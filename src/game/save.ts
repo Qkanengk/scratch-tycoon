@@ -2,7 +2,7 @@ import { BALANCE } from '../data/balance';
 import { TICKET_IDS, ticketDef, type TicketId, type TicketRules } from '../data/tickets';
 import { layoutTicket } from '../render/layout';
 import { revealTicket } from './economy';
-import { coverage, createMask, encodeMask, restoreMask, ticketContentKey } from './scratch';
+import { createMask, encodeMask, restoreMask, scratchProgress, ticketContentKey } from './scratch';
 import { createInitialState, emptyStats, SAVE_VERSION, type GameState, type Ticket } from './state';
 import { cellCount } from './tickets';
 
@@ -60,9 +60,9 @@ function readTicket(value: unknown): Ticket | null {
   if (value.cells.length !== cellCount(def.rules) || !def.prizes[tier]) return null;
   if (!value.cells.every((cell) => isCell(cell, def.rules))) return null;
   const layout = layoutTicket(def.rules);
-  const mask = createMask(layout.cells, layout.height);
+  const mask = createMask(layout.cells, layout.height, BALANCE.scratchThreshold);
   const scratch = value.revealed !== true && restoreMask(mask, value.scratch)
-    && coverage(mask) < BALANCE.scratchThreshold ? encodeMask(mask) : undefined;
+    && scratchProgress(mask) < 1 ? encodeMask(mask) : undefined;
   return {
     serial: amount(value.serial, 0),
     type: value.type,
@@ -188,11 +188,11 @@ export function recordScratch(state: GameState, ticket: Ticket, scratch: string)
   const current = state.ticket;
   if (!current || current.revealed || ticketContentKey(current) !== ticketContentKey(ticket)) return state;
   const layout = layoutTicket(ticketDef(current.type).rules);
-  const mask = createMask(layout.cells, layout.height);
+  const mask = createMask(layout.cells, layout.height, BALANCE.scratchThreshold);
   if (!restoreMask(mask, scratch)) return state;
   if (current.scratch) restoreMask(mask, current.scratch);
   const merged = encodeMask(mask);
   if (merged === current.scratch) return state;
   const next = { ...state, ticket: { ...current, scratch: merged } };
-  return coverage(mask) >= BALANCE.scratchThreshold ? revealTicket(next) : next;
+  return scratchProgress(mask) === 1 ? revealTicket(next) : next;
 }

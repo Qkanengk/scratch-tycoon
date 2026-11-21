@@ -4,7 +4,7 @@ import { ticketDef, TICKET_IDS } from '../data/tickets';
 import { layoutTicket } from '../render/layout';
 import { buyTicket, revealTicket } from './economy';
 import { deserialize, loadStoredSave, migrate, recordScratch, SAVE_BACKUP_KEY, SAVE_KEY, serialize, updateStoredSave } from './save';
-import { coverage, createMask, encodeMask, restoreMask, scratchSegment } from './scratch';
+import { createMask, encodeMask, restoreMask, scratchProgress, scratchSegment } from './scratch';
 import { createInitialState, SAVE_VERSION } from './state';
 
 describe('save', () => {
@@ -224,13 +224,13 @@ describe('saved scratching', () => {
   const bought = () => buyTicket(createInitialState(4), 'dong');
   const maskFor = (id = 'dong' as (typeof TICKET_IDS)[number]) => {
     const layout = layoutTicket(ticketDef(id).rules);
-    return createMask(layout.cells, layout.height);
+    return createMask(layout.cells, layout.height, BALANCE.scratchThreshold);
   };
 
   it.each(TICKET_IDS)('round-trips optional scratch progress for %s without a version change', (id) => {
     const state = buyTicket({ ...createInitialState(4), money: 1e9, licenses: TICKET_IDS.slice(1) }, id);
     const mask = maskFor(id);
-    scratchSegment(mask, 0.1, 0.1, 0.25, 0.1, 0.04);
+    scratchSegment(mask, { x: 0.1, y: 0.1 }, { x: 0.25, y: 0.1 }, 0.04);
     const saved = { ...state, ticket: { ...state.ticket!, scratch: encodeMask(mask) } };
     expect(deserialize(serialize(saved))).toEqual(saved);
     expect(saved.version).toBe(1);
@@ -244,21 +244,21 @@ describe('saved scratching', () => {
   it('ignores a mask that would already require a reveal', () => {
     const state = bought();
     const mask = maskFor();
-    scratchSegment(mask, 0, 0.2, 1, 0.2, 1);
+    scratchSegment(mask, { x: 0, y: 0.2 }, { x: 1, y: 0.2 }, 1);
     expect(migrate({ ...state, ticket: { ...state.ticket, scratch: encodeMask(mask) } })).toEqual(state);
   });
 
   it('records a partial stroke, merges other tabs\' areas, and does not re-save identical progress', () => {
     const state = bought();
     const first = maskFor(), second = maskFor();
-    scratchSegment(first, 0.1, 0.1, 0.25, 0.1, 0.04);
-    scratchSegment(second, 0.7, 0.1, 0.85, 0.1, 0.04);
+    scratchSegment(first, { x: 0.1, y: 0.1 }, { x: 0.25, y: 0.1 }, 0.04);
+    scratchSegment(second, { x: 0.7, y: 0.1 }, { x: 0.85, y: 0.1 }, 0.04);
     const saved = recordScratch(state, state.ticket!, encodeMask(first));
     const merged = recordScratch(saved, state.ticket!, encodeMask(second));
     const restored = maskFor();
     expect(restoreMask(restored, merged.ticket?.scratch)).toBe(true);
-    expect(restored.scratched).toBe(first.scratched + second.scratched);
-    expect(coverage(restored)).toBeGreaterThan(coverage(first));
+    expect(restored.removed.reduce((sum, bit) => sum + bit, 0)).toBe(first.removed.reduce((sum, bit) => sum + bit, 0) + second.removed.reduce((sum, bit) => sum + bit, 0));
+    expect(scratchProgress(restored)).toBeGreaterThan(scratchProgress(first));
     expect(recordScratch(merged, state.ticket!, encodeMask(second))).toBe(merged);
   });
 
@@ -278,7 +278,7 @@ describe('saved scratching', () => {
   it('uses the existing reveal transition if merged progress reaches the normal threshold', () => {
     const state = bought();
     const mask = maskFor();
-    scratchSegment(mask, 0, 0.2, 1, 0.2, 1);
+    scratchSegment(mask, { x: 0, y: 0.2 }, { x: 1, y: 0.2 }, 1);
     const revealed = recordScratch(state, state.ticket!, encodeMask(mask));
     expect(revealed.ticket?.revealed).toBe(true);
     expect(revealed.stats.dong.scratched).toBe(1);

@@ -28,15 +28,30 @@ describe('ticketMetrics', () => {
   it('restores only the saved scratched grid squares on the foil', () => {
     const clearRect = vi.fn();
     const canvas = { width: 768, getContext: () => ({ clearRect }) } as unknown as HTMLCanvasElement;
-    const mask = createMask([{ x: 0, y: 0, w: 1, h: 1 }], 1);
-    restoreFoil(canvas, mask);
+    const cells = [{ x: 0, y: 0, w: 1, h: 1 }];
+    const mask = createMask(cells, 1, 1);
+    restoreFoil(canvas, mask, cells);
     expect(clearRect).not.toHaveBeenCalled();
-    scratchSegment(mask, 0.2, 0.2, 0.5, 0.2, 0.05);
-    restoreFoil(canvas, mask);
-    expect(clearRect).toHaveBeenCalledTimes(mask.scratched);
+    scratchSegment(mask, { x: 0.2, y: 0.2 }, { x: 0.5, y: 0.2 }, 0.05);
+    restoreFoil(canvas, mask, cells);
+    expect(clearRect).toHaveBeenCalledTimes(mask.cells[0]!.scratched);
     for (const [x, y, w, h] of clearRect.mock.calls) {
-      expect(mask.points[(y / 16) * mask.cols + x / 16]).toBe(2);
-      expect([w, h]).toEqual([16, 16]);
+      expect(mask.removed[(y / 12) * mask.cols + x / 12]).toBe(1);
+      expect([w, h]).toEqual([12, 12]);
     }
+  });
+
+  it('restores the entire peeled patch after its cell reaches the threshold', () => {
+    const clearRect = vi.fn();
+    const canvas = { width: 768, getContext: () => ({ clearRect }) } as unknown as HTMLCanvasElement;
+    const cells = [{ x: 0, y: 0, w: 1, h: 1 }];
+    const mask = createMask(cells, 1, 0.5);
+    scratchSegment(mask, { x: 0, y: 0.5 }, { x: 1, y: 0.5 }, 1);
+    restoreFoil(canvas, mask, cells);
+    const [x, y, width, height] = clearRect.mock.lastCall!;
+    expect(x).toBeLessThan(0);
+    expect(y).toBeLessThan(0);
+    expect(width).toBeGreaterThan(768);
+    expect(height).toBeGreaterThan(768);
   });
 });

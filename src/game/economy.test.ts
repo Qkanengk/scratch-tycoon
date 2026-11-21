@@ -104,6 +104,16 @@ describe('promo ticket', () => {
     expect(next.promoReadyAt).toBe(isBroke(after) ? 50_000 + BALANCE.promoIntervalMs : null);
   });
 
+  it('offers the highest unlocked ticket when broke, not the last played or most expensive locked one', () => {
+    const licensed = { ...broke, licenses: ['vang', 'bac'] as GameState['licenses'] };
+    const ready = updatePromo(licensed, 0);
+    const claimed = claimPromo(ready, BALANCE.promoIntervalMs);
+    expect(claimed.ticket).toMatchObject({ type: 'vang', free: true });
+    expect(claimed.money).toBe(licensed.money);
+    expect(claimPromo({ ...ready, money: 10 }, BALANCE.promoIntervalMs).ticket).toBeNull();
+    expect(claimPromo(claimed, BALANCE.promoIntervalMs)).toBe(claimed);
+  });
+
   it('cancels the wait once the player has money again', () => {
     const waiting = updatePromo(broke, 0);
     expect(updatePromo({ ...waiting, money: 10 }, 10).promoReadyAt).toBeNull();

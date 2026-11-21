@@ -90,7 +90,14 @@ export function canClaimPromo(state: GameState, now: number): boolean {
   return isBroke(state) && state.promoReadyAt !== null && now >= state.promoReadyAt;
 }
 
+export function promoTicketDef(state: GameState): TicketDef {
+  return TICKETS.reduce(
+    (best, def) => def.price > best.price && isUnlocked(state, def.id) ? def : best,
+    ticketDef(BALANCE.promoTicket),
+  );
+}
+
 export function claimPromo(state: GameState, now: number): GameState {
   if (!canClaimPromo(state, now)) return state;
-  return placeTicket({ ...state, promoReadyAt: null }, ticketDef(BALANCE.promoTicket), true);
+  return placeTicket({ ...state, promoReadyAt: null }, promoTicketDef(state), true);
 }
