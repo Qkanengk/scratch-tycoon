@@ -30,7 +30,7 @@ export interface TicketUnlock {
   /** Lifetime prize money needed. */
   totalEarned: number;
   licenseCost: number;
-  mission: { ticket: TicketId; scratched: number; jackpots: number };
+  mission: { ticket: TicketId; scratched: number; bigWins: number };
 }
 
 export interface TicketDef {
@@ -45,13 +45,13 @@ export interface TicketDef {
   unlock: TicketUnlock | null;
 }
 
-const LICENSE_PRICE_FACTOR = 50;
+export const BIG_WIN_MULTIPLIER = 5;
 
-function unlock(previous: TicketId, price: number, totalEarned: number): TicketUnlock {
+function unlock(previous: TicketId, totalEarned: number, licenseCost: number, scratched: number, bigWins: number): TicketUnlock {
   return {
     totalEarned,
-    licenseCost: price * LICENSE_PRICE_FACTOR,
-    mission: { ticket: previous, scratched: 200, jackpots: 1 },
+    licenseCost,
+    mission: { ticket: previous, scratched, bigWins },
   };
 }
 
@@ -84,7 +84,7 @@ export const TICKETS: readonly TicketDef[] = [
       { multiplier: 50, weight: 30 },
     ],
     rules: { kind: 'match', cells: 6, need: 3, symbols: ['gourd', 'crab', 'fish-a', 'chicken-a', 'stag'] },
-    unlock: unlock('dong', 100, 5_000),
+    unlock: unlock('dong', 4_000, 100, 500, 25),
   },
   {
     id: 'vang',
@@ -99,7 +99,7 @@ export const TICKETS: readonly TicketDef[] = [
       { multiplier: 100, weight: 20 },
     ],
     rules: { kind: 'lucky', winning: 3, numbers: 9, maxNumber: 40, multipliers: null },
-    unlock: unlock('bac', 1_000, 150_000),
+    unlock: unlock('bac', 35_000, 100, 370, 13),
   },
   {
     id: 'ngoc',
@@ -114,7 +114,7 @@ export const TICKETS: readonly TicketDef[] = [
       { multiplier: 250, weight: 10 },
     ],
     rules: { kind: 'lucky', winning: 3, numbers: 8, maxNumber: 40, multipliers: [1, 2, 3, 5] },
-    unlock: unlock('vang', 12_000, 5_000_000),
+    unlock: unlock('vang', 285_000, 100, 280, 8),
   },
   {
     id: 'rong',
@@ -129,7 +129,7 @@ export const TICKETS: readonly TicketDef[] = [
       { multiplier: 500, weight: 5 },
     ],
     rules: { kind: 'dragon', size: 4, dragons: 3 },
-    unlock: unlock('ngoc', 150_000, 200_000_000),
+    unlock: unlock('ngoc', 900_000, 2_500, 165, 3),
   },
 ];
 

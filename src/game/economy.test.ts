@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE } from '../data/balance';
+import { ticketDef } from '../data/tickets';
 import {
   buyTicket,
   canBuyTicket,
@@ -65,6 +66,15 @@ describe('buying and collecting', () => {
     const revealed = revealTicket(buyTicket(createInitialState(1), 'dong'));
     expect(revealTicket(revealed)).toBe(revealed);
     expect(revealed.stats.dong.scratched).toBe(1);
+  });
+
+  it.each([[2, 0], [5, 1], [20, 1]])('credits a big win for qualifying ×%i prizes', (multiplier, expected) => {
+    const state = buyTicket(createInitialState(1), 'dong');
+    const def = ticketDef('dong');
+    const ticket = { ...state.ticket!, tier: def.prizes.findIndex(prize => prize.multiplier === multiplier), prize: multiplier * def.price };
+    const revealed = revealTicket({ ...state, ticket });
+    expect(revealed.stats.dong.bigWins).toBe(expected);
+    expect(revealTicket(revealed).stats.dong.bigWins).toBe(expected);
   });
 
   it('gives the same tickets for the same seed', () => {

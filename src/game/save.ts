@@ -10,7 +10,17 @@ type RawSave = Record<string, unknown>;
  * One entry per old version: turns a save of that version into the next one.
  * Add an entry (and a test) whenever the shape of GameState changes.
  */
-const MIGRATIONS: Record<number, (save: RawSave) => RawSave> = {};
+const MIGRATIONS: Record<number, (save: RawSave) => RawSave> = {
+  1: (save) => {
+    if (!isRecord(save.stats)) return { ...save, version: 2 };
+    const stats = { ...save.stats };
+    for (const id of TICKET_IDS) {
+      const entry = stats[id];
+      if (isRecord(entry)) stats[id] = { ...entry, bigWins: amount(entry.jackpots, 0) };
+    }
+    return { ...save, version: 2, stats };
+  },
+};
 
 function isRecord(value: unknown): value is RawSave {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -88,6 +98,7 @@ export function migrate(raw: unknown): GameState | null {
         scratched: amount(entry.scratched, 0),
         wins: amount(entry.wins, 0),
         jackpots: amount(entry.jackpots, 0),
+        bigWins: amount(entry.bigWins, 0),
       };
     }
   }

@@ -55,7 +55,7 @@ export const vi = {
 
   'shop.req.revenue': 'Tổng thu {current} / {target}',
   'shop.req.scratched': 'Cào {current} / {target} {name}',
-  'shop.req.jackpot': 'Trúng độc đắc {name}: {current} / {target}',
+  'shop.req.bigWins': 'Trúng từ ×{multiplier} · {name}: {current} / {target}',
   'shop.req.license': 'Cần {required} (phí {cost} + vé đầu)',
   'shop.buyLicense': 'Mua giấy phép · {cost}',
   'shop.unlockedToast': 'Đã mở khoá {name}!',

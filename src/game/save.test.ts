@@ -18,7 +18,7 @@ describe('save', () => {
       totalEarned: 9_999_999,
       licenses: ['bac' as const, 'vang' as const],
       selected: 'vang' as const,
-      stats: { ...base.stats, bac: { scratched: 250, wins: 100, jackpots: 2 } },
+      stats: { ...base.stats, bac: { scratched: 250, wins: 100, jackpots: 2, bigWins: 16 } },
     };
     expect(deserialize(serialize(state))).toEqual(state);
   });
@@ -51,8 +51,17 @@ describe('save', () => {
       selected: 'dong',
       ticket: null,
     });
-    expect(state?.stats.dong).toEqual({ scratched: 12, wins: 0, jackpots: 0 });
-    expect(state?.stats.rong).toEqual({ scratched: 0, wins: 0, jackpots: 0 });
+    expect(state?.stats.dong).toEqual({ scratched: 12, wins: 0, jackpots: 0, bigWins: 0 });
+    expect(state?.stats.rong).toEqual({ scratched: 0, wins: 0, jackpots: 0, bigWins: 0 });
+  });
+
+  it('credits known jackpots from saves that did not track big wins', () => {
+    const state = migrate({
+      version: 1,
+      stats: { dong: { scratched: 250, wins: 100, jackpots: 2 } },
+    });
+    expect(state?.version).toBe(SAVE_VERSION);
+    expect(state?.stats.dong).toEqual({ scratched: 250, wins: 100, jackpots: 2, bigWins: 2 });
   });
 
   it.each(TICKET_IDS)('keeps a %s ticket through a save', (id) => {
