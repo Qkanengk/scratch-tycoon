@@ -55,6 +55,7 @@ export function buildRoom(): THREE.Group {
   const rail = new THREE.Mesh(new THREE.PlaneGeometry(14, 0.035), new THREE.MeshBasicMaterial({ color: palette.ink }));
   rail.position.set(0, 0.5, WALL_Z + 0.006);
   const sign = inkCard(2.2, 0.55, signTexture(), 0.03);
+  sign.name = 'shop-sign';
   sign.position.set(0, 1.8, WALL_Z + 0.03);
   // The prize shelf is its own group so a tall window can lift it out of the rack's way.
   const shelf = new THREE.Group();

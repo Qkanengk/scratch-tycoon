@@ -96,6 +96,9 @@ export class Stage {
   private readonly raycaster = new THREE.Raycaster();
   private readonly plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -FACE_Y);
   private readonly observer: ResizeObserver;
+  private readonly hudObserver: ResizeObserver;
+  private readonly hudChanges: MutationObserver;
+  private hudFrame = 0;
   private readonly tweens: Tween[] = [];
   // Created once the images and the font have loaded.
   private particles!: Particles;
@@ -145,7 +148,7 @@ export class Stage {
   }
 
   private measureHud(): void {
-    if (!this.touchLayout()) return;
+    if (!this.ready || !this.touchLayout()) return;
     const app = this.host.parentElement;
     const prompt = app?.querySelector('.prompt')?.getBoundingClientRect();
     if (!app || !prompt) return;
@@ -167,6 +170,22 @@ export class Stage {
     this.touchTop = top + 6;
     this.touchBottom = bottom + 6;
     this.aim();
+  }
+
+  private queueHudMeasurement(): void {
+    if (this.disposed || this.hudFrame) return;
+    this.hudFrame = requestAnimationFrame(() => {
+      this.hudFrame = 0;
+      this.measureHud();
+    });
+  }
+
+  private observeHud(): void {
+    this.hudObserver.disconnect();
+    for (const element of this.host.parentElement?.querySelectorAll('.prompt, .purse, .corner, .look') ?? []) {
+      this.hudObserver.observe(element);
+    }
+    this.queueHudMeasurement();
   }
 
   constructor(
@@ -194,6 +213,10 @@ export class Stage {
     canvas.addEventListener('wheel', this.onWheel, { passive: true });
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(host);
+    this.hudObserver = new ResizeObserver(() => this.queueHudMeasurement());
+    this.hudChanges = new MutationObserver(() => this.observeHud());
+    if (host.parentElement) this.hudChanges.observe(host.parentElement, { childList: true });
+    this.observeHud();
 
     void this.load();
   }
@@ -242,12 +265,16 @@ export class Stage {
     if (!this.ready) return;
     this.aim();
     this.callbacks.onView(view);
+    this.queueHudMeasurement();
   }
 
   dispose(): void {
     this.disposed = true;
     cancelAnimationFrame(this.frame);
+    cancelAnimationFrame(this.hudFrame);
     this.observer.disconnect();
+    this.hudObserver.disconnect();
+    this.hudChanges.disconnect();
     if (this.ready) this.particles.dispose();
     this.faceTexture.dispose();
     this.foilTexture.dispose();
@@ -655,6 +682,15 @@ export class Stage {
       points = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => new THREE.Vector3(sx * halfW, FACE_Y, sz * halfH)));
     } else if (this.view === 'shop') {
       points = this.rack.points();
+      const sign = touch && tall ? this.room.getObjectByName('shop-sign') : null;
+      if (sign) {
+        const box = new THREE.Box3().setFromObject(sign);
+        points.push(...[-1, 1].flatMap((sx) => [-1, 1].map((sy) => new THREE.Vector3(
+          sx < 0 ? box.min.x : box.max.x,
+          sy < 0 ? box.min.y : box.max.y,
+          box.max.z,
+        ))));
+      }
       if (!tall && !touch) points.push(...this.board.points());
       const box = new THREE.Box3().setFromPoints(points);
       target = box.getCenter(new THREE.Vector3());
@@ -685,6 +721,7 @@ export class Stage {
     this.board.group.position.set(tall ? 1.22 : 1.75, 0, RACK_Z - 0.05);
     this.board.group.rotation.y = tall ? -0.3 : -0.38;
     this.aim();
+    this.queueHudMeasurement();
   }
 
   /** Screen positions of everything a play-through script needs to touch. */
@@ -709,7 +746,6 @@ export class Stage {
 
   private readonly tick = (time: number): void => {
     this.frame = requestAnimationFrame(this.tick);
-    this.measureHud();
     const dt = Math.min(0.05, (time - this.last) / 1000 || 0);
     this.last = time;
 
