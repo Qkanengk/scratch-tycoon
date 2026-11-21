@@ -39,6 +39,7 @@ export function preloadImages(): Promise<void> {
     ...PATTERNS.map((name) => loadImage(`patterns/${name}.svg`)),
     ...PARTICLES.map((name) => loadImage(`particles/${name}.svg`)),
     ...STICKERS.map((name) => loadImage(`stickers/${name}.png`)),
+    loadImage('icons/wrench.png'),
   ]).then(() => undefined);
   return imagesReady;
 }

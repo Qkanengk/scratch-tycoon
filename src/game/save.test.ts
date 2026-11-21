@@ -9,6 +9,36 @@ import { createInitialState, SAVE_VERSION } from './state';
 import { buyTool, upgradeTool } from './tools';
 
 describe('save', () => {
+  it.each([3, 4])('preserves the purchased value of a winning Rồng ticket from v%s', version => {
+    const rich = { ...createInitialState(9), money: 1e9, licenses: TICKET_IDS.slice(1) };
+    const bought = buyTicket(rich, 'rong');
+    const gross = ticketDef('rong').prizes[1]!.multiplier * 150_000;
+    const tax = version === 3 ? 0 : Math.floor((gross - 150_000) * .2);
+    const legacy = { ...bought, version, ticket: { ...bought.ticket!, tier: 1, fakeTell: null, prize: gross,
+      gross: version === 3 ? undefined : gross, tax: version === 3 ? undefined : tax, net: undefined } };
+    const loaded = migrate(legacy)!;
+    expect(loaded.ticket).toMatchObject({ gross, prize: gross, tax, net: gross - tax });
+    expect(deserialize(serialize(loaded))?.ticket).toEqual(loaded.ticket);
+    expect(collectTicket(revealTicket(loaded)).money).toBe(loaded.money + gross - tax);
+  });
+  it.each([1, 2, 3])('migrates v%s with full durability, fresh rent clock and no debt', version => {
+    const old = { ...createInitialState(9), version, durability: undefined, rentElapsedMs: undefined, rentDebt: undefined };
+    const state = migrate(old)!;
+    expect(state.version).toBe(4);
+    expect(state.durability).toEqual(createInitialState(9).durability);
+    expect(state.rentElapsedMs).toBe(0);
+    expect(state.rentDebt).toBe(0);
+  });
+
+  it('sanitizes malformed durability and rent fields', () => {
+    const state = migrate({ ...createInitialState(9), durability: { coin: 0, key: -1, card: 2, laser: 'bad' }, rentDebt: -1, rentElapsedMs: Infinity })!;
+    expect(state.durability.coin).toBe(1);
+    expect(state.durability.key).toBe(1);
+    expect(state.durability.card).toBe(1);
+    expect(state.durability.laser).toBe(1);
+    expect(state.rentDebt).toBe(0);
+    expect(state.rentElapsedMs).toBe(0);
+  });
   it('migrates v2 saves to a level-zero coin without losing progress', () => {
     const state = createInitialState(9);
     expect(migrate({ ...state, version: 2, ownedTools: undefined, toolLevels: undefined, equippedTool: undefined })).toEqual(state);
@@ -275,6 +305,8 @@ describe('stored saves', () => {
         cells: ticket.cells.map(() => ({ type: 'symbol' as const, symbol: 4, win: true })),
         tier: 5,
         prize: ticketDef('dong').price * ticketDef('dong').prizes[5]!.multiplier,
+        gross: ticketDef('dong').price * ticketDef('dong').prizes[5]!.multiplier,
+        net: ticketDef('dong').price * ticketDef('dong').prizes[5]!.multiplier,
       },
     };
     const storage = memory(serialize(state));
@@ -360,7 +392,7 @@ describe('saved scratching', () => {
     const state = buyTicket({ ...createInitialState(4), money: 1e9, licenses: TICKET_IDS.slice(1) }, id);
     const mask = maskFor(id);
     scratchSegment(mask, { x: 0.1, y: 0.1 }, { x: 0.25, y: 0.1 }, 0.04);
-    const saved = { ...state, ticket: { ...state.ticket!, scratch: encodeMask(mask) } };
+    const saved = recordScratch(state, state.ticket!, encodeMask(mask));
     expect(deserialize(serialize(saved))).toEqual(saved);
     expect(saved.version).toBe(SAVE_VERSION);
   });

@@ -30,7 +30,7 @@ export function promptFor(state: GameState, now: number, view: View, progress: n
     };
   }
   if (ticket?.revealed) {
-    const amount = money(ticket.prize);
+    const amount = money(ticket.net);
     if (ticket.prize === 0) return { tone: 'lose', message: t('table.lose'), button: { label: t('table.discard'), command: 'collect' } };
     const jackpot = ticket.tier === jackpotTier(ticketDef(ticket.type));
     return { tone: jackpot ? 'jackpot' : 'win', message: t(jackpot ? 'table.jackpot' : 'table.win', { amount }), button: { label: t('table.collect', { amount }), command: 'collect' } };

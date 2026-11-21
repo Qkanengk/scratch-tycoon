@@ -1,4 +1,5 @@
 import { toolDef, type ToolId } from '../data/tools';
+import { BALANCE } from '../data/balance';
 import type { GameState } from './state';
 
 export type ToolIntent = { id: ToolId; kind: 'buy' | 'equip' | 'upgrade'; level: number };
@@ -17,7 +18,25 @@ export function applyToolIntent(state: GameState, intent: ToolIntent): GameState
 
 export function toolRadius(state: GameState): number {
   const def = toolDef(state.equippedTool);
-  return def.baseRadius + def.radiusGrowth * state.toolLevels[def.id];
+  return (def.baseRadius + def.radiusGrowth * state.toolLevels[def.id])
+    * (BALANCE.minimumRadiusFactor + (1 - BALANCE.minimumRadiusFactor) * state.durability[def.id]);
+}
+
+export function wearTool(state: GameState, wear: number): GameState {
+  const id = state.equippedTool;
+  if (id === 'coin' || !Number.isFinite(wear) || wear <= 0) return state;
+  return { ...state, durability: { ...state.durability, [id]: Math.max(0, state.durability[id] - wear) } };
+}
+
+export function repairPrice(state: GameState, id: ToolId): number {
+  const price = toolDef(id).price * BALANCE.repairPriceFraction * (1 - state.durability[id]);
+  return Math.ceil(Math.round(price * 1e9) / 1e9);
+}
+
+export function repairTool(state: GameState, id: ToolId): GameState {
+  const price = repairPrice(state, id);
+  if (!state.ownedTools.includes(id) || state.money < price || state.durability[id] === 1) return state;
+  return { ...state, money: state.money - price, durability: { ...state.durability, [id]: 1 } };
 }
 
 export function toolUpgradePrice(state: GameState, id: ToolId): number {

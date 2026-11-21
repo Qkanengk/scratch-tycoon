@@ -3,6 +3,7 @@ import { BIG_WIN_MULTIPLIER, TICKETS, ticketDef, type TicketDef, type TicketId }
 import { Rng } from './rng';
 import type { GameState, Ticket } from './state';
 import { generateCells, jackpotTier } from './tickets';
+import { wearTool } from './tools';
 
 export function isUnlocked(state: GameState, id: TicketId): boolean {
   return ticketDef(id).unlock === null || state.licenses.includes(id);
@@ -15,12 +16,19 @@ export function canBuyTicket(state: GameState, id: TicketId): boolean {
 function placeTicket(state: GameState, def: TicketDef, free: boolean): GameState {
   const rng = new Rng(state.rngState);
   const { tier, cells } = generateCells(def, rng);
+  const fake = !free && BALANCE.fakeChances[def.id] > 0 && rng.next() < BALANCE.fakeChances[def.id];
+  const gross = fake ? 0 : (def.prizes[tier]?.multiplier ?? 0) * def.price;
+  const tax = Math.floor(Math.max(0, gross - def.price) * BALANCE.taxRates[def.id]);
   const ticket: Ticket = {
     serial: state.nextSerial,
     type: def.id,
     cells,
     tier,
-    prize: (def.prizes[tier]?.multiplier ?? 0) * def.price,
+    prize: gross,
+    gross, tax, net: gross - tax,
+    fakeTell: fake ? rng.pick(['missing-seal', 'misprinted-serial'] as const) : null,
+    scratchStarted: false,
+    hitBombs: [],
     free,
     revealed: false,
   };
@@ -41,6 +49,9 @@ export function buyTicket(state: GameState, id: TicketId): GameState {
 
 /** Marks the ticket on the table as fully scratched and counts it toward missions. */
 export function revealTicket(state: GameState): GameState {
+  if (!state.ticket || state.ticket.revealed) return state;
+  state = startScratch(state);
+  for (let i = 0; i < state.ticket!.cells.length; i++) state = uncoverCell(state, i);
   const ticket = state.ticket;
   if (ticket === null || ticket.revealed) return state;
   const previous = state.stats[ticket.type];
@@ -53,8 +64,8 @@ export function revealTicket(state: GameState): GameState {
       [ticket.type]: {
         scratched: previous.scratched + 1,
         wins: previous.wins + (ticket.prize > 0 ? 1 : 0),
-        jackpots: previous.jackpots + (ticket.tier === jackpotTier(def) ? 1 : 0),
-        bigWins: previous.bigWins + ((def.prizes[ticket.tier]?.multiplier ?? 0) >= BIG_WIN_MULTIPLIER ? 1 : 0),
+        jackpots: previous.jackpots + (!ticket.fakeTell && ticket.tier === jackpotTier(def) ? 1 : 0),
+        bigWins: previous.bigWins + (!ticket.fakeTell && (def.prizes[ticket.tier]?.multiplier ?? 0) >= BIG_WIN_MULTIPLIER ? 1 : 0),
       },
     },
   };
@@ -64,12 +75,50 @@ export function revealTicket(state: GameState): GameState {
 export function collectTicket(state: GameState): GameState {
   const ticket = state.ticket;
   if (ticket === null || !ticket.revealed) return state;
+  const withheld = Math.min(state.rentDebt, ticket.net);
   return {
     ...state,
-    money: state.money + ticket.prize,
-    totalEarned: state.totalEarned + ticket.prize,
+    money: state.money + ticket.net - withheld,
+    rentDebt: state.rentDebt - withheld,
+    totalEarned: state.totalEarned + ticket.net,
     ticket: null,
   };
+}
+
+export function startScratch(state: GameState): GameState {
+  if (!state.ticket || state.ticket.revealed || state.ticket.scratchStarted) return state;
+  return { ...wearTool(state, BALANCE.ticketWear), ticket: { ...state.ticket, scratchStarted: true } };
+}
+
+export function uncoverCell(state: GameState, index: number): GameState {
+  const ticket = state.ticket;
+  if (!ticket || ticket.revealed || ticket.cells[index]?.type !== 'bomb' || ticket.hitBombs.includes(index)) return state;
+  state = startScratch(state);
+  return { ...wearTool(state, BALANCE.bombWear), ticket: { ...state.ticket!, hitBombs: [...ticket.hitBombs, index] } };
+}
+
+export function returnFake(state: GameState): GameState {
+  const ticket = state.ticket;
+  if (!ticket?.fakeTell || ticket.free || ticket.scratchStarted || ticket.revealed) return state;
+  const refund = Math.floor(ticketDef(ticket.type).price * (1 - BALANCE.fakeReturnFee));
+  return { ...state, money: state.money + refund, ticket: null };
+}
+
+export function rentAmount(state: GameState): number {
+  return TICKETS.reduce((amount, def) => isUnlocked(state, def.id) ? BALANCE.rentAmounts[def.id] : amount, BALANCE.rentAmounts.dong as number);
+}
+
+export function timeToNextRent(state: GameState): number {
+  return BALANCE.rentIntervalMs - state.rentElapsedMs;
+}
+
+/** The caller supplies only elapsed active play time, never wall-clock timestamps. */
+export function advancePlayTime(state: GameState, elapsedMs: number): GameState {
+  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return state;
+  const elapsed = state.rentElapsedMs + elapsedMs;
+  const due = Math.floor(elapsed / BALANCE.rentIntervalMs) * rentAmount(state);
+  const paid = Math.min(state.money, due);
+  return { ...state, rentElapsedMs: elapsed % BALANCE.rentIntervalMs, money: state.money - paid, rentDebt: state.rentDebt + due - paid };
 }
 
 function cheapestPrice(): number {

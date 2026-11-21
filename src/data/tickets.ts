@@ -84,7 +84,7 @@ export const TICKETS: readonly TicketDef[] = [
       { multiplier: 50, weight: 30 },
     ],
     rules: { kind: 'match', cells: 6, need: 3, symbols: ['gourd', 'crab', 'fish-a', 'chicken-a', 'stag'] },
-    unlock: unlock('dong', 4_000, 100, 500, 25),
+    unlock: unlock('dong', 4_000, 100, 450, 23),
   },
   {
     id: 'vang',
@@ -99,7 +99,7 @@ export const TICKETS: readonly TicketDef[] = [
       { multiplier: 100, weight: 20 },
     ],
     rules: { kind: 'lucky', winning: 3, numbers: 9, maxNumber: 40, multipliers: null },
-    unlock: unlock('bac', 35_000, 100, 370, 13),
+    unlock: unlock('bac', 22_000, 100, 215, 8),
   },
   {
     id: 'ngoc',
@@ -114,11 +114,11 @@ export const TICKETS: readonly TicketDef[] = [
       { multiplier: 250, weight: 10 },
     ],
     rules: { kind: 'lucky', winning: 3, numbers: 8, maxNumber: 40, multipliers: [1, 2, 3, 5] },
-    unlock: unlock('vang', 285_000, 100, 280, 8),
+    unlock: unlock('vang', 90_000, 100, 80, 3),
   },
   {
     id: 'rong',
-    price: 150_000,
+    price: 90_000,
     baseReturn: 0.92,
     prizes: [
       { multiplier: 0, weight: 7185 },
@@ -129,7 +129,7 @@ export const TICKETS: readonly TicketDef[] = [
       { multiplier: 500, weight: 5 },
     ],
     rules: { kind: 'dragon', size: 4, dragons: 3 },
-    unlock: unlock('ngoc', 900_000, 2_500, 165, 3),
+    unlock: unlock('ngoc', 200_000, 2_500, 25, 1),
   },
 ];
 

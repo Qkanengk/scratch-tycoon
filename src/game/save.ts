@@ -2,7 +2,7 @@ import { BALANCE } from '../data/balance';
 import { initialToolLevels, TOOLS, type ToolId } from '../data/tools';
 import { BIG_WIN_MULTIPLIER, TICKET_IDS, ticketDef, type TicketId, type TicketRules } from '../data/tickets';
 import { layoutTicket } from '../render/layout';
-import { revealTicket } from './economy';
+import { revealTicket, startScratch, uncoverCell } from './economy';
 import { createMask, encodeMask, restoreMask, scratchProgress, ticketContentKey } from './scratch';
 import { createInitialState, emptyStats, SAVE_VERSION, type GameState, type Ticket } from './state';
 import { cellCount, jackpotTier } from './tickets';
@@ -17,6 +17,8 @@ type RawSave = Record<string, unknown>;
  * Add an entry (and a test) whenever the shape of GameState changes.
  */
 const MIGRATIONS: Record<number, (save: RawSave) => RawSave> = {
+  3: (save) => ({ ...save, version: 4, durability: createInitialState(0).durability, rentElapsedMs: 0, rentDebt: 0,
+    ticket: isRecord(save.ticket) ? { ...save.ticket, gross: save.ticket.prize, tax: 0 } : save.ticket }),
   2: (save) => ({ ...save, version: 3, ownedTools: ['coin'], toolLevels: initialToolLevels(), equippedTool: 'coin' }),
   1: (save) => {
     if (!isRecord(save.stats)) return { ...save, version: 2 };
@@ -64,6 +66,7 @@ function isCell(cell: unknown, rules: TicketRules): boolean {
     case 'dragon':
       return rules.kind === 'dragon' && number(cell.prize) && flag(cell.win);
     case 'bomb':
+      return rules.kind === 'dragon' || rules.kind === 'lucky';
     case 'blank':
       return rules.kind === 'dragon';
     default:
@@ -81,12 +84,19 @@ function readTicket(value: unknown): Ticket | null {
   const mask = createMask(layout.cells, layout.height, BALANCE.scratchThreshold);
   const scratch = value.revealed !== true && restoreMask(mask, value.scratch)
     && scratchProgress(mask) < 1 ? encodeMask(mask) : undefined;
+  const fakeTell = value.free !== true && (value.fakeTell === 'missing-seal' || value.fakeTell === 'misprinted-serial') ? value.fakeTell : null;
+  const gross = fakeTell ? 0 : amount(value.gross, amount(value.prize, (def.prizes[tier]?.multiplier ?? 0) * def.price));
+  const tax = Math.min(gross, amount(value.tax, Math.floor(Math.max(0, gross - def.price) * BALANCE.taxRates[def.id])));
   return {
     serial: amount(value.serial, 0),
     type: value.type,
     cells: value.cells as Ticket['cells'],
     tier,
-    prize: (def.prizes[tier]?.multiplier ?? 0) * def.price,
+    prize: gross,
+    gross, tax, net: gross - tax,
+    fakeTell,
+    scratchStarted: value.scratchStarted === true || value.revealed === true || (scratch !== undefined && scratchProgress(mask) > 0),
+    hitBombs: Array.isArray(value.hitBombs) ? [...new Set(value.hitBombs.filter((i): i is number => Number.isInteger(i) && value.cells instanceof Array && (value.cells[i] as { type?: string })?.type === 'bomb'))] : [],
     free: value.free === true,
     revealed: value.revealed === true,
     ...(scratch === undefined ? {} : { scratch }),
@@ -117,6 +127,8 @@ export function migrate(raw: unknown, now = Date.now()): GameState | null {
     }
   }
   const equippedTool = ownedTools.find(id => id === save.equippedTool) ?? 'coin';
+  const durability = { ...base.durability };
+  for (const tool of TOOLS) durability[tool.id] = tool.id === 'coin' ? 1 : Math.min(1, amount(isRecord(save.durability) ? save.durability[tool.id] : undefined, 1));
   const stats = emptyStats();
   if (isRecord(save.stats)) {
     for (const id of TICKET_IDS) {
@@ -142,6 +154,9 @@ export function migrate(raw: unknown, now = Date.now()): GameState | null {
   return {
     version: SAVE_VERSION,
     money: amount(save.money, base.money) + refund,
+    durability,
+    rentElapsedMs: amount(save.rentElapsedMs, 0) % BALANCE.rentIntervalMs,
+    rentDebt: amount(save.rentDebt, 0),
     ownedTools,
     toolLevels,
     equippedTool,
@@ -233,6 +248,11 @@ export function recordScratch(state: GameState, ticket: Ticket, scratch: string)
   if (current.scratch) restoreMask(mask, current.scratch);
   const merged = encodeMask(mask);
   if (merged === current.scratch) return state;
-  const next = { ...state, ticket: { ...current, scratch: merged } };
+  let next = scratchProgress(mask) > 0 ? startScratch(state) : state;
+  for (let i = 0; i < mask.cells.length; i++) {
+    const cell = mask.cells[i]!;
+    if (cell.scratched >= cell.target) next = uncoverCell(next, i);
+  }
+  next = { ...next, ticket: { ...next.ticket!, scratch: merged } };
   return scratchProgress(mask) === 1 ? recordReveal(next, ticket) : next;
 }
