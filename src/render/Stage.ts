@@ -680,7 +680,9 @@ export class Stage {
   private press(action: Action): void {
     if (action.kind === 'ticket') this.callbacks.onTicket(action.id);
     else if (action.kind === 'tools') this.look('tools');
-    else if (action.kind === 'tool' && action.intent) this.callbacks.onTool(action.intent);
+    else if (action.kind === 'tool') {
+      if (action.intent) this.callbacks.onTool(action.intent);
+    }
     else if (action.kind === 'collect') this.callbacks.onCollect();
     else if (this.view === 'board') this.callbacks.onBoard();
     else this.look('board');
