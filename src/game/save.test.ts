@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { TICKET_IDS } from '../data/tickets';
 import { buyTicket, revealTicket } from './economy';
 import { deserialize, migrate, serialize } from './save';
 import { createInitialState, SAVE_VERSION } from './state';
@@ -52,6 +53,28 @@ describe('save', () => {
     });
     expect(state?.stats.dong).toEqual({ scratched: 12, wins: 0, jackpots: 0 });
     expect(state?.stats.rong).toEqual({ scratched: 0, wins: 0, jackpots: 0 });
+  });
+
+  it.each(TICKET_IDS)('keeps a %s ticket through a save', (id) => {
+    const rich = { ...createInitialState(9), money: 1e9, licenses: TICKET_IDS.slice(1) };
+    const bought = buyTicket(rich, id);
+    expect(bought.ticket).not.toBeNull();
+    expect(deserialize(serialize(bought))?.ticket).toEqual(bought.ticket);
+  });
+
+  it('drops a ticket whose cells lack what the renderer reads', () => {
+    const bought = buyTicket(createInitialState(4), 'dong');
+    const damaged = JSON.parse(serialize(bought)) as { ticket: { cells: Record<string, unknown>[] } };
+    delete damaged.ticket.cells[0]?.symbol;
+    expect(migrate(damaged)?.ticket).toBeNull();
+
+    const outOfRange = JSON.parse(serialize(bought)) as { ticket: { cells: Record<string, unknown>[] } };
+    (outOfRange.ticket.cells[0] as Record<string, unknown>).symbol = 99;
+    expect(migrate(outOfRange)?.ticket).toBeNull();
+
+    const wrongKind = JSON.parse(serialize(bought)) as { ticket: { cells: Record<string, unknown>[] } };
+    wrongKind.ticket.cells[0] = { type: 'bomb' };
+    expect(migrate(wrongKind)?.ticket).toBeNull();
   });
 
   it('takes the prize from the prize table, not from the save text', () => {

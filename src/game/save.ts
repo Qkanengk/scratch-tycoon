@@ -1,4 +1,4 @@
-import { TICKET_IDS, ticketDef, type TicketId } from '../data/tickets';
+import { TICKET_IDS, ticketDef, type TicketId, type TicketRules } from '../data/tickets';
 import { createInitialState, emptyStats, SAVE_VERSION, type GameState, type Ticket } from './state';
 import { cellCount } from './tickets';
 
@@ -24,12 +24,36 @@ function isTicketId(value: unknown): value is TicketId {
   return typeof value === 'string' && (TICKET_IDS as readonly string[]).includes(value);
 }
 
+/** Whether a saved cell has every field the renderer and the rules read, for a ticket with these rules. */
+function isCell(cell: unknown, rules: TicketRules): boolean {
+  if (!isRecord(cell)) return false;
+  const number = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+  const flag = (value: unknown) => typeof value === 'boolean';
+  switch (cell.type) {
+    case 'symbol':
+      return rules.kind === 'match' && Number.isInteger(cell.symbol) && rules.symbols[cell.symbol as number] !== undefined && flag(cell.win);
+    case 'winning':
+      return rules.kind === 'lucky' && number(cell.number);
+    case 'number':
+      return rules.kind === 'lucky' && number(cell.number) && number(cell.prize) && flag(cell.win);
+    case 'multiplier':
+      return rules.kind === 'lucky' && number(cell.value) && flag(cell.win);
+    case 'dragon':
+      return rules.kind === 'dragon' && number(cell.prize) && flag(cell.win);
+    case 'bomb':
+    case 'blank':
+      return rules.kind === 'dragon';
+    default:
+      return false;
+  }
+}
+
 function readTicket(value: unknown): Ticket | null {
   if (!isRecord(value) || !isTicketId(value.type) || !Array.isArray(value.cells)) return null;
   const def = ticketDef(value.type);
   const tier = amount(value.tier, -1);
   if (value.cells.length !== cellCount(def.rules) || !def.prizes[tier]) return null;
-  if (!value.cells.every((cell) => isRecord(cell) && typeof cell.type === 'string')) return null;
+  if (!value.cells.every((cell) => isCell(cell, def.rules))) return null;
   return {
     serial: amount(value.serial, 0),
     type: value.type,

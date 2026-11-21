@@ -90,7 +90,8 @@ function drawCell(ctx: Ctx, def: TicketDef, cell: Cell, r: Rect, lit: boolean): 
   switch (cell.type) {
     case 'symbol': {
       const rules = def.rules;
-      if (rules.kind === 'match') sticker(ctx, rules.symbols[cell.symbol] ?? 'star', cx, cy, Math.min(r.w, r.h) * 0.8);
+      const name = rules.kind === 'match' ? rules.symbols[cell.symbol] : undefined;
+      if (name) sticker(ctx, name, cx, cy, Math.min(r.w, r.h) * 0.8);
       break;
     }
     case 'winning':
