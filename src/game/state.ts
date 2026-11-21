@@ -21,6 +21,7 @@ export interface Ticket {
   prize: number;
   free: boolean;
   revealed: boolean;
+  scratch?: string;
 }
 
 export interface TicketStats {

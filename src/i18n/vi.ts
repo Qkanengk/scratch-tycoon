@@ -28,8 +28,8 @@ export const vi = {
   'table.title': 'Bàn cào',
   'table.buy': 'Mua {name} · {price}',
   'table.notEnough': 'Chưa đủ tiền mua {name}.',
-  'table.hint': 'Kéo chuột hoặc ngón tay trên lớp bạc để cào.',
-  'table.progress': 'Đã cào {percent}%',
+  'table.hint': 'Giữ và kéo qua từng ô bạc để mở vé.',
+  'table.progress': 'Tiến độ cào: {percent}%',
   'table.win': 'Trúng {amount}!',
   'table.jackpot': 'ĐỘC ĐẮC! Trúng {amount}!',
   'table.lose': 'Trượt rồi. Chúc may mắn lần sau.',
@@ -73,6 +73,7 @@ export const vi = {
   'save.exported': 'Đã xuất save vào ô bên dưới. Hãy chép lại để giữ.',
   'save.imported': 'Đã nhập save.',
   'save.invalid': 'Save không hợp lệ.',
+  'save.recovered': 'Không đọc được save cũ. Đã giữ một bản sao lưu.',
 } as const;
 
 export type MessageKey = keyof typeof vi;

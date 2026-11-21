@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { play, playScratch } from '../audio/sfx';
+import { play, playScratch, stopScratch } from '../audio/sfx';
 import { BALANCE } from '../data/balance';
 import { ticketDef, type TicketId } from '../data/tickets';
-import { coverage, createMask, scratchSegment, type ScratchMask } from '../game/scratch';
+import { createMask, encodeMask, restoreMask, scratchProgress, scratchSegment, ticketContentKey, type Point, type ScratchMask } from '../game/scratch';
 import type { GameState, Ticket } from '../game/state';
 import { jackpotTier } from '../game/tickets';
 import { allText } from '../i18n';
@@ -12,7 +12,7 @@ import { Particles } from './particles';
 import { Rack } from './rack';
 import { buildRoom } from './room';
 import { flat, roundedRect } from './shapes';
-import { drawFace, drawFoil, eraseFoil, ticketMetrics, type TicketMetrics } from './ticketFace';
+import { drawFace, drawFoil, eraseFoil, peelFoil, restoreFoil, ticketMetrics, type TicketMetrics } from './ticketFace';
 import { fitToSize, INK, toonify } from './toon';
 
 /** Where the player is looking: down at the scratch mat, up at the ticket rack, or at the licence board. */
@@ -20,9 +20,10 @@ export type View = 'desk' | 'shop' | 'board';
 
 export interface StageCallbacks {
   /** The player scratched enough of the ticket on the mat. */
-  onRevealed(): void;
+  onRevealed(ticket: Ticket): void;
   /** Scratch progress toward the reveal, 0 to 1. */
   onProgress(done: number): void;
+  onScratch(ticket: Ticket, scratch: string): void;
   /** The player picked a ticket type on the rack. */
   onTicket(id: TicketId): void;
   /** The player picked up the scratched ticket. */
@@ -87,6 +88,9 @@ export class Stage {
   private readonly ticket = new THREE.Group();
   private readonly mat = new THREE.Group();
   private readonly tool = new THREE.Group();
+  private toolLift = 0.045;
+  private toolLean = 0;
+  private lastFlakes = -Infinity;
   private readonly inkMaterial = new THREE.MeshBasicMaterial({ color: INK });
   private readonly faceCanvas = document.createElement('canvas');
   private readonly foilCanvas = document.createElement('canvas');
@@ -109,7 +113,10 @@ export class Stage {
   private pose: Pose = { ...REST };
   private mask: ScratchMask | null = null;
   private state: GameState | null = null;
-  private shown: { serial: number; type: TicketId; revealed: boolean } | null = null;
+  private shown: Ticket | null = null;
+  private readonly pendingScratch = new Set<string>();
+  private lastScratchSave = 0;
+  private lastScratchSent: string | undefined;
   private first = true;
   private ready = false;
   private disposed = false;
@@ -133,8 +140,10 @@ export class Stage {
   /** Whether the current press has rubbed the ticket; such a press is never read as a click or a look. */
   private stroked = false;
   private hovering = false;
-  private down: { x: number; y: number } | null = null;
-  private stroke: { x: number; y: number } | null = null;
+  private down: Point | null = null;
+  private stroke: Point | null = null;
+  private activePointer: number | null = null;
+  private readonly pointerNdc = new THREE.Vector2();
   private readonly pointer = new THREE.Vector3();
 
   constructor(
@@ -158,6 +167,7 @@ export class Stage {
     canvas.addEventListener('pointermove', this.onMove);
     canvas.addEventListener('pointerup', this.onUp);
     canvas.addEventListener('pointercancel', this.onCancel);
+    canvas.addEventListener('lostpointercapture', this.onCancel);
     canvas.addEventListener('pointerleave', this.onLeave);
     canvas.addEventListener('wheel', this.onWheel, { passive: true });
     this.observer = new ResizeObserver(() => this.resize());
@@ -190,8 +200,9 @@ export class Stage {
     document.body.dataset.ready = '1';
 
     try {
-      const coin = fitToSize(await loadModel('kenney-platformer-kit/coin-gold.glb'), 0.2);
-      toonify(coin, { outline: 0.011 });
+      const coin = fitToSize(await loadModel('kenney-platformer-kit/coin-gold.glb'), 0.13);
+      if (this.disposed) return;
+      toonify(coin, { outline: 0.007 });
       this.tool.add(coin);
     } catch {
       // Without the coin model the pointer itself does the scratching.
@@ -206,7 +217,9 @@ export class Stage {
 
   look(view: View): void {
     if (this.view === view) return;
+    this.saveScratch();
     this.view = view;
+    this.stroke = null;
     if (!this.ready) return;
     this.aim();
     this.callbacks.onView(view);
@@ -214,6 +227,7 @@ export class Stage {
 
   dispose(): void {
     this.disposed = true;
+    stopScratch();
     cancelAnimationFrame(this.frame);
     this.observer.disconnect();
     if (this.ready) this.particles.dispose();
@@ -244,11 +258,17 @@ export class Stage {
       return;
     }
     if (before && ticket && before.serial === ticket.serial && before.type === ticket.type) {
-      if (ticket.revealed && !before.revealed) this.reveal(ticket);
-      else if (!ticket.revealed && before.revealed) {
-        // An imported save can put the same ticket back under its foil.
+      if (ticketContentKey(before) !== ticketContentKey(ticket)) {
         this.show(ticket);
         this.setState(ticket);
+      } else if (ticket.revealed && !before.revealed) this.reveal(ticket);
+      else if (ticket.revealed !== before.revealed || ticket.scratch !== before.scratch) {
+        if (!ticket.revealed && ticket.scratch && this.pendingScratch.delete(ticket.scratch)) {
+          before.scratch = ticket.scratch;
+        } else {
+          this.show(ticket);
+          this.setState(ticket);
+        }
       }
       return;
     }
@@ -256,6 +276,7 @@ export class Stage {
     const deal = () => {
       if (!ticket) {
         this.ticket.visible = false;
+        this.callbacks.onProgress(0);
         this.setState(null);
         return;
       }
@@ -266,6 +287,7 @@ export class Stage {
     };
     this.shown = null;
     this.mask = null;
+    this.pendingScratch.clear();
     if (before) {
       play('ticket-collect');
       this.move(this.pose, TILL, 0.3, easeOut, deal);
@@ -290,13 +312,17 @@ export class Stage {
     drawFoil(this.foilCanvas, ticket.type);
     this.faceTexture.needsUpdate = true;
     this.foilTexture.needsUpdate = true;
-    this.foilMaterial.opacity = 1;
     this.foilMaterial.visible = !ticket.revealed;
-    this.mask = ticket.revealed ? null : createMask(this.metrics.layout.cells, this.metrics.layout.height);
-    this.shown = { serial: ticket.serial, type: ticket.type, revealed: ticket.revealed };
+    const { cells, height } = this.metrics.layout;
+    this.mask = ticket.revealed ? null : createMask(cells, height, BALANCE.scratchThreshold);
+    if (this.mask && restoreMask(this.mask, ticket.scratch)) restoreFoil(this.foilCanvas, this.mask, cells);
+    this.shown = { ...ticket };
+    this.pendingScratch.clear();
+    this.lastScratchSent = ticket.scratch;
+    this.lastScratchSave = performance.now();
     this.ticket.visible = true;
     this.stroke = null;
-    this.callbacks.onProgress(0);
+    this.callbacks.onProgress(this.mask ? scratchProgress(this.mask) : 0);
   }
 
   /** Rebuilds the ticket and its mat when the ticket type (and so its height) changes. */
@@ -343,18 +369,15 @@ export class Stage {
 
   private reveal(ticket: Ticket): void {
     if (!this.shown) return;
-    this.shown.revealed = true;
+    this.shown = { ...ticket };
+    this.pendingScratch.clear();
     this.mask = null;
     this.scratching = false;
+    stopScratch();
+    this.foilMaterial.visible = false;
     this.setState(ticket);
     drawFace(this.faceCanvas, ticket.type, ticket, true);
     this.faceTexture.needsUpdate = true;
-    this.tweens.push({
-      elapsed: 0,
-      duration: 0.35,
-      step: (k) => (this.foilMaterial.opacity = 1 - k),
-      done: () => (this.foilMaterial.visible = false),
-    });
     this.celebrate(ticket);
   }
 
@@ -364,8 +387,8 @@ export class Stage {
     const burst = (name: ParticleName, count: number, fast = 1) =>
       this.particles.emit(origin, { name, count, speed: [1.4 * fast, 2.6 * fast], spread: 0.75, size: [0.07, 0.13], life: [0.8, 1.3] });
     if (ticket.prize === 0) {
-      burst('smoke-puff', 3, 0.5);
-      play('lose', 0.45);
+      this.particles.emit(origin, { name: 'smoke-puff', count: 2, speed: [0.4, 0.65], spread: 0.5, size: [0.08, 0.12], life: [0.45, 0.65] });
+      play('lose', 0.62);
       return;
     }
     const jackpot = ticket.tier === jackpotTier(def);
@@ -375,9 +398,16 @@ export class Stage {
     if (big) burst('sparkle', 8, 1.2);
     if (jackpot) for (const name of CONFETTI) burst(name, 10, 1.3);
     play(jackpot ? 'win-jackpot' : big ? 'win-big' : 'win-small');
-    play(big ? 'coins-many' : 'coin-1', 0.5);
-    // A little hop for the winner.
-    this.tweens.push({ elapsed: 0, duration: 0.4, step: (k) => this.applyPose({ ...REST, y: Math.sin(k * Math.PI) * 0.12, turn: Math.sin(k * Math.PI * 2) * 0.04 }) });
+    const shown = this.shown;
+    this.tweens.push({
+      elapsed: 0,
+      duration: 0.4,
+      step: (k) => {
+        if (this.shown === shown && !this.busy) {
+          this.applyPose({ ...REST, y: Math.sin(k * Math.PI) * 0.12, turn: Math.sin(k * Math.PI * 2) * 0.04 });
+        }
+      },
+    });
   }
 
   private applyPose(pose: Pose): void {
@@ -428,9 +458,23 @@ export class Stage {
   }
 
   /** Finds where the pointer touches the ticket's surface, in world units. */
-  private locate(event: PointerEvent): boolean {
-    this.raycaster.setFromCamera(this.ndc(event), this.camera);
+  private locate(): boolean {
+    if (!this.hovering) return false;
+    this.raycaster.setFromCamera(this.pointerNdc, this.camera);
     return this.raycaster.ray.intersectPlane(this.plane, this.pointer) !== null;
+  }
+
+  private trackPointer(event: PointerEvent): void {
+    this.pointerNdc.copy(this.ndc(event));
+    this.hovering = Math.abs(this.pointerNdc.x) <= 1 && Math.abs(this.pointerNdc.y) <= 1;
+  }
+
+  private foilPoint(): Point {
+    const { height, window } = this.metrics;
+    return {
+      x: (this.pointer.x + 0.5 - window.x) / window.w,
+      y: (this.pointer.z + height / 2 - window.y) / window.w,
+    };
   }
 
   /** The thing under the pointer that can be pressed, if any. */
@@ -453,26 +497,26 @@ export class Stage {
   }
 
   private readonly onDown = (event: PointerEvent): void => {
-    if (!this.ready) return;
+    if (!this.ready || this.activePointer !== null || event.button !== 0) return;
     event.preventDefault();
     this.renderer.domElement.setPointerCapture(event.pointerId);
+    this.activePointer = event.pointerId;
     this.pressed = true;
     this.stroked = false;
     this.down = { x: event.clientX, y: event.clientY };
-    if (this.canScratch() && this.locate(event)) {
+    this.trackPointer(event);
+    if (this.canScratch() && this.locate()) {
       this.scratching = true;
       this.stroked = true;
-      this.hovering = true;
       this.stroke = null;
       this.scratchTo(event.timeStamp);
     }
   };
 
   private readonly onMove = (event: PointerEvent): void => {
-    if (!this.ready) return;
-    const ndc = this.ndc(event);
-    if (event.pointerType === 'mouse') this.swayGoal.copy(ndc);
-    if (this.locate(event)) this.hovering = true;
+    if (!this.ready || (this.activePointer !== null && this.activePointer !== event.pointerId)) return;
+    this.trackPointer(event);
+    if (event.pointerType === 'mouse') this.swayGoal.copy(this.pointerNdc);
     // A press that began while the ticket was still landing turns into a stroke once it can.
     if (this.pressed && !this.scratching && this.canScratch()) {
       this.scratching = true;
@@ -480,7 +524,8 @@ export class Stage {
       this.stroke = null;
     }
     if (this.scratching) {
-      if (this.canScratch()) this.scratchTo(event.timeStamp);
+      if (this.canScratch() && this.locate()) this.scratchTo(event.timeStamp);
+      else this.stroke = null;
       return;
     }
     if (event.pointerType !== 'mouse' || this.pressed) return;
@@ -490,6 +535,9 @@ export class Stage {
   };
 
   private readonly onUp = (event: PointerEvent): void => {
+    if (this.activePointer !== event.pointerId) return;
+    this.activePointer = null;
+    this.saveScratch();
     const down = this.down;
     // The reveal ends the stroke before the pointer lifts, so ask what the whole press did.
     const wasScratching = this.stroked;
@@ -511,11 +559,15 @@ export class Stage {
     }
   };
 
-  private readonly onCancel = (): void => {
+  private readonly onCancel = (event: PointerEvent): void => {
+    if (this.activePointer !== event.pointerId) return;
+    this.activePointer = null;
+    this.saveScratch();
     this.pressed = false;
     this.scratching = false;
     this.stroke = null;
     this.down = null;
+    this.hovering = false;
   };
 
   private readonly onLeave = (): void => {
@@ -544,33 +596,64 @@ export class Stage {
     const mask = this.mask;
     if (!mask) return;
     const m = this.metrics;
-    const x = (this.pointer.x + 0.5 - m.window.x) / m.window.w;
-    const y = (this.pointer.z + m.height / 2 - m.window.y) / m.window.w;
-    const from = this.stroke ?? { x, y };
-    this.stroke = { x, y };
+    const to = this.foilPoint();
+    const from = this.stroke ?? to;
+    this.stroke = to;
     const radius = BALANCE.brushRadius / m.window.w;
-    const before = mask.scratched;
-    scratchSegment(mask, from.x, from.y, x, y, radius);
-    eraseFoil(this.foilCanvas, from.x, from.y, x, y, radius);
+    this.toolLean = THREE.MathUtils.clamp((to.x - from.x) * 6, -0.18, 0.18);
+    const { cleared, contact } = scratchSegment(mask, from, to, radius);
+    if (!contact) return;
+    eraseFoil(this.foilCanvas, from.x, from.y, to.x, to.y, radius);
+    for (const index of cleared) peelFoil(this.foilCanvas, m.layout.cells[index]!);
     this.foilDirty = true;
-    const removed = mask.scratched - before;
-    if (removed === 0) return;
-    playScratch(now);
-    this.particles.emit(new THREE.Vector3(this.pointer.x, FACE_Y + 0.02, this.pointer.z), {
-      name: FLAKES[Math.floor(Math.random() * FLAKES.length)] as ParticleName,
-      count: Math.min(3, Math.ceil(removed / 8)),
-      speed: [0.5, 1.3],
-      spread: 1,
-      size: [0.035, 0.07],
-      life: [0.5, 0.9],
-    });
-    const done = coverage(mask) / BALANCE.scratchThreshold;
-    this.callbacks.onProgress(Math.min(1, done));
-    if (done >= 1) {
-      this.mask = null;
-      play('reveal', 0.5);
-      this.callbacks.onRevealed();
+    if (cleared.length || now - this.lastFlakes >= 45) {
+      this.lastFlakes = now;
+      this.particles.emit(new THREE.Vector3(m.window.x + contact.x * m.window.w - 0.5, FACE_Y + 0.02, m.window.y + contact.y * m.window.w - m.height / 2), {
+        name: FLAKES[Math.floor(Math.random() * FLAKES.length)] as ParticleName,
+        count: cleared.length ? 5 : 2,
+        speed: [0.45, 1],
+        spread: 1,
+        size: [0.035, 0.065],
+        life: [0.35, 0.6],
+      });
     }
+    const done = scratchProgress(mask);
+    this.callbacks.onProgress(done);
+    if (done === 1) {
+      this.mask = null;
+      if (this.shown) this.callbacks.onRevealed(this.shown);
+    } else {
+      playScratch();
+      if (now - this.lastScratchSave >= 500) this.saveScratch();
+    }
+  }
+
+  private updateTool(dt: number): void {
+    let overFoil = false;
+    if (this.canScratch() && this.locate()) {
+      const { x, y } = this.foilPoint();
+      const pad = BALANCE.brushRadius / this.metrics.window.w;
+      overFoil = x >= -pad && x <= 1 + pad && y >= -pad && y <= this.metrics.layout.height + pad;
+    }
+    this.tool.visible = overFoil && this.tool.children.length > 0;
+    const canvas = this.renderer.domElement;
+    canvas.style.cursor = this.tool.visible ? 'none' : overFoil ? 'crosshair' : canvas.dataset.hot === '1' ? 'pointer' : 'default';
+    this.toolLean = THREE.MathUtils.damp(this.toolLean, 0, 14, dt);
+    this.toolLift = THREE.MathUtils.damp(this.toolLift, this.scratching ? 0.012 : 0.045, 38, dt);
+    if (this.tool.visible) {
+      this.tool.position.set(this.pointer.x, FACE_Y + this.toolLift, this.pointer.z);
+      this.tool.rotation.set(-0.26, 0, -0.52 + this.toolLean);
+    }
+  }
+
+  private saveScratch(): void {
+    if (!this.mask || !this.shown || scratchProgress(this.mask) === 0) return;
+    const scratch = encodeMask(this.mask);
+    if (scratch === this.lastScratchSent) return;
+    this.lastScratchSent = scratch;
+    this.lastScratchSave = performance.now();
+    this.pendingScratch.add(scratch);
+    this.callbacks.onScratch(this.shown, scratch);
   }
 
   // --- camera -----------------------------------------------------------------------------------
@@ -704,15 +787,7 @@ export class Stage {
       this.foilDirty = false;
     }
 
-    // The coin follows the pointer and rocks while it rubs.
-    this.tool.visible = this.hovering && this.canScratch();
-    const canvas = this.renderer.domElement;
-    canvas.style.cursor = this.tool.visible ? 'none' : canvas.dataset.hot === '1' ? 'pointer' : 'default';
-    if (this.tool.visible) {
-      const lift = this.scratching ? 0.004 : 0.07;
-      this.tool.position.set(this.pointer.x, FACE_Y + lift, this.pointer.z);
-      this.tool.rotation.set(-0.5, 0, this.scratching ? Math.sin(time / 28) * 0.35 : -0.25);
-    }
+    this.updateTool(dt);
 
     this.particles.update(dt);
     if (this.ticks++ % 10 === 0) this.publish();

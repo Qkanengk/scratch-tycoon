@@ -22,6 +22,7 @@ export function isMuted(): boolean {
 
 export function setMuted(value: boolean): void {
   muted = value;
+  if (muted) stopScratch();
   try {
     localStorage.setItem(MUTE_KEY, value ? '1' : '0');
   } catch {
@@ -31,6 +32,10 @@ export function setMuted(value: boolean): void {
 
 /** Plays a sound effect. Browsers only allow this after the player has touched the page, which every caller follows. */
 export function play(sound: Sound, volume = 0.6): void {
+  start(sound, volume);
+}
+
+function start(sound: Sound, volume: number): HTMLAudioElement | undefined {
   if (muted || typeof Audio === 'undefined') return;
   let pool = players.get(sound);
   if (!pool) players.set(sound, (pool = []));
@@ -43,13 +48,24 @@ export function play(sound: Sound, volume = 0.6): void {
   audio.volume = volume;
   audio.currentTime = 0;
   void audio.play().catch(() => undefined);
+  return audio;
 }
 
-let lastScratch = 0;
+const SCRATCHES = [
+  ['scratch-1', 0.34],
+  ['scratch-2', 0.32],
+  ['scratch-3', 0.54],
+] as const;
+let scratchVoice: HTMLAudioElement | undefined;
 
-/** One of the scratch samples, at most every 90 ms, so a long stroke sounds like rubbing rather than one loop. */
-export function playScratch(now: number): void {
-  if (now - lastScratch < 90) return;
-  lastScratch = now;
-  play(`scratch-${1 + Math.floor(Math.random() * 5)}` as Sound, 0.35);
+/** Only one short scrape can play at once, regardless of the pointer's sample rate. */
+export function playScratch(): void {
+  if (scratchVoice && !scratchVoice.paused && !scratchVoice.ended) return;
+  const [sound, volume] = SCRATCHES[Math.floor(Math.random() * SCRATCHES.length)]!;
+  scratchVoice = start(sound, volume);
+}
+
+export function stopScratch(): void {
+  scratchVoice?.pause();
+  scratchVoice = undefined;
 }
