@@ -469,6 +469,11 @@ export class Stage {
     const ndc = this.ndc(event);
     if (event.pointerType === 'mouse') this.swayGoal.copy(ndc);
     if (this.locate(event)) this.hovering = true;
+    // A press that began while the ticket was still landing turns into a stroke once it can.
+    if (this.pressed && !this.scratching && this.canScratch()) {
+      this.scratching = true;
+      this.stroke = null;
+    }
     if (this.scratching) {
       if (this.canScratch()) this.scratchTo(event.timeStamp);
       return;
@@ -493,7 +498,8 @@ export class Stage {
     if (Math.hypot(dx, dy) < 10) {
       const action = this.pick(event);
       if (action) this.press(action);
-    } else if (Math.abs(dy) > 50 && Math.abs(dy) > Math.abs(dx)) {
+    } else if (this.mask === null && Math.abs(dy) > 50 && Math.abs(dy) > Math.abs(dx)) {
+      // With foil still on the mat a drag is always an attempt to scratch, never a look.
       // Dragging the scene down looks up, like turning your head.
       this.nod(dy > 0 ? 'up' : 'down');
     }
@@ -512,7 +518,7 @@ export class Stage {
   };
 
   private readonly onWheel = (event: WheelEvent): void => {
-    if (Math.abs(event.deltaY) > 4) this.nod(event.deltaY < 0 ? 'up' : 'down');
+    if (!this.pressed && Math.abs(event.deltaY) > 4) this.nod(event.deltaY < 0 ? 'up' : 'down');
   };
 
   /** Looks one step up (desk to rack) or down (board or rack back to the desk). */
