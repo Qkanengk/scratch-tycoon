@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { isMuted, play, setMuted } from '../audio/sfx';
 import { ticketDef, TICKETS, type TicketId } from '../data/tickets';
+import { applyToolIntent, type ToolIntent } from '../game/tools';
+import { shelfOffer } from '../render/toolShelf';
 import { buyTicket, canBuyTicket, claimPromo, collectTicket, isUnlocked, selectTicket } from '../game/economy';
 import { buyLicense, unlockProgress } from '../game/unlocks';
 import { recordReveal, recordScratch } from '../game/save';
@@ -86,6 +88,19 @@ export function App() {
     }
   };
 
+  const tool = (intent: ToolIntent) => {
+    const { id } = intent;
+    const offer = shelfOffer(state, id);
+    if (offer.kind === 'max') return;
+    if (!offer.affordable) {
+      play('ui-error');
+      stage.current?.refuseTool(id);
+      return;
+    }
+    play(offer.kind === 'upgrade' ? 'unlock' : offer.kind === 'buy' ? 'coin-2' : 'ui-select');
+    apply(current => applyToolIntent(current, intent));
+  };
+
   const handlers = useRef<StageCallbacks>(null as unknown as StageCallbacks);
   const prompt = promptFor(state, now, view, progress);
   const keys = useRef<(event: KeyboardEvent) => void>(() => undefined);
@@ -97,6 +112,7 @@ export function App() {
       onTicket: buy,
       onCollect: collect,
       onBoard: license,
+      onTool: tool,
       onView: (next) => setView(next),
     };
     keys.current = (event) => {
@@ -111,8 +127,8 @@ export function App() {
         if (prompt.button && !prompt.button.disabled) run(prompt.button.command);
       } else if (key === 'arrowup' || key === 'w') stage.current?.nod('up');
       else if (key === 'arrowdown' || key === 's') stage.current?.nod('down');
-      else if (key === 'arrowright' || key === 'd') stage.current?.look('board');
-      else if (key === 'arrowleft' || key === 'a') stage.current?.look('shop');
+      else if (key === 'arrowright' || key === 'd') stage.current?.look(view === 'tools' ? 'shop' : 'board');
+      else if (key === 'arrowleft' || key === 'a') stage.current?.look(view === 'board' ? 'shop' : 'tools');
     };
   });
 
@@ -160,6 +176,8 @@ export function App() {
 
       {view === 'desk' && <LookButton direction="up" testid="look-shop" label={t('look.shop')} onClick={() => stage.current?.look('shop')} />}
       {view === 'shop' && <LookButton direction="right" testid="look-board" label={t('look.board')} onClick={() => stage.current?.look('board')} />}
+      {view === 'shop' && <LookButton direction="left" testid="look-tools" label={t('look.tools')} onClick={() => stage.current?.look('tools')} />}
+      {view === 'tools' && <LookButton direction="right" testid="look-shop" label={t('look.shop')} onClick={() => stage.current?.look('shop')} />}
       {view === 'board' && <LookButton direction="left" testid="look-shop" label={t('look.shop')} onClick={() => stage.current?.look('shop')} />}
       {view === 'shop' && <LookButton direction="down" testid="look-desk" label={t('look.desk')} onClick={() => stage.current?.look('desk')} />}
 

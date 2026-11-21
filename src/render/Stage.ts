@@ -2,21 +2,25 @@ import * as THREE from 'three';
 import { play, playScratch, stopScratch } from '../audio/sfx';
 import { BALANCE } from '../data/balance';
 import { ticketDef, type TicketId } from '../data/tickets';
+import { TOOLS, type ToolId } from '../data/tools';
 import { createMask, encodeMask, restoreMask, scratchProgress, scratchSegment, ticketContentKey, type Point, type ScratchMask } from '../game/scratch';
 import type { GameState, Ticket } from '../game/state';
+import { toolRadius, type ToolIntent } from '../game/tools';
 import { jackpotTier } from '../game/tickets';
 import { allText } from '../i18n';
-import { canvasTexture, loadFonts, loadModel, patternTexture, preloadImages, type ParticleName } from './assets';
+import { canvasTexture, loadFonts, patternTexture, preloadImages, type ParticleName } from './assets';
 import { LicenseBoard } from './board';
 import { Particles } from './particles';
 import { Rack } from './rack';
 import { buildRoom, desktopLayout, layoutCounterProp, WALL_Z } from './room';
 import { flat, roundedRect } from './shapes';
 import { drawFace, drawFoil, eraseFoil, peelFoil, restoreFoil, ticketMetrics, type TicketMetrics } from './ticketFace';
-import { fitToSize, INK, toonify } from './toon';
+import { animateToolModel, buildToolModel, disposeToolObject } from './toolModels';
+import { ToolShelf } from './toolShelf';
+import { INK } from './toon';
 
 /** Where the player is looking: down at the scratch mat, up at the ticket rack, or at the licence board. */
-export type View = 'desk' | 'shop' | 'board';
+export type View = 'desk' | 'shop' | 'board' | 'tools';
 
 export interface StageCallbacks {
   /** The player scratched enough of the ticket on the mat. */
@@ -30,10 +34,11 @@ export interface StageCallbacks {
   onCollect(): void;
   /** The player pressed the licence board while reading it. */
   onBoard(): void;
+  onTool(intent: ToolIntent): void;
   onView(view: View): void;
 }
 
-type Action = { kind: 'ticket'; id: TicketId } | { kind: 'board' } | { kind: 'collect' };
+type Action = { kind: 'ticket'; id: TicketId } | { kind: 'board' } | { kind: 'collect' } | { kind: 'tools' } | { kind: 'tool'; intent: ToolIntent | null };
 
 const FACE_PX = 1024;
 const FOIL_PX = 768;
@@ -110,6 +115,8 @@ export class Stage {
   private room!: THREE.Group;
   private rack!: Rack;
   private board!: LicenseBoard;
+  private toolShelf!: ToolShelf;
+  private handKey = '';
   private feltMaterial!: THREE.Material;
 
   private metrics: TicketMetrics = ticketMetrics('dong');
@@ -241,10 +248,13 @@ export class Stage {
     this.rack = new Rack();
     this.rack.group.position.set(0, 0, RACK_Z);
     this.board = new LicenseBoard();
+    this.toolShelf = new ToolShelf();
+    this.toolShelf.group.position.set(-2.8, 0, -1.5);
+    this.toolShelf.group.rotation.y = 0.18;
     this.feltMaterial = new THREE.MeshBasicMaterial({ map: patternTexture('mat-felt', 0.5) });
     this.ticket.visible = false;
     this.tool.visible = false;
-    this.scene.add(this.room, this.mat, this.rack.group, this.board.group, this.ticket, this.tool, this.particles.group);
+    this.scene.add(this.room, this.mat, this.rack.group, this.board.group, this.toolShelf.group, this.ticket, this.tool, this.particles.group);
     this.build('dong');
 
     this.ready = true;
@@ -256,13 +266,12 @@ export class Stage {
     this.frame = requestAnimationFrame(this.tick);
     document.body.dataset.ready = '1';
 
-    try {
-      const coin = fitToSize(await loadModel('kenney-platformer-kit/coin-gold.glb'), 0.13);
-      if (this.disposed) return;
-      toonify(coin, { outline: 0.007 });
-      this.tool.add(coin);
-    } catch {
-      // Without the coin model the pointer itself does the scratching.
+  }
+
+  refuseTool(id: ToolId): void {
+    if (this.ready && this.state) {
+      this.toolShelf.refuse(id);
+      this.toolShelf.update(this.state);
     }
   }
 
@@ -291,7 +300,11 @@ export class Stage {
     this.observer.disconnect();
     this.hudObserver.disconnect();
     this.hudChanges.disconnect();
-    if (this.ready) this.particles.dispose();
+    if (this.ready) {
+      this.particles.dispose();
+      this.toolShelf.dispose();
+      disposeToolObject(this.tool);
+    }
     this.faceTexture.dispose();
     this.foilTexture.dispose();
     this.renderer.dispose();
@@ -303,6 +316,21 @@ export class Stage {
   private sync(): void {
     const state = this.state;
     if (!state) return;
+    this.toolShelf.update(state);
+    const handKey = `${state.equippedTool}:${state.toolLevels[state.equippedTool]}`;
+    if (this.handKey !== handKey) {
+      this.handKey = handKey;
+      for (const child of [...this.tool.children]) disposeToolObject(child);
+      const model = buildToolModel(state.equippedTool, state.toolLevels[state.equippedTool]);
+      model.rotation.x = -Math.PI / 2;
+      if (state.equippedTool === 'coin') model.scale.setScalar(toolRadius(state) / 0.4);
+      else model.scale.multiplyScalar(0.22);
+      this.tool.add(model);
+      const footprint = new THREE.Mesh(new THREE.RingGeometry(toolRadius(state) * 0.94, toolRadius(state), 48), new THREE.MeshBasicMaterial({ color: state.equippedTool === 'laser' ? 0xef4b3f : 0xffd23f, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false }));
+      footprint.rotation.x = -Math.PI / 2;
+      footprint.name = 'scratch-footprint';
+      this.tool.add(footprint);
+    }
     this.rack.update(state);
     this.board.update(state, this.view === 'board' && this.touchLayout() && this.camera.aspect > 1);
     const ticket = state.ticket;
@@ -541,12 +569,13 @@ export class Stage {
   /** The thing under the pointer that can be pressed, if any. */
   private pick(event: PointerEvent): Action | null {
     this.raycaster.setFromCamera(this.ndc(event), this.camera);
-    for (const hit of this.raycaster.intersectObjects([this.rack.group, this.board.group, this.ticket], true)) {
+    for (const hit of this.raycaster.intersectObjects([this.rack.group, this.board.group, this.toolShelf.group, this.ticket], true)) {
       let visible = true;
       for (let node: THREE.Object3D | null = hit.object; node; node = node.parent) visible &&= node.visible;
       if (!visible) continue;
       const action = hit.object.userData.action as Action | undefined;
       if (!action) continue;
+      if (action.kind === 'tool' && this.view !== 'tools') return { kind: 'tools' };
       if (action.kind === 'collect' && !(this.shown?.revealed && !this.busy)) continue;
       return action;
     }
@@ -613,7 +642,9 @@ export class Stage {
     if (Math.hypot(dx, dy) < 10) {
       const action = this.pick(event);
       if (action) this.press(action);
-    } else if (this.mask === null && Math.abs(dy) > 50 && Math.abs(dy) > Math.abs(dx)) {
+    } else if ((this.mask === null || this.view !== 'desk') && Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+      this.look(dx > 0 ? this.view === 'board' ? 'shop' : 'tools' : this.view === 'tools' ? 'shop' : 'board');
+    } else if ((this.mask === null || this.view !== 'desk') && Math.abs(dy) > 50 && Math.abs(dy) > Math.abs(dx)) {
       // With foil still on the mat a drag is an attempt to scratch, not a look.
       // Dragging the scene down looks up, like turning your head.
       this.nod(dy > 0 ? 'up' : 'down');
@@ -643,11 +674,15 @@ export class Stage {
   /** Looks one step up (desk to rack) or down (board or rack back to the desk). */
   nod(direction: 'up' | 'down'): void {
     if (direction === 'up') this.look('shop');
-    else this.look(this.view === 'board' ? 'shop' : 'desk');
+    else this.look(this.view === 'board' || this.view === 'tools' ? 'shop' : 'desk');
   }
 
   private press(action: Action): void {
     if (action.kind === 'ticket') this.callbacks.onTicket(action.id);
+    else if (action.kind === 'tools') this.look('tools');
+    else if (action.kind === 'tool') {
+      if (action.intent) this.callbacks.onTool(action.intent);
+    }
     else if (action.kind === 'collect') this.callbacks.onCollect();
     else if (this.view === 'board') this.callbacks.onBoard();
     else this.look('board');
@@ -655,12 +690,12 @@ export class Stage {
 
   private scratchTo(now: number): void {
     const mask = this.mask;
-    if (!mask) return;
+    if (!mask || !this.state) return;
     const m = this.metrics;
     const to = this.foilPoint();
     const from = this.stroke ?? to;
     this.stroke = to;
-    const radius = BALANCE.brushRadius / m.window.w;
+    const radius = toolRadius(this.state) / m.window.w;
     this.toolLean = THREE.MathUtils.clamp((to.x - from.x) * 6, -0.18, 0.18);
     const { cleared, contact } = scratchSegment(mask, from, to, radius);
     if (!contact) return;
@@ -693,7 +728,7 @@ export class Stage {
     let overFoil = false;
     if (this.canScratch() && this.locate()) {
       const { x, y } = this.foilPoint();
-      const pad = BALANCE.brushRadius / this.metrics.window.w;
+      const pad = (this.state ? toolRadius(this.state) : BALANCE.brushRadius) / this.metrics.window.w;
       overFoil = x >= -pad && x <= 1 + pad && y >= -pad && y <= this.metrics.layout.height + pad;
     }
     this.tool.visible = overFoil && this.tool.children.length > 0;
@@ -702,8 +737,9 @@ export class Stage {
     this.toolLean = THREE.MathUtils.damp(this.toolLean, 0, 14, dt);
     this.toolLift = THREE.MathUtils.damp(this.toolLift, this.scratching ? 0.012 : 0.045, 38, dt);
     if (this.tool.visible) {
+      animateToolModel(this.tool, dt, this.scratching && this.canScratch());
       this.tool.position.set(this.pointer.x, FACE_Y + this.toolLift, this.pointer.z);
-      this.tool.rotation.set(-0.26, 0, -0.52 + this.toolLean);
+      this.tool.rotation.set(0, this.toolLean, 0);
     }
   }
 
@@ -801,6 +837,10 @@ export class Stage {
       target = box.getCenter(new THREE.Vector3());
       direction = gaze(13);
       lift = desktop ? this.camera.aspect < 1.5 ? 0.2 : 0.03 : touch ? 0 : 0.34;
+    } else if (this.view === 'tools') {
+      points = this.toolShelf.points();
+      target = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
+      direction = gaze(6, this.toolShelf.group.rotation.y);
     } else {
       points = this.board.points();
       target = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
@@ -856,6 +896,9 @@ export class Stage {
     for (const id of ['dong', 'bac', 'vang', 'ngoc', 'rong'] as const) rack[id] = screen(this.rack.anchor(id));
     canvas.dataset.rack = JSON.stringify(rack);
     canvas.dataset.board = JSON.stringify(screen(new THREE.Box3().setFromPoints(this.board.points()).getCenter(new THREE.Vector3())));
+    canvas.dataset.tools = JSON.stringify(Object.fromEntries(TOOLS.map(tool => [tool.id, screen(this.toolShelf.anchor(tool.id))])));
+    canvas.dataset.equippedTool = this.state?.equippedTool ?? 'coin';
+    canvas.dataset.toolLevel = String(this.state?.toolLevels[this.state.equippedTool] ?? 0);
     canvas.dataset.ticket = JSON.stringify(screen(new THREE.Vector3(0, FACE_Y, 0)));
     canvas.dataset.view = this.view;
     canvas.dataset.busy = this.busy || !this.settled ? '1' : '0';
@@ -902,6 +945,7 @@ export class Stage {
     }
 
     this.updateTool(dt);
+    if (this.state) this.toolShelf.tick(dt, this.state);
 
     this.particles.update(dt);
     if (this.ticks++ % 10 === 0) this.publish();

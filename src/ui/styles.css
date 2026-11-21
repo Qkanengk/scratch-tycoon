@@ -477,6 +477,11 @@ textarea {
     top: 74px;
     bottom: auto;
   }
+
+  .app[data-view='shop'] .look-left {
+    top: 74px;
+    bottom: auto;
+  }
 }
 
 /* Phone: the prompt stacks and spans the width; key hints go away. */
@@ -596,5 +601,6 @@ textarea {
     bottom: auto;
   }
   .look-up, .look-down, .look-left { left: 42%; transform: translateX(-50%); }
+  .app[data-view='shop'] .look-left { top: calc(var(--hud-top) + 52px); }
   .look-right { right: calc(var(--hud-right) + 108px); }
 }

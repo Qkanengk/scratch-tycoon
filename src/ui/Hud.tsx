@@ -19,6 +19,7 @@ interface Prompt {
 /** What the game asks of the player right now, given what is on the desk and where they are looking. */
 export function promptFor(state: GameState, now: number, view: View, progress: number): Prompt {
   const ticket = state.ticket;
+  if (view === 'tools') return { tone: 'idle', message: t('tools.hint') };
   if (view === 'board') {
     const next = TICKETS.find((def) => !unlockProgress(state, def.id).unlocked);
     if (!next?.unlock) return { tone: 'idle', message: t('board.allDone') };

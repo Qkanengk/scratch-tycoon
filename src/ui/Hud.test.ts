@@ -6,6 +6,11 @@ import { promptFor } from './Hud';
 const fresh = (): GameState => createInitialState(1);
 
 describe('promptFor', () => {
+  it('keeps shelf hints contextual even with a ticket on the desk', () => {
+    const prompt = promptFor(revealTicket(buyTicket(fresh(), 'dong')), 0, 'tools', 1);
+    expect(prompt.button).toBeUndefined();
+    expect(prompt.message).toContain('nâng cấp');
+  });
   it('offers the selected ticket on an empty desk', () => {
     const prompt = promptFor(fresh(), 0, 'shop', 0);
     expect(prompt.button).toMatchObject({ command: 'buy', disabled: false });

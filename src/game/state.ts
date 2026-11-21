@@ -1,4 +1,5 @@
 import { BALANCE } from '../data/balance';
+import { initialToolLevels, type ToolId } from '../data/tools';
 import { TICKET_IDS, type TicketId } from '../data/tickets';
 
 /** Prizes inside cells are in units of the ticket's price. */
@@ -31,11 +32,14 @@ export interface TicketStats {
   bigWins: number;
 }
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 export interface GameState {
   version: typeof SAVE_VERSION;
   money: number;
+  ownedTools: ToolId[];
+  toolLevels: Record<ToolId, number>;
+  equippedTool: ToolId;
   /** Lifetime prize money collected. */
   totalEarned: number;
   rngState: number;
@@ -60,6 +64,9 @@ export function createInitialState(seed: number): GameState {
   return {
     version: SAVE_VERSION,
     money: BALANCE.startingMoney,
+    ownedTools: ['coin'],
+    toolLevels: initialToolLevels(),
+    equippedTool: 'coin',
     totalEarned: 0,
     rngState: seed >>> 0,
     nextSerial: 1,
