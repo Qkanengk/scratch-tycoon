@@ -3,7 +3,7 @@ import { BALANCE } from '../data/balance';
 import { ticketDef, TICKET_IDS } from '../data/tickets';
 import { layoutTicket } from '../render/layout';
 import { buyTicket, revealTicket } from './economy';
-import { deserialize, loadStoredSave, migrate, recordScratch, SAVE_BACKUP_KEY, SAVE_KEY, serialize, updateStoredSave } from './save';
+import { deserialize, loadStoredSave, migrate, recordReveal, recordScratch, SAVE_BACKUP_KEY, SAVE_KEY, serialize, updateStoredSave } from './save';
 import { createMask, encodeMask, restoreMask, scratchProgress, scratchSegment } from './scratch';
 import { createInitialState, SAVE_VERSION } from './state';
 
@@ -209,6 +209,38 @@ describe('stored saves', () => {
     expect(storage.setItem).not.toHaveBeenCalled();
   });
 
+  it.each(['serial', 'content'] as const)('ignores queued completion and mask saves after another tab replaces ticket %s', (field) => {
+    const state = buyTicket(fresh(), 'dong');
+    const ticket = state.ticket!;
+    const replacement = {
+      ...state,
+      ticket: field === 'serial' ? { ...ticket, serial: ticket.serial + 1 } : {
+        ...ticket,
+        cells: ticket.cells.map(() => ({ type: 'symbol' as const, symbol: 4, win: true })),
+        tier: 5,
+        prize: ticketDef('dong').price * ticketDef('dong').prizes[5]!.multiplier,
+      },
+    };
+    const storage = memory(serialize(state));
+    const stale = loadStoredSave(storage, fresh);
+    storage.setItem(SAVE_KEY, serialize(replacement));
+    storage.setItem.mockClear();
+    const layout = layoutTicket(ticketDef('dong').rules);
+    const mask = createMask(layout.cells, layout.height, BALANCE.scratchThreshold);
+    scratchSegment(mask, { x: 0, y: 0 }, { x: 1, y: 1 }, 1);
+    for (const transition of [
+      (current: typeof state) => recordReveal(current, ticket),
+      (current: typeof state) => recordScratch(current, ticket, encodeMask(mask)),
+    ]) {
+      const next = updateStoredSave(storage, stale, fresh, transition, 1000);
+      expect(next.state).toEqual(replacement);
+      expect(next.state.ticket?.revealed).toBe(false);
+      expect(next.state.ticket?.scratch).toBeUndefined();
+      expect(next.state.stats).toEqual(state.stats);
+      expect(storage.setItem).not.toHaveBeenCalled();
+    }
+  });
+
   it('continues in memory if writing the updated save fails', () => {
     const storage = memory(serialize(fresh()));
     storage.setItem.mockImplementation(() => { throw new Error('full'); });
@@ -226,6 +258,16 @@ describe('saved scratching', () => {
     const layout = layoutTicket(ticketDef(id).rules);
     return createMask(layout.cells, layout.height, BALANCE.scratchThreshold);
   };
+
+  it('reveals only the scratched ticket once and ignores absent tickets', () => {
+    const state = bought();
+    const revealed = recordReveal(state, state.ticket!);
+    expect(revealed).toEqual(revealTicket(state));
+    expect(revealed.stats.dong.scratched).toBe(1);
+    expect(recordReveal(revealed, state.ticket!)).toBe(revealed);
+    const empty = { ...state, ticket: null };
+    expect(recordReveal(empty, state.ticket!)).toBe(empty);
+  });
 
   it.each(TICKET_IDS)('round-trips optional scratch progress for %s without a version change', (id) => {
     const state = buyTicket({ ...createInitialState(4), money: 1e9, licenses: TICKET_IDS.slice(1) }, id);

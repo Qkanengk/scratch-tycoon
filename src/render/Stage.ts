@@ -20,7 +20,7 @@ export type View = 'desk' | 'shop' | 'board';
 
 export interface StageCallbacks {
   /** The player scratched enough of the ticket on the mat. */
-  onRevealed(): void;
+  onRevealed(ticket: Ticket): void;
   /** Scratch progress toward the reveal, 0 to 1. */
   onProgress(done: number): void;
   onScratch(ticket: Ticket, scratch: string): void;
@@ -621,7 +621,7 @@ export class Stage {
     this.callbacks.onProgress(done);
     if (done === 1) {
       this.mask = null;
-      this.callbacks.onRevealed();
+      if (this.shown) this.callbacks.onRevealed(this.shown);
     } else {
       playScratch();
       if (now - this.lastScratchSave >= 500) this.saveScratch();

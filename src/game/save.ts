@@ -184,6 +184,12 @@ export function updateStoredSave(
   return { ...current, state };
 }
 
+export function recordReveal(state: GameState, ticket: Ticket): GameState {
+  const current = state.ticket;
+  if (!current || current.revealed || ticketContentKey(current) !== ticketContentKey(ticket)) return state;
+  return revealTicket(state);
+}
+
 export function recordScratch(state: GameState, ticket: Ticket, scratch: string): GameState {
   const current = state.ticket;
   if (!current || current.revealed || ticketContentKey(current) !== ticketContentKey(ticket)) return state;
@@ -194,5 +200,5 @@ export function recordScratch(state: GameState, ticket: Ticket, scratch: string)
   const merged = encodeMask(mask);
   if (merged === current.scratch) return state;
   const next = { ...state, ticket: { ...current, scratch: merged } };
-  return scratchProgress(mask) === 1 ? revealTicket(next) : next;
+  return scratchProgress(mask) === 1 ? recordReveal(next, ticket) : next;
 }

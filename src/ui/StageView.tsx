@@ -17,7 +17,7 @@ export function StageView({ state, handlers, stage }: Props) {
   useEffect(() => {
     if (!host.current) return;
     const created = new Stage(host.current, {
-      onRevealed: () => handlers.current.onRevealed(),
+      onRevealed: (ticket) => handlers.current.onRevealed(ticket),
       onProgress: (done) => handlers.current.onProgress(done),
       onScratch: (ticket, scratch) => handlers.current.onScratch(ticket, scratch),
       onTicket: (id) => handlers.current.onTicket(id),
