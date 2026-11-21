@@ -21,7 +21,14 @@ export function App() {
   const [view, setView] = useState<View>('shop');
   const [muted, setMutedState] = useState(isMuted);
   const [paused, setPaused] = useState(false);
-  const [toast, setToast] = useState<string | null>(() => game.recovered ? t('save.recovered') : null);
+  const [toast, setToast] = useState<string | null>(() => game.saveFailed ? t('save.failed') : game.recovered ? t('save.recovered') : null);
+  const previousSaveFailed = useRef(game.saveFailed);
+
+  useEffect(() => {
+    if (game.saveFailed && !previousSaveFailed.current) setToast(t('save.failed'));
+    else if (!game.saveFailed && previousSaveFailed.current) setToast((current) => current === t('save.failed') ? null : current);
+    previousSaveFailed.current = game.saveFailed;
+  }, [game.saveFailed]);
 
   useEffect(() => {
     if (!toast) return;

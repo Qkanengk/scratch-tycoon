@@ -62,6 +62,8 @@ export const vi = {
 
   'save.title': 'Lưu game',
   'save.auto': 'Game tự lưu trên trình duyệt này.',
+  'save.failed': 'Không lưu được tiến độ: bộ nhớ trình duyệt đầy hoặc bị chặn. Hãy xuất save để giữ lại.',
+  'save.unsaved': 'Chưa lưu được trên trình duyệt này — hãy xuất save.',
   'save.export': 'Xuất save',
   'save.import': 'Nhập save',
   'save.reset': 'Chơi lại từ đầu',
