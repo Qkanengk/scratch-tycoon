@@ -6,6 +6,13 @@ import { promptFor } from './Hud';
 const fresh = (): GameState => createInitialState(1);
 
 describe('promptFor', () => {
+  it('offers the net payout rather than the gross prize', () => {
+    const state = revealTicket(buyTicket(fresh(), 'dong'));
+    state.ticket = { ...state.ticket!, prize: 24000, gross: 24000, tax: 1680, net: 22320 };
+    const prompt = promptFor(state, 0, 'desk', 1);
+    expect(prompt.button?.label).toBe('Nhận 22.320 xu');
+    expect(prompt.message).toContain('22.320');
+  });
   it('keeps shelf hints contextual even with a ticket on the desk', () => {
     const prompt = promptFor(revealTicket(buyTicket(fresh(), 'dong')), 0, 'tools', 1);
     expect(prompt.button).toBeUndefined();

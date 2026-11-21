@@ -279,7 +279,7 @@ export class Stage {
     const pin = new THREE.Mesh(new THREE.SphereGeometry(.025, 12, 8), new THREE.MeshToonMaterial({ color: 0xc43c2d }));
     pin.position.set(0, .22, .03);
     this.rent.group.add(pin);
-    this.receipt = new Paper(.84, .65);
+    this.receipt = new Paper(.9, .76);
     this.receipt.group.rotation.x = -Math.PI / 2;
     this.receipt.group.position.set(0, .085, .025);
     this.receipt.group.rotation.z = -.045;

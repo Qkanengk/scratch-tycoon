@@ -7,6 +7,7 @@ export const vi = {
   'drain.gross': 'Giải gốc: {cost} xu',
   'drain.tax': 'Thuế lãi: −{cost} xu',
   'drain.net': 'Thực lĩnh: {cost} xu',
+  'drain.wallet': 'Vào ví: {cost} xu',
   'drain.withheld': 'Trừ nợ sạp: {cost} xu',
   'drain.collect': 'ĐÃ LĨNH · CẢM ƠN!',
   'drain.fake': 'VÉ GIẢ · KHÔNG TRẢ THƯỞNG',

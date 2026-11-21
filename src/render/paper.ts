@@ -53,11 +53,14 @@ export function rentLines(state: GameState, paid: boolean) {
 }
 
 export function receiptLines(ticket: Ticket, debt: number) {
+  const exact = (amount: number) => Math.floor(amount).toLocaleString('vi-VN');
+  const withheld = Math.min(debt, ticket.net);
   return [
     { text: t(ticket.fakeTell ? 'drain.fake' : 'drain.receipt'), color: ticket.fakeTell ? '#bb3026' : '#2b1b17', size: 73 },
-    { text: t('drain.gross', { cost: formatCompact(ticket.gross) }) },
-    { text: t('drain.tax', { cost: formatCompact(ticket.tax) }), color: '#bb3026' },
-    { text: t('drain.net', { cost: formatCompact(ticket.net) }), size: 78 },
-    { text: debt ? t('drain.withheld', { cost: formatCompact(Math.min(debt, ticket.net)) }) : t('drain.collect'), color: '#736047', size: 49 },
+    { text: t('drain.gross', { cost: exact(ticket.gross) }) },
+    { text: t('drain.tax', { cost: exact(ticket.tax) }), color: '#bb3026' },
+    { text: t('drain.net', { cost: exact(ticket.net) }), size: 70 },
+    { text: withheld ? t('drain.withheld', { cost: exact(withheld) }) : t('drain.collect'), color: '#736047', size: 55 },
+    ...(withheld ? [{ text: t('drain.wallet', { cost: exact(ticket.net - withheld) }), size: 70 }] : []),
   ];
 }
