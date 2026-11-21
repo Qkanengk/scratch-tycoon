@@ -17,7 +17,8 @@ type RawSave = Record<string, unknown>;
  * Add an entry (and a test) whenever the shape of GameState changes.
  */
 const MIGRATIONS: Record<number, (save: RawSave) => RawSave> = {
-  3: (save) => ({ ...save, version: 4, durability: createInitialState(0).durability, rentElapsedMs: 0, rentDebt: 0 }),
+  3: (save) => ({ ...save, version: 4, durability: createInitialState(0).durability, rentElapsedMs: 0, rentDebt: 0,
+    ticket: isRecord(save.ticket) ? { ...save.ticket, gross: save.ticket.prize, tax: 0 } : save.ticket }),
   2: (save) => ({ ...save, version: 3, ownedTools: ['coin'], toolLevels: initialToolLevels(), equippedTool: 'coin' }),
   1: (save) => {
     if (!isRecord(save.stats)) return { ...save, version: 2 };
@@ -84,8 +85,8 @@ function readTicket(value: unknown): Ticket | null {
   const scratch = value.revealed !== true && restoreMask(mask, value.scratch)
     && scratchProgress(mask) < 1 ? encodeMask(mask) : undefined;
   const fakeTell = value.free !== true && (value.fakeTell === 'missing-seal' || value.fakeTell === 'misprinted-serial') ? value.fakeTell : null;
-  const gross = fakeTell ? 0 : (def.prizes[tier]?.multiplier ?? 0) * def.price;
-  const tax = Math.floor(Math.max(0, gross - def.price) * BALANCE.taxRates[def.id]);
+  const gross = fakeTell ? 0 : amount(value.gross, amount(value.prize, (def.prizes[tier]?.multiplier ?? 0) * def.price));
+  const tax = Math.min(gross, amount(value.tax, Math.floor(Math.max(0, gross - def.price) * BALANCE.taxRates[def.id])));
   return {
     serial: amount(value.serial, 0),
     type: value.type,

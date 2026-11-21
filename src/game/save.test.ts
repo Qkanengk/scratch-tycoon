@@ -9,6 +9,18 @@ import { createInitialState, SAVE_VERSION } from './state';
 import { buyTool, upgradeTool } from './tools';
 
 describe('save', () => {
+  it.each([3, 4])('preserves the purchased value of a winning Rồng ticket from v%s', version => {
+    const rich = { ...createInitialState(9), money: 1e9, licenses: TICKET_IDS.slice(1) };
+    const bought = buyTicket(rich, 'rong');
+    const gross = ticketDef('rong').prizes[1]!.multiplier * 150_000;
+    const tax = version === 3 ? 0 : Math.floor((gross - 150_000) * .2);
+    const legacy = { ...bought, version, ticket: { ...bought.ticket!, tier: 1, fakeTell: null, prize: gross,
+      gross: version === 3 ? undefined : gross, tax: version === 3 ? undefined : tax, net: undefined } };
+    const loaded = migrate(legacy)!;
+    expect(loaded.ticket).toMatchObject({ gross, prize: gross, tax, net: gross - tax });
+    expect(deserialize(serialize(loaded))?.ticket).toEqual(loaded.ticket);
+    expect(collectTicket(revealTicket(loaded)).money).toBe(loaded.money + gross - tax);
+  });
   it.each([1, 2, 3])('migrates v%s with full durability, fresh rent clock and no debt', version => {
     const old = { ...createInitialState(9), version, durability: undefined, rentElapsedMs: undefined, rentDebt: undefined };
     const state = migrate(old)!;
