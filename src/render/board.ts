@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TICKETS, type TicketId } from '../data/tickets';
+import { BIG_WIN_MULTIPLIER, TICKETS, type TicketId } from '../data/tickets';
 import { formatMoney } from '../game/format';
 import type { GameState } from '../game/state';
 import { unlockProgress } from '../game/unlocks';
@@ -55,7 +55,7 @@ export class LicenseBoard {
     const stats = state.stats[unlock.mission.ticket];
     const previous = t(`ticket.${unlock.mission.ticket}.name`);
     const scratched = Math.min(stats.scratched, unlock.mission.scratched);
-    const wins = Math.min(stats.wins, unlock.mission.wins);
+    const bigWins = Math.min(stats.bigWins, unlock.mission.bigWins);
     const rows: Row[] = [
       {
         label: t('shop.req.revenue', { current: money(Math.min(state.totalEarned, unlock.totalEarned)), target: money(unlock.totalEarned) }),
@@ -68,9 +68,9 @@ export class LicenseBoard {
         share: scratched / unlock.mission.scratched,
       },
       {
-        label: t('shop.req.wins', { current: wins, target: unlock.mission.wins, name: previous }),
-        done: progress.winsDone,
-        share: wins / unlock.mission.wins,
+        label: t('shop.req.bigWins', { current: bigWins, target: unlock.mission.bigWins, name: previous, multiplier: BIG_WIN_MULTIPLIER }),
+        done: progress.bigWinsDone,
+        share: bigWins / unlock.mission.bigWins,
       },
       {
         label: t('shop.req.license', { required: money(progress.requiredMoney), cost: money(unlock.licenseCost) }),

@@ -28,9 +28,10 @@ export interface TicketStats {
   scratched: number;
   wins: number;
   jackpots: number;
+  bigWins: number;
 }
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 export interface GameState {
   version: typeof SAVE_VERSION;
@@ -51,7 +52,7 @@ export interface GameState {
 
 export function emptyStats(): Record<TicketId, TicketStats> {
   const stats = {} as Record<TicketId, TicketStats>;
-  for (const id of TICKET_IDS) stats[id] = { scratched: 0, wins: 0, jackpots: 0 };
+  for (const id of TICKET_IDS) stats[id] = { scratched: 0, wins: 0, jackpots: 0, bigWins: 0 };
   return stats;
 }
 

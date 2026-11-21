@@ -1,5 +1,5 @@
 import { BALANCE } from '../data/balance';
-import { TICKETS, ticketDef, type TicketDef, type TicketId } from '../data/tickets';
+import { BIG_WIN_MULTIPLIER, TICKETS, ticketDef, type TicketDef, type TicketId } from '../data/tickets';
 import { Rng } from './rng';
 import type { GameState, Ticket } from './state';
 import { generateCells, jackpotTier } from './tickets';
@@ -44,6 +44,7 @@ export function revealTicket(state: GameState): GameState {
   const ticket = state.ticket;
   if (ticket === null || ticket.revealed) return state;
   const previous = state.stats[ticket.type];
+  const def = ticketDef(ticket.type);
   return {
     ...state,
     ticket: { ...ticket, revealed: true },
@@ -52,7 +53,8 @@ export function revealTicket(state: GameState): GameState {
       [ticket.type]: {
         scratched: previous.scratched + 1,
         wins: previous.wins + (ticket.prize > 0 ? 1 : 0),
-        jackpots: previous.jackpots + (ticket.tier === jackpotTier(ticketDef(ticket.type)) ? 1 : 0),
+        jackpots: previous.jackpots + (ticket.tier === jackpotTier(def) ? 1 : 0),
+        bigWins: previous.bigWins + ((def.prizes[ticket.tier]?.multiplier ?? 0) >= BIG_WIN_MULTIPLIER ? 1 : 0),
       },
     },
   };
