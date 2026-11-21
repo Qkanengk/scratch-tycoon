@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { updatePromo } from '../game/economy';
 import { loadStoredSave, SAVE_KEY, updateStoredSave } from '../game/save';
 import { createInitialState, type GameState } from '../game/state';
+import { settleAway } from '../game/automation';
+import { AUTOMATION } from '../data/automation';
 
 function newGame(): GameState {
   return createInitialState((Math.random() * 2 ** 32) >>> 0);
@@ -63,8 +65,16 @@ export function useGame(): Game {
       setSaveFailed(next.saveFailed);
     };
     window.addEventListener('storage', onStorage);
-    apply((value) => value);
+    apply((value, time) => settleAway(value, time));
     return () => window.removeEventListener('storage', onStorage);
+  }, [apply]);
+
+  useEffect(() => {
+    const visibility = () => apply((value, time) => document.hidden
+      ? { ...value, automation: { ...value.automation, lastSeenAt: time } }
+      : settleAway(value, time, AUTOMATION.returnThresholdMs));
+    document.addEventListener('visibilitychange', visibility);
+    return () => document.removeEventListener('visibilitychange', visibility);
   }, [apply]);
 
   const waiting = state.promoReadyAt !== null;

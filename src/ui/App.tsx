@@ -15,6 +15,7 @@ import { money } from './money';
 import { SavePanel } from './SavePanel';
 import { StageView } from './StageView';
 import { useGame } from './useGame';
+import { advanceAutomation, automationAction, robotContext, type AutomationAction } from '../game/automation';
 
 export function App() {
   const game = useGame();
@@ -80,13 +81,19 @@ export function App() {
   };
 
   const run = (command: Command) => {
-    if (command === 'buy') buy(state.selected);
+    if (command === 'robot') automate('context', 0);
+    else if (command === 'buy') buy(state.selected);
     else if (command === 'collect') collect();
     else if (command === 'license') license();
     else {
       play('promo');
       apply(claimPromo);
     }
+  };
+
+  const automate = (action: AutomationAction | 'context', index: number) => {
+    play('ui-click');
+    apply((current, time) => automationAction(current, action === 'context' ? robotContext(current, index) : action, index, time));
   };
 
   const tool = (intent: ToolIntent) => {
@@ -107,7 +114,11 @@ export function App() {
   const keys = useRef<(event: KeyboardEvent) => void>(() => undefined);
   useEffect(() => {
     handlers.current = {
-      onPlayTime: elapsed => apply(current => advancePlayTime(current, elapsed)),
+      onAutomation: automate,
+      onPlayTime: elapsed => apply((current, time) => {
+        const next = advanceAutomation(advancePlayTime(current, elapsed), elapsed);
+        return { ...next, automation: { ...next.automation, lastSeenAt: time } };
+      }),
       onReturn: () => { play('ticket-collect'); apply(returnFake); },
       onRepair: id => {
         if (state.money < repairPrice(state, id)) { play('ui-error'); stage.current?.refuseTool(id); return; }
@@ -138,8 +149,8 @@ export function App() {
         if (prompt.button && !prompt.button.disabled) run(prompt.button.command);
       } else if (key === 'arrowup' || key === 'w') stage.current?.nod('up');
       else if (key === 'arrowdown' || key === 's') stage.current?.nod('down');
-      else if (key === 'arrowright' || key === 'd') stage.current?.look(view === 'tools' ? 'shop' : 'board');
-      else if (key === 'arrowleft' || key === 'a') stage.current?.look(view === 'board' ? 'shop' : 'tools');
+      else if (key === 'arrowright' || key === 'd') stage.current?.look(view === 'tools' ? 'shop' : view === 'board' ? 'robots' : view === 'robots' ? 'shop' : 'board');
+      else if (key === 'arrowleft' || key === 'a') stage.current?.look(view === 'robots' ? 'board' : view === 'board' ? 'shop' : 'tools');
     };
   });
 
@@ -190,6 +201,8 @@ export function App() {
       {view === 'shop' && <LookButton direction="left" testid="look-tools" label={t('look.tools')} onClick={() => stage.current?.look('tools')} />}
       {view === 'tools' && <LookButton direction="right" testid="look-shop" label={t('look.shop')} onClick={() => stage.current?.look('shop')} />}
       {view === 'board' && <LookButton direction="left" testid="look-shop" label={t('look.shop')} onClick={() => stage.current?.look('shop')} />}
+      {view === 'board' && <LookButton direction="right" testid="look-robots" label={t('robot.title')} onClick={() => stage.current?.look('robots')} />}
+      {view === 'robots' && <LookButton direction="left" testid="look-shop" label={t('look.shop')} onClick={() => stage.current?.look('shop')} />}
       {view === 'shop' && <LookButton direction="down" testid="look-desk" label={t('look.desk')} onClick={() => stage.current?.look('desk')} />}
 
       <PromptChip prompt={prompt} onCommand={run} />

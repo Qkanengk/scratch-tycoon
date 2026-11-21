@@ -24,7 +24,7 @@ describe('save', () => {
   it.each([1, 2, 3])('migrates v%s with full durability, fresh rent clock and no debt', version => {
     const old = { ...createInitialState(9), version, durability: undefined, rentElapsedMs: undefined, rentDebt: undefined };
     const state = migrate(old)!;
-    expect(state.version).toBe(4);
+    expect(state.version).toBe(SAVE_VERSION);
     expect(state.durability).toEqual(createInitialState(9).durability);
     expect(state.rentElapsedMs).toBe(0);
     expect(state.rentDebt).toBe(0);

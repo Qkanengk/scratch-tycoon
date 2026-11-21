@@ -6,8 +6,9 @@ import { unlockProgress } from '../game/unlocks';
 import { t } from '../i18n';
 import type { View } from '../render/Stage';
 import { money } from './money';
+import { automationPrice, robotContext } from '../game/automation';
 
-export type Command = 'buy' | 'collect' | 'promo' | 'license';
+export type Command = 'buy' | 'collect' | 'promo' | 'license' | 'robot';
 
 interface Prompt {
   tone: 'idle' | 'win' | 'jackpot' | 'lose';
@@ -19,6 +20,12 @@ interface Prompt {
 /** What the game asks of the player right now, given what is on the desk and where they are looking. */
 export function promptFor(state: GameState, now: number, view: View, progress: number): Prompt {
   const ticket = state.ticket;
+  if (view === 'robots') {
+    const action = robotContext(state);
+    const busy = !!state.automation.robots[0]?.tray && action !== 'recharge';
+    return { tone: 'idle', message: state.rentDebt ? t('robot.debtHint') : t('robot.hint', { tickets: state.automation.report.tickets, net: money(state.automation.report.net) }),
+      button: busy || state.rentDebt > 0 ? undefined : { label: `${t(`robot.${action}`, { level: state.automation.robots.length })} · ${money(automationPrice(state, action))}`, command: 'robot', disabled: state.money < automationPrice(state, action) } };
+  }
   if (view === 'tools') return { tone: 'idle', message: t('tools.hint') };
   if (view === 'board') {
     const next = TICKETS.find((def) => !unlockProgress(state, def.id).unlocked);

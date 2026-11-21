@@ -1,0 +1,195 @@
+import { describe, expect, it } from 'vitest';
+import { AUTOMATION as A } from '../data/automation';
+import { TICKET_IDS } from '../data/tickets';
+import { advanceAutomation, automationAction, automationPrice, awayCapMs, batteryCapacity, loadRobot, robotInterval, settleAway, ticketCharge } from './automation';
+import { buyTicket } from './economy';
+import { deserialize, migrate, serialize } from './save';
+import { createInitialState } from './state';
+import { unlockProgress } from './unlocks';
+
+const rich = (seed = 1) => ({ ...createInitialState(seed), money: 1e8, licenses: [...TICKET_IDS] });
+const hired = (seed = 1) => automationAction(rich(seed), 'robot');
+
+describe('robot work', () => {
+  it('loads a paid independent tray without touching the hand ticket', () => {
+    const hand = buyTicket(hired(), 'dong');
+    const loaded = loadRobot(hand, 0);
+    expect(loaded.ticket).toEqual(hand.ticket);
+    expect(loaded.automation.robots[0]?.tray?.serial).not.toBe(hand.ticket?.serial);
+    expect(loaded.money).toBe(hand.money - 10);
+    expect(hand.automation.robots[0]?.tray).toBeNull();
+  });
+
+  it('finishes on cadence, pays tax and updates missions without wearing the hand tool', () => {
+    let seed = 1;
+    while (!loadRobot({ ...hired(seed), selected: 'vang' }, 0).automation.robots[0]!.tray!.tax) seed++;
+    const s = { ...hired(seed), selected: 'vang' as const, equippedTool: 'key' as const, ownedTools: ['coin', 'key'] as const };
+    const loaded = loadRobot({ ...s, ownedTools: [...s.ownedTools] }, 0);
+    const tray = loaded.automation.robots[0]!.tray!;
+    expect(tray.tax).toBeGreaterThan(0);
+    const before = loaded.money;
+    const half = advanceAutomation(loaded, 2000);
+    expect(half.automation.robots[0]?.progressMs).toBe(2000);
+    expect(half.stats.vang.scratched).toBe(0);
+    const done = advanceAutomation(half, 2000);
+    expect(done.money).toBe(before + tray.net);
+    expect(done.totalEarned).toBe(tray.net);
+    expect(done.stats.vang.scratched).toBe(1);
+    expect(done.automation.robots[0]?.tray).toBeNull();
+    expect(done.durability.key).toBe(1);
+    expect(loaded.automation.robots[0]?.progressMs).toBe(0);
+  });
+
+  it('does not load twice, buy locked tickets, or spend money it lacks', () => {
+    const loaded = loadRobot(hired(), 0);
+    expect(loadRobot(loaded, 0)).toBe(loaded);
+    const broke = { ...hired(), money: 0 };
+    expect(loadRobot(broke, 0)).toBe(broke);
+    const locked = { ...hired(), licenses: [], selected: 'rong' as const };
+    expect(loadRobot(locked, 0)).toBe(locked);
+    expect(loadRobot(loaded, 8)).toBe(loaded);
+  });
+
+  it('waits with an empty tray until loaded, then auto-buys only after purchasing the circuit', () => {
+    const idle = hired();
+    expect(advanceAutomation(idle, 8000).money).toBe(idle.money);
+    const auto = automationAction(idle, 'autoBuy');
+    const done = advanceAutomation(auto, 8000);
+    expect(done.stats.dong.scratched).toBe(2);
+    expect(done.automation.report.tickets).toBe(2);
+    expect(idle.automation.autoBuy).toBe(false);
+  });
+
+  it('loses fake tickets without spotting or refunding them', () => {
+    let s = hired();
+    for (let seed = 1; seed < 500; seed++) {
+      const candidate = loadRobot({ ...hired(seed), selected: 'vang' }, 0);
+      if (candidate.automation.robots[0]?.tray?.fakeTell) { s = candidate; break; }
+    }
+    expect(s.automation.robots[0]?.tray?.fakeTell).toBeTruthy();
+    const done = advanceAutomation(s, 4000);
+    expect(done.money).toBe(s.money);
+    expect(done.totalEarned).toBe(0);
+    expect(done.stats.vang.wins).toBe(0);
+    expect(done.stats.vang.scratched).toBe(1);
+  });
+
+  it('drains extra charge for bombs and stops mid-ticket when flat', () => {
+    const s = loadRobot(hired(), 0);
+    const robot = s.automation.robots[0]!;
+    robot.tray!.cells[0] = { type: 'bomb' };
+    robot.charge = .5;
+    const done = advanceAutomation(s, 4000, true);
+    expect(done.automation.robots[0]?.charge).toBe(0);
+    expect(done.automation.robots[0]?.tray).not.toBeNull();
+    expect(done.automation.robots[0]?.progressMs).toBeCloseTo(4000 * .5 / ticketCharge(robot.tray!));
+    expect(done.stats.dong.scratched).toBe(0);
+  });
+
+  it('recharges for money or slowly for free only in active play', () => {
+    const s = hired(); s.automation.robots[0]!.charge = 0;
+    const price = automationPrice(s, 'recharge');
+    const paid = automationAction(s, 'recharge');
+    expect(paid.money).toBe(s.money - price);
+    expect(paid.automation.robots[0]?.charge).toBe(batteryCapacity(s));
+    const half = advanceAutomation(s, A.freeChargeMs / 2);
+    expect(half.automation.robots[0]?.charge).toBeCloseTo(batteryCapacity(s) / 2);
+    expect(half.automation.robots[0]?.charging).toBe(true);
+    const full = advanceAutomation(half, A.freeChargeMs / 2);
+    expect(full.automation.robots[0]?.charging).toBe(false);
+    expect(full.money).toBe(s.money);
+    expect(advanceAutomation(s, A.freeChargeMs, true).automation.robots[0]?.charge).toBe(0);
+    expect(automationAction({ ...s, money: 0 }, 'recharge').automation.robots[0]?.charge).toBe(0);
+  });
+
+  it('pauses all work and loading while rent is owed', () => {
+    const s = { ...loadRobot(hired(), 0), rentDebt: 100 };
+    expect(advanceAutomation(s, 100000)).toBe(s);
+    const idle = { ...hired(), rentDebt: 100 };
+    expect(loadRobot(idle, 0)).toBe(idle);
+    expect(advanceAutomation({ ...s, rentDebt: 0 }, 4000).stats.dong.scratched).toBe(1);
+  });
+
+  it('caps robots and upgrades, preserves progress fraction and validates prerequisites', () => {
+    let s = loadRobot(hired(), 0);
+    s = advanceAutomation(s, 1000);
+    s = automationAction(s, 'speed');
+    expect(s.automation.robots[0]!.progressMs / robotInterval(s)).toBeCloseTo(.25);
+    for (let i = 0; i < 20; i++) {
+      s = automationAction(automationAction(automationAction(s, 'robot'), 'speed'), 'capacity');
+    }
+    expect(s.automation.robots).toHaveLength(3);
+    expect(s.automation.speed).toBe(A.maxSpeed);
+    expect(s.automation.capacity).toBe(A.maxCapacity);
+    expect(automationAction(s, 'away')).toBe(s);
+    expect(automationAction(s, 'robot')).toBe(s);
+    const poor = { ...createInitialState(1), money: 0 };
+    expect(automationAction(poor, 'robot')).toBe(poor);
+  });
+
+  it.each([NaN, Infinity, -1, 0])('ignores invalid/empty active elapsed %s', elapsed => {
+    const s = loadRobot(hired(), 0);
+    expect(advanceAutomation(s, elapsed)).toBe(s);
+  });
+});
+
+describe('away work and saves', () => {
+  function awayState() {
+    let s = automationAction(automationAction(hired(), 'autoBuy'), 'away', 0, 1000);
+    for (let i = 0; i < 8; i++) s = automationAction(automationAction(s, 'speed'), 'capacity');
+    s = automationAction(automationAction(s, 'robot'), 'robot');
+    for (let i = 0; i < 5; i++) s = automationAction(s, 'cap');
+    for (let i = 0; i < 3; i++) s = automationAction(s, 'recharge', i);
+    return s;
+  }
+
+  it('simulates deterministically, caps at twelve hours, and cannot cross an unmet licence gate', () => {
+    const s = { ...awayState(), licenses: [] };
+    s.totalEarned = 3999;
+    s.stats.dong = { scratched: 449, bigWins: 22, wins: 100, jackpots: 0 };
+    expect(unlockProgress(s, 'bac').canBuyLicense).toBe(false);
+    const done = settleAway(s, 1000 + 12 * 3600_000);
+    expect(done.automation.report.tickets).toBeGreaterThan(0);
+    expect(done.money).not.toBe(s.money);
+    expect(done.stats).toEqual(s.stats);
+    expect(done.totalEarned).toBe(s.totalEarned);
+    expect(done.rentElapsedMs).toBe(s.rentElapsedMs);
+    expect(done.rentDebt).toBe(s.rentDebt);
+    expect(unlockProgress(done, 'bac').canBuyLicense).toBe(false);
+    expect(settleAway(s, 1000 + 12 * 3600_000)).toEqual(done);
+    expect(settleAway(s, 1000 + 24 * 3600_000).money).toBe(done.money);
+    expect(awayCapMs(s)).toBe(12 * 3600_000);
+    expect(settleAway(done, done.automation.lastSeenAt).money).toBe(done.money);
+  });
+
+  it('limits away work by money and battery, and requires the unlock', () => {
+    const s = awayState();
+    const flat = { ...s, automation: { ...s.automation, robots: s.automation.robots.map(r => ({ ...r, charge: 0 })) } };
+    expect(settleAway(flat, 3600_000).automation.report.tickets).toBe(0);
+    expect(settleAway({ ...s, money: 0 }, 3600_000).automation.report.tickets).toBe(0);
+    expect(settleAway(hired(), 3600_000).automation.report.tickets).toBe(0);
+    expect(settleAway(s, 59000, 60000).automation.report.tickets).toBe(0);
+    expect(settleAway(s, -10).money).toBe(s.money);
+    expect(settleAway(s, 500)).toBe(s);
+    expect(settleAway(s, NaN)).toBe(s);
+  });
+
+  it('round-trips robots, partial trays, battery, unlocks and timestamp in v5', () => {
+    const s = advanceAutomation(loadRobot(awayState(), 0), 500);
+    expect(deserialize(serialize(s))).toEqual(s);
+    const old = { ...rich(), version: 4, automation: undefined };
+    expect(migrate(old)?.automation).toEqual(createInitialState(1).automation);
+    expect(migrate(old)?.version).toBe(5);
+  });
+
+  it('sanitizes malformed levels, battery, trays, unlocks and timestamps', () => {
+    const s = migrate({ ...rich(), automation: { speed: 999, capacity: -1, autoBuy: false, away: true, capLevel: 5,
+      lastSeenAt: Infinity, robots: [{ charge: Infinity, progressMs: -1, tray: { broken: true } }, null] } })!;
+    expect(s.automation.speed).toBe(0);
+    expect(s.automation.capacity).toBe(0);
+    expect(s.automation.away).toBe(false);
+    expect(s.automation.capLevel).toBe(0);
+    expect(s.automation.lastSeenAt).toBe(0);
+    expect(s.automation.robots).toEqual([{ charge: 0, charging: false, tray: null, progressMs: 0 }]);
+  });
+});

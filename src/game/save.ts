@@ -1,4 +1,6 @@
 import { BALANCE } from '../data/balance';
+import { AUTOMATION } from '../data/automation';
+import { batteryCapacity, initialAutomation, robotInterval, type Automation, type Robot } from './automation';
 import { initialToolLevels, TOOLS, type ToolId } from '../data/tools';
 import { BIG_WIN_MULTIPLIER, TICKET_IDS, ticketDef, type TicketId, type TicketRules } from '../data/tickets';
 import { layoutTicket } from '../render/layout';
@@ -17,6 +19,7 @@ type RawSave = Record<string, unknown>;
  * Add an entry (and a test) whenever the shape of GameState changes.
  */
 const MIGRATIONS: Record<number, (save: RawSave) => RawSave> = {
+  4: save => ({ ...save, version: 5, automation: initialAutomation() }),
   3: (save) => ({ ...save, version: 4, durability: createInitialState(0).durability, rentElapsedMs: 0, rentDebt: 0,
     ticket: isRecord(save.ticket) ? { ...save.ticket, gross: save.ticket.prize, tax: 0 } : save.ticket }),
   2: (save) => ({ ...save, version: 3, ownedTools: ['coin'], toolLevels: initialToolLevels(), equippedTool: 'coin' }),
@@ -103,6 +106,25 @@ function readTicket(value: unknown): Ticket | null {
   };
 }
 
+function readAutomation(value: unknown): Automation {
+  const base = initialAutomation();
+  if (!isRecord(value)) return base;
+  const level = (v: unknown, max: number) => Number.isInteger(v) && typeof v === 'number' && v >= 0 && v <= max ? v : 0;
+  const a: Automation = { ...base, speed: level(value.speed, AUTOMATION.maxSpeed), capacity: level(value.capacity, AUTOMATION.maxCapacity),
+    autoBuy: value.autoBuy === true, away: value.autoBuy === true && value.away === true,
+    capLevel: value.away === true && value.autoBuy === true ? level(value.capLevel, AUTOMATION.maxCapLevel) : 0,
+    lastSeenAt: amount(value.lastSeenAt, 0) };
+  const shell = { automation: a } as GameState;
+  a.robots = Array.isArray(value.robots) ? value.robots.slice(0, 3).filter(isRecord).map((r): Robot => {
+    const tray = readTicket(r.tray);
+    return { charge: Math.min(batteryCapacity(shell), amount(r.charge, 0)), charging: r.charging === true,
+      tray: tray && !tray.revealed && !tray.free ? tray : null,
+      progressMs: tray && !tray.revealed ? Math.min(robotInterval(shell) - 1e-6, amount(r.progressMs, 0)) : 0 };
+  }) : [];
+  if (isRecord(value.report)) a.report = { tickets: Math.floor(amount(value.report.tickets, 0)), net: amount(value.report.net, 0) };
+  return a;
+}
+
 export function migrate(raw: unknown, now = Date.now()): GameState | null {
   if (!isRecord(raw) || typeof raw.version !== 'number') return null;
   let save = raw;
@@ -153,6 +175,7 @@ export function migrate(raw: unknown, now = Date.now()): GameState | null {
     : null;
   return {
     version: SAVE_VERSION,
+    automation: readAutomation(save.automation),
     money: amount(save.money, base.money) + refund,
     durability,
     rentElapsedMs: amount(save.rentElapsedMs, 0) % BALANCE.rentIntervalMs,
