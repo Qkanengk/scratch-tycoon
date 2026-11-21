@@ -100,6 +100,9 @@ export class Stage {
   private readonly raycaster = new THREE.Raycaster();
   private readonly plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -FACE_Y);
   private readonly observer: ResizeObserver;
+  private readonly hudObserver: ResizeObserver;
+  private readonly hudChanges: MutationObserver;
+  private hudFrame = 0;
   private readonly tweens: Tween[] = [];
   // Created once the images and the font have loaded.
   private particles!: Particles;
@@ -145,6 +148,54 @@ export class Stage {
   private activePointer: number | null = null;
   private readonly pointerNdc = new THREE.Vector2();
   private readonly pointer = new THREE.Vector3();
+  private hudBounds = '';
+  private touchTop = 70;
+  private touchBottom = 120;
+
+  private touchLayout(): boolean {
+    return window.matchMedia('(pointer: coarse), (hover: none), (max-height: 500px)').matches;
+  }
+
+  private measureHud(): void {
+    if (!this.ready || !this.touchLayout()) return;
+    const app = this.host.parentElement;
+    const prompt = app?.querySelector('.prompt')?.getBoundingClientRect();
+    if (!app || !prompt) return;
+    const promptHeight = `${prompt.height}px`;
+    if (app.style.getPropertyValue('--prompt-height') !== promptHeight) {
+      app.style.setProperty('--prompt-height', promptHeight);
+    }
+    const height = this.host.clientHeight;
+    let top = 0;
+    let bottom = height - prompt.top;
+    for (const element of app.querySelectorAll('.purse, .corner, .look')) {
+      const rect = element.getBoundingClientRect();
+      if (rect.top < height / 3) top = Math.max(top, rect.bottom);
+      else bottom = Math.max(bottom, height - rect.top);
+    }
+    const bounds = `${top}:${bottom}:${this.view}:${height}`;
+    if (bounds === this.hudBounds) return;
+    this.hudBounds = bounds;
+    this.touchTop = top + 6;
+    this.touchBottom = bottom + 6;
+    this.aim();
+  }
+
+  private queueHudMeasurement(): void {
+    if (this.disposed || this.hudFrame) return;
+    this.hudFrame = requestAnimationFrame(() => {
+      this.hudFrame = 0;
+      this.measureHud();
+    });
+  }
+
+  private observeHud(): void {
+    this.hudObserver.disconnect();
+    for (const element of this.host.parentElement?.querySelectorAll('.prompt, .purse, .corner, .look') ?? []) {
+      this.hudObserver.observe(element);
+    }
+    this.queueHudMeasurement();
+  }
 
   constructor(
     private readonly host: HTMLElement,
@@ -172,6 +223,10 @@ export class Stage {
     canvas.addEventListener('wheel', this.onWheel, { passive: true });
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(host);
+    this.hudObserver = new ResizeObserver(() => this.queueHudMeasurement());
+    this.hudChanges = new MutationObserver(() => this.observeHud());
+    if (host.parentElement) this.hudChanges.observe(host.parentElement, { childList: true });
+    this.observeHud();
 
     void this.load();
   }
@@ -223,13 +278,17 @@ export class Stage {
     if (!this.ready) return;
     this.aim();
     this.callbacks.onView(view);
+    this.queueHudMeasurement();
   }
 
   dispose(): void {
     this.disposed = true;
     stopScratch();
     cancelAnimationFrame(this.frame);
+    cancelAnimationFrame(this.hudFrame);
     this.observer.disconnect();
+    this.hudObserver.disconnect();
+    this.hudChanges.disconnect();
     if (this.ready) this.particles.dispose();
     this.faceTexture.dispose();
     this.foilTexture.dispose();
@@ -662,8 +721,8 @@ export class Stage {
   private frameUp(target: THREE.Vector3, direction: THREE.Vector3, points: THREE.Vector3[]): THREE.Vector3 {
     const height = Math.max(1, this.host.clientHeight);
     // The HUD covers a strip at the top and the bottom of the picture.
-    const top = 1 - (2 * 70) / height;
-    const bottom = -1 + (2 * 120) / height;
+    const top = 1 - (2 * (this.touchLayout() ? this.touchTop : 70)) / height;
+    const bottom = -1 + (2 * (this.touchLayout() ? this.touchBottom : 120)) / height;
     const probe = this.camera.clone();
     let near = 0.4;
     let far = 30;
@@ -685,25 +744,41 @@ export class Stage {
   /** Sets where the eye should go for the current view. */
   private aim(): void {
     const tall = this.camera.aspect < 0.8;
+    const touch = this.touchLayout();
+    if (touch) {
+      const width = this.host.clientWidth;
+      const height = this.host.clientHeight;
+      const center = (this.touchTop + height - this.touchBottom) / 2;
+      this.camera.setViewOffset(width, height, 0, height / 2 - center, width, height);
+    } else if (this.camera.view?.enabled) this.camera.clearViewOffset();
     let target: THREE.Vector3;
     let direction: THREE.Vector3;
     let points: THREE.Vector3[];
     // Looking at the rack, the eye rests a little above it so the shop behind shows.
     let lift = 0;
     if (this.view === 'desk') {
-      const margin = tall ? 0.03 : MAT_MARGIN;
+      const margin = tall || touch ? 0.03 : MAT_MARGIN;
       const halfW = 0.5 + margin;
       const halfH = this.metrics.height / 2 + margin;
       target = new THREE.Vector3(0, 0, 0);
-      direction = gaze(tall ? 60 : 50);
+      direction = gaze(touch && !tall ? 85 : tall ? 60 : 50);
       points = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => new THREE.Vector3(sx * halfW, FACE_Y, sz * halfH)));
     } else if (this.view === 'shop') {
       points = this.rack.points();
-      if (!tall) points.push(...this.board.points());
+      const sign = touch && tall ? this.room.getObjectByName('shop-sign') : null;
+      if (sign) {
+        const box = new THREE.Box3().setFromObject(sign);
+        points.push(...[-1, 1].flatMap((sx) => [-1, 1].map((sy) => new THREE.Vector3(
+          sx < 0 ? box.min.x : box.max.x,
+          sy < 0 ? box.min.y : box.max.y,
+          box.max.z,
+        ))));
+      }
+      if (!tall && !touch) points.push(...this.board.points());
       const box = new THREE.Box3().setFromPoints(points);
       target = box.getCenter(new THREE.Vector3());
       direction = gaze(13);
-      lift = 0.34;
+      lift = touch ? 0 : 0.34;
     } else {
       points = this.board.points();
       target = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
@@ -729,6 +804,7 @@ export class Stage {
     this.board.group.position.set(tall ? 1.22 : 1.75, 0, RACK_Z - 0.05);
     this.board.group.rotation.y = tall ? -0.3 : -0.38;
     this.aim();
+    this.queueHudMeasurement();
   }
 
   /** Screen positions of everything a play-through script needs to touch. */
