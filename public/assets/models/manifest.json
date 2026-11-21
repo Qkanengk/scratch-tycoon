@@ -1,0 +1,202 @@
+[
+ {
+  "id": "platformer-kit/coin-gold",
+  "file": "models/kenney-platformer-kit/coin-gold.glb",
+  "author": "Kenney",
+  "license": "CC0-1.0",
+  "source": "https://kenney.nl/assets/platformer-kit",
+  "use": "tool: đồng xu cào"
+ },
+ {
+  "id": "food-kit/cherries",
+  "file": "models/kenney-food-kit/cherries.glb",
+  "author": "Kenney",
+  "license": "CC0-1.0",
+  "source": "https://kenney.nl/assets/food-kit",
+  "use": "symbol: Vé Đồng"
+ },
+ {
+  "id": "food-kit/lemon",
+  "file": "models/kenney-food-kit/lemon.glb",
+  "author": "Kenney",
+  "license": "CC0-1.0",
+  "source": "https://kenney.nl/assets/food-kit",
+  "use": "symbol: Vé Đồng"
+ },
+ {
+  "id": "quaternius/bell",
+  "file": "models/quaternius/bell.glb",
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/cILuaO115Y",
+  "use": "symbol: Vé Đồng"
+ },
+ {
+  "id": "platformer-kit/jewel",
+  "file": "models/kenney-platformer-kit/jewel.glb",
+  "author": "Kenney",
+  "license": "CC0-1.0",
+  "source": "https://kenney.nl/assets/platformer-kit",
+  "use": "symbol: Vé Đồng, Vé Ngọc"
+ },
+ {
+  "id": "quaternius/crown",
+  "file": "models/quaternius/crown.glb",
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/i0PZVuVlYv",
+  "use": "symbol: Vé Đồng (jackpot)"
+ },
+ {
+  "id": "original/gourd",
+  "file": "models/original/gourd.glb",
+  "author": "Scratch Tycoon",
+  "license": "CC0-1.0",
+  "source": "scripts/assets/make-gourd.py",
+  "use": "symbol: Vé Bạc (bầu)"
+ },
+ {
+  "id": "quaternius/crab",
+  "file": "models/quaternius/crab.glb",
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/Gs3yfsV5lB",
+  "use": "symbol: Vé Bạc (cua)"
+ },
+ {
+  "id": "quaternius/fish-a",
+  "file": "models/quaternius/fish-a.glb",
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/BEcU9rjiAq",
+  "use": "symbol: Vé Bạc (cá)"
+ },
+ {
+  "id": "quaternius/chicken-a",
+  "file": "models/quaternius/chicken-a.glb",
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/ineV9pU5VL",
+  "use": "symbol: Vé Bạc (gà)"
+ },
+ {
+  "id": "quaternius/stag",
+  "file": "models/quaternius/stag.glb",
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/tQdzbZ1Cmw",
+  "use": "symbol: Vé Bạc (nai, jackpot)"
+ },
+ {
+  "id": "platformer-kit/star",
+  "file": "models/kenney-platformer-kit/star.glb",
+  "author": "Kenney",
+  "license": "CC0-1.0",
+  "source": "https://kenney.nl/assets/platformer-kit",
+  "use": "symbol: số may mắn, hiệu ứng thắng"
+ },
+ {
+  "id": "quaternius/dragon-evolved",
+  "file": "models/quaternius/dragon-evolved.glb",
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/LlwD0QNUPj",
+  "use": "symbol: Vé Rồng (rồng)"
+ },
+ {
+  "id": "platformer-kit/bomb",
+  "file": "models/kenney-platformer-kit/bomb.glb",
+  "author": "Kenney",
+  "license": "CC0-1.0",
+  "source": "https://kenney.nl/assets/platformer-kit",
+  "use": "symbol: Vé Rồng (bom)"
+ },
+ {
+  "id": "quaternius/coins",
+  "file": "models/quaternius/coins.glb",
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/VaGFKE0n0F",
+  "use": "reward: thắng nhỏ"
+ },
+ {
+  "id": "quaternius/star-coin",
+  "file": "models/quaternius/star-coin.glb",
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/n5nJIQAozN",
+  "use": "reward: xu thưởng"
+ },
+ {
+  "id": "quaternius/gold-bag",
+  "file": "models/quaternius/gold-bag.glb",
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/vFFblhnHtb",
+  "use": "reward: thắng vừa"
+ },
+ {
+  "id": "quaternius/gold-ingots",
+  "file": "models/quaternius/gold-ingots.glb",
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/3jRhAgbc6t",
+  "use": "reward: thắng lớn"
+ },
+ {
+  "id": "platformer-kit/chest",
+  "file": "models/kenney-platformer-kit/chest.glb",
+  "author": "Kenney",
+  "license": "CC0-1.0",
+  "source": "https://kenney.nl/assets/platformer-kit",
+  "use": "reward: jackpot"
+ },
+ {
+  "id": "platformer-kit/lock",
+  "file": "models/kenney-platformer-kit/lock.glb",
+  "author": "Kenney",
+  "license": "CC0-1.0",
+  "source": "https://kenney.nl/assets/platformer-kit",
+  "use": "shop: vé chưa mở khóa"
+ },
+ {
+  "id": "mini-arcade/ticket-machine",
+  "file": "models/kenney-mini-arcade/ticket-machine.glb",
+  "author": "Kenney",
+  "license": "CC0-1.0",
+  "source": "https://kenney.nl/assets/mini-arcade",
+  "use": "prop: máy bán vé"
+ },
+ {
+  "id": "mini-arcade/cash-register",
+  "file": "models/kenney-mini-arcade/cash-register.glb",
+  "author": "Kenney",
+  "license": "CC0-1.0",
+  "source": "https://kenney.nl/assets/mini-arcade",
+  "use": "prop: quầy thu ngân"
+ },
+ {
+  "id": "mini-arcade/prize-wheel",
+  "file": "models/kenney-mini-arcade/prize-wheel.glb",
+  "author": "Kenney",
+  "license": "CC0-1.0",
+  "source": "https://kenney.nl/assets/mini-arcade",
+  "use": "prop: vé khuyến mãi"
+ },
+ {
+  "id": "mini-arcade/gambling-machine",
+  "file": "models/kenney-mini-arcade/gambling-machine.glb",
+  "author": "Kenney",
+  "license": "CC0-1.0",
+  "source": "https://kenney.nl/assets/mini-arcade",
+  "use": "prop: trang trí bàn"
+ },
+ {
+  "id": "mini-shop/gacha-machine",
+  "file": "models/kenney-mini-shop/gacha-machine.glb",
+  "author": "Kenney",
+  "license": "CC0-1.0",
+  "source": "https://kenney.nl/assets/mini-shop",
+  "use": "prop: trang trí bàn"
+ }
+]

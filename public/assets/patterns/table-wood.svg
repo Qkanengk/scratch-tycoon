@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240">
+<rect width="240" height="240" fill="#c98a4b"/>
+<rect x="0" y="0" width="240" height="60" fill="#c98a4b"/>
+<path d="M0 0 H240" stroke="#2b1b17" stroke-width="4"/>
+<path d="M70 0 V60" stroke="#2b1b17" stroke-width="4"/>
+<path d="M110 22 h46 M10 40 h30" stroke="#9a6230" stroke-width="4" stroke-linecap="round"/>
+<rect x="0" y="60" width="240" height="60" fill="#bd7d40"/>
+<path d="M0 60 H240" stroke="#2b1b17" stroke-width="4"/>
+<path d="M190 60 V120" stroke="#2b1b17" stroke-width="4"/>
+<path d="M230 82 h46 M130 100 h30" stroke="#9a6230" stroke-width="4" stroke-linecap="round"/>
+<rect x="0" y="120" width="240" height="60" fill="#d1955a"/>
+<path d="M0 120 H240" stroke="#2b1b17" stroke-width="4"/>
+<path d="M130 120 V180" stroke="#2b1b17" stroke-width="4"/>
+<path d="M170 142 h46 M70 160 h30" stroke="#9a6230" stroke-width="4" stroke-linecap="round"/>
+<rect x="0" y="180" width="240" height="60" fill="#c2854a"/>
+<path d="M0 180 H240" stroke="#2b1b17" stroke-width="4"/>
+<path d="M30 180 V240" stroke="#2b1b17" stroke-width="4"/>
+<path d="M70 202 h46 M150 220 h30" stroke="#9a6230" stroke-width="4" stroke-linecap="round"/>
+</svg>

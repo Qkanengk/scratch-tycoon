@@ -25,8 +25,16 @@ src/
   game/   Pure game logic, no UI dependencies
   data/   Balance numbers (tickets, prizes, unlocks)
   ui/     React components
+  render/ Three.js toon shader and palette
+  gallery/ Asset board (dev only, open /gallery.html)
   i18n/   UI strings (Vietnamese)
 ```
+
+## Assets
+
+All art and sound lives in `public/assets`; sources and licences are listed in [ASSETS.md](ASSETS.md), and the games
+looked at for reference are in [docs/references.md](docs/references.md). Run `npm run dev` and open `/gallery.html`
+to see every asset in the game's toon style.
 
 ## Deploy
 
