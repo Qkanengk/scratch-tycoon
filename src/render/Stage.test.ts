@@ -4,6 +4,17 @@ import { Stage } from './Stage';
 import { PlayClock } from './playClock';
 
 describe('stage shelf interactions', () => {
+  it('never scratches a return-tag press and returns only when released on the tag', () => {
+    const press = vi.fn();
+    const pick = vi.fn().mockReturnValue({ kind: 'return' });
+    const stage = Object.assign(Object.create(Stage.prototype), { returnPress: true, mask: {}, busy: false, view: 'desk', settled: true, pick, press });
+    expect(stage.canScratch()).toBe(false);
+    stage.releaseReturn({ clientX: 102, clientY: 100 });
+    expect(press).toHaveBeenCalledExactlyOnceWith({ kind: 'return' });
+    pick.mockReturnValue(null);
+    stage.releaseReturn({ clientX: 200, clientY: 100 });
+    expect(press).toHaveBeenCalledTimes(1);
+  });
   it('counts rent only while this window owns focus', () => {
     const document = { hidden: false, hasFocus: () => true };
     vi.stubGlobal('document', document);

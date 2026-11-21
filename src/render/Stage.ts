@@ -167,6 +167,7 @@ export class Stage {
   private settled = false;
 
   private pressed = false;
+  private returnPress = false;
   private scratching = false;
   /** Whether the current press has rubbed the ticket; such a press is never read as a click or a look. */
   private stroked = false;
@@ -664,7 +665,7 @@ export class Stage {
   }
 
   private canScratch(): boolean {
-    return !this.paused && !document.hidden && this.mask !== null && !this.busy && this.view === 'desk' && this.settled;
+    return !this.returnPress && !this.paused && !document.hidden && this.mask !== null && !this.busy && this.view === 'desk' && this.settled;
   }
 
   private readonly onDown = (event: PointerEvent): void => {
@@ -676,7 +677,8 @@ export class Stage {
     this.stroked = false;
     this.down = { x: event.clientX, y: event.clientY };
     this.trackPointer(event);
-    if (this.pick(event)?.kind === 'return') return;
+    this.returnPress = this.pick(event)?.kind === 'return';
+    if (this.returnPress) return;
     if (this.canScratch() && this.locate()) {
       this.scratching = true;
       this.stroked = true;
@@ -713,12 +715,15 @@ export class Stage {
     const down = this.down;
     // The reveal ends the stroke before the pointer lifts, so ask what the whole press did.
     const wasScratching = this.stroked;
+    const wasReturn = this.returnPress;
+    this.returnPress = false;
     this.pressed = false;
     this.scratching = false;
     this.stroke = null;
     this.down = null;
     if (event.pointerType !== 'mouse') this.hovering = false;
     if (!down || wasScratching || !this.ready) return;
+    if (wasReturn) { this.releaseReturn(event); return; }
     const dx = event.clientX - down.x;
     const dy = event.clientY - down.y;
     if (Math.hypot(dx, dy) < 10) {
@@ -736,6 +741,7 @@ export class Stage {
   private readonly onCancel = (event: PointerEvent): void => {
     if (this.activePointer !== event.pointerId) return;
     this.activePointer = null;
+    this.returnPress = false;
     this.saveScratch();
     this.pressed = false;
     this.scratching = false;
@@ -743,6 +749,10 @@ export class Stage {
     this.down = null;
     this.hovering = false;
   };
+
+  private releaseReturn(event: PointerEvent): void {
+    if (this.pick(event)?.kind === 'return') this.press({ kind: 'return' });
+  }
 
   private readonly onLeave = (): void => {
     if (!this.pressed) this.hovering = false;
