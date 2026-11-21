@@ -109,7 +109,7 @@ export class Stage {
   private pose: Pose = { ...REST };
   private mask: ScratchMask | null = null;
   private state: GameState | null = null;
-  private shown: { serial: number; revealed: boolean } | null = null;
+  private shown: { serial: number; type: TicketId; revealed: boolean } | null = null;
   private first = true;
   private ready = false;
   private disposed = false;
@@ -241,8 +241,13 @@ export class Stage {
       this.setState(ticket);
       return;
     }
-    if (before && ticket && before.serial === ticket.serial) {
+    if (before && ticket && before.serial === ticket.serial && before.type === ticket.type) {
       if (ticket.revealed && !before.revealed) this.reveal(ticket);
+      else if (!ticket.revealed && before.revealed) {
+        // An imported save can put the same ticket back under its foil.
+        this.show(ticket);
+        this.setState(ticket);
+      }
       return;
     }
     if (!before && !ticket) return;
@@ -286,7 +291,7 @@ export class Stage {
     this.foilMaterial.opacity = 1;
     this.foilMaterial.visible = !ticket.revealed;
     this.mask = ticket.revealed ? null : createMask(this.metrics.layout.cells, this.metrics.layout.height);
-    this.shown = { serial: ticket.serial, revealed: ticket.revealed };
+    this.shown = { serial: ticket.serial, type: ticket.type, revealed: ticket.revealed };
     this.ticket.visible = true;
     this.stroke = null;
     this.callbacks.onProgress(0);
