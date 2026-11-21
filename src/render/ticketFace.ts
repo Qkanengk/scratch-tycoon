@@ -184,7 +184,7 @@ export function drawFace(canvas: HTMLCanvasElement, id: TicketId, ticket: Ticket
   text(ctx, `${serial}  ·  ${price}`, S / 2, footY + footH * 0.16 + band * 0.72, band * 0.26, '#8a5a2b', 700);
   if (id === 'vang' || id === 'ngoc' || id === 'rong') {
     const sealX = S * .86;
-    const sealY = footY + footH * .62;
+    const sealY = footY + footH * .78;
     ctx.fillStyle = palette.cream;
     ctx.fillRect(MARGIN * S + 6, footY + footH * .59, S * .72, footH * .33);
     const number = String(ticket?.serial ?? 1).padStart(6, '0');
@@ -195,17 +195,17 @@ export function drawFace(canvas: HTMLCanvasElement, id: TicketId, ticket: Ticket
     ctx.strokeStyle = '#366779';
     ctx.lineWidth = S * .004;
     if (ticket?.fakeTell === 'missing-seal') ctx.setLineDash([S * .009, S * .007]);
-    ctx.beginPath(); ctx.arc(0, 0, footH * .23, 0, Math.PI * 2);
+    ctx.beginPath(); ctx.arc(0, 0, footH * .16, 0, Math.PI * 2);
     ctx.fillStyle = '#72c9b5';
     if (ticket?.fakeTell !== 'missing-seal') ctx.fill();
     ctx.stroke();
     ctx.setLineDash([]);
     if (ticket?.fakeTell !== 'missing-seal') {
       ctx.fillStyle = '#ffe09a';
-      ctx.beginPath(); ctx.moveTo(0, -footH * .17); ctx.lineTo(footH * .11, 0); ctx.lineTo(0, footH * .17); ctx.lineTo(-footH * .11, 0); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(0, -footH * .115); ctx.lineTo(footH * .075, 0); ctx.lineTo(0, footH * .115); ctx.lineTo(-footH * .075, 0); ctx.fill();
     }
     ctx.restore();
-    text(ctx, t('drain.seal'), sealX, sealY + footH * .32, footH * .13, '#366779');
+    text(ctx, t('drain.seal'), sealX, sealY + footH * .205, footH * .11, '#366779');
   }
   if (lit && ticket?.fakeTell) {
     ctx.save();
