@@ -929,6 +929,7 @@ export class Stage {
       direction = gaze(desktop ? 72 : touch && !tall ? 85 : tall ? 60 : 50);
       points = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => new THREE.Vector3(sx * halfW, FACE_Y, sz * halfH)));
       if (desktop) {
+        points.push(...this.robots.deskPoints());
         for (const name of ['cash-register', 'gold-bag', 'coins']) {
           const prop = this.room.getObjectByName(name);
           if (!prop) continue;
@@ -939,6 +940,7 @@ export class Stage {
             sz < 0 ? box.min.z : box.max.z,
           )))));
         }
+        target = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
       }
     } else if (this.view === 'shop') {
       points = this.rack.points();
@@ -964,7 +966,7 @@ export class Stage {
     } else if (this.view === 'robots') {
       points = this.robots.points();
       target = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
-      direction = gaze(18);
+      direction = gaze(tall ? 45 : 35);
     } else if (this.view === 'tools') {
       points = this.toolShelf.points();
       target = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
@@ -989,6 +991,7 @@ export class Stage {
     if (!this.ready) return;
     const tall = this.camera.aspect < 0.8;
     const desktop = desktopLayout(width, height);
+    this.robots.layout(!desktop);
     this.rack.layout(tall);
     const shelf = this.room.getObjectByName('shelf');
     if (shelf) {

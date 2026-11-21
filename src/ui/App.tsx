@@ -197,6 +197,7 @@ export function App() {
       )}
 
       {view === 'desk' && <LookButton direction="up" testid="look-shop" label={t('look.shop')} onClick={() => stage.current?.look('shop')} />}
+      {view === 'desk' && <LookButton direction="right" testid="look-robots" label={t('robot.title')} onClick={() => stage.current?.look('robots')} />}
       {view === 'shop' && <LookButton direction="right" testid="look-board" label={t('look.board')} onClick={() => stage.current?.look('board')} />}
       {view === 'shop' && <LookButton direction="left" testid="look-tools" label={t('look.tools')} onClick={() => stage.current?.look('tools')} />}
       {view === 'tools' && <LookButton direction="right" testid="look-shop" label={t('look.shop')} onClick={() => stage.current?.look('shop')} />}
