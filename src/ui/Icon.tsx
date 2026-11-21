@@ -15,7 +15,8 @@ export function Icon({ name }: { name: IconName }) {
       </>}
     </svg>;
   }
-  const style = { '--icon': `url("${ASSETS}/icons/${name}.png")` } as CSSProperties;
+  const maskImage = `url("${ASSETS}/icons/${name}.png")`;
+  const style: CSSProperties = { maskImage, WebkitMaskImage: maskImage };
   return <span className="icon" style={style} aria-hidden="true" />;
 }
 
