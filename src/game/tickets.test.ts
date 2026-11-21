@@ -50,3 +50,7 @@ it('ticket prices rise and returns fall with each type', () => {
     expect(TICKETS[i]?.baseReturn).toBeLessThan(TICKETS[i - 1]?.baseReturn ?? 0);
   }
 });
+
+it('keeps the planned paid-ticket returns', () => {
+  expect(TICKETS.map((def) => expectedReturn(def.prizes))).toEqual([1.08, 1.04, 1, 0.96, 0.92]);
+});

@@ -1,5 +1,5 @@
 import { ticketDef, TICKETS } from '../data/tickets';
-import { canBuyTicket, canClaimPromo, isBroke } from '../game/economy';
+import { canBuyTicket, canClaimPromo, isBroke, promoTicketDef } from '../game/economy';
 import type { GameState } from '../game/state';
 import { jackpotTier } from '../game/tickets';
 import { unlockProgress } from '../game/unlocks';
@@ -42,7 +42,7 @@ export function promptFor(state: GameState, now: number, view: View, progress: n
     const seconds = Math.max(1, Math.ceil(((state.promoReadyAt ?? now) - now) / 1000));
     return {
       tone: 'idle',
-      message: ready ? t('table.promoReady') : t('table.promoWait', { seconds }),
+      message: ready ? t('table.promoReady', { name: t(`ticket.${promoTicketDef(state).id}.name`) }) : t('table.promoWait', { seconds }),
       button: { label: t('table.promoClaim'), command: 'promo', disabled: !ready },
     };
   }
