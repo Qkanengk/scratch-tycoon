@@ -197,12 +197,13 @@ export class RobotStation {
 
   layout(phone: boolean): void {
     this.group.position.x = phone ? 2.05 : 1.12;
-    this.slots.forEach((s, i) => s.group.position.set(phone ? [0, .83, 0][i]! : i * .84, 0, phone && i === 2 ? 1.16 : 0));
-    this.board.position.set(phone ? 1.95 : 2.80, phone ? .35 : 0, -.48);
-    this.charger.position.set(phone ? 1.90 : 2.66, 0, phone ? 1.10 : 1.04);
-    this.motor.position.set(phone ? .85 : 1.40, 0, phone ? 1.10 : 1.25);
-    this.hiring.position.set(phone ? 1.80 : .10, 0, phone ? .20 : 1.25);
-    this.receipt.group.position.set(phone ? 1.70 : 2.64, .015, 1.91);
+    this.group.position.z = phone ? -1.70 : .35;
+    this.slots.forEach((s, i) => s.group.position.set(phone ? 0 : i * .84, 0, phone ? i * 1.30 : 0));
+    this.board.position.set(phone ? .95 : 2.80, phone ? .35 : 0, phone ? -.10 : -.48);
+    this.charger.position.set(phone ? .95 : 2.66, 0, phone ? 2.70 : 1.04);
+    this.motor.position.set(phone ? .95 : 1.40, 0, phone ? 1.50 : 1.25);
+    this.hiring.position.set(phone ? .95 : .10, 0, phone ? .30 : 1.25);
+    this.receipt.group.position.set(phone ? .45 : 2.64, .015, phone ? 3.90 : 1.91);
   }
 
   update(state: GameState): void {
@@ -270,7 +271,15 @@ export class RobotStation {
   }
 
   deskPoints(): THREE.Vector3[] {
-    return [.76, 3.15].flatMap(x => [.1, 1.40].map(z => new THREE.Vector3(x, .75, z)));
+    return [.76, 4.70].flatMap(x => [-.20, 1.40].flatMap(z => [0, 1.20].map(y => new THREE.Vector3(x, y, z))));
+  }
+
+  offerAnchors(): Record<string, THREE.Vector3> {
+    return Object.fromEntries(this.offers.map(({ action, paper }) => [action, paper.group.getWorldPosition(new THREE.Vector3())]));
+  }
+
+  robotAnchors(): THREE.Vector3[] {
+    return this.slots.map(slot => slot.group.localToWorld(new THREE.Vector3(0, .3, .15)));
   }
 
   points(): THREE.Vector3[] {

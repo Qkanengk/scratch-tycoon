@@ -966,7 +966,7 @@ export class Stage {
     } else if (this.view === 'robots') {
       points = this.robots.points();
       target = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
-      direction = gaze(tall ? 45 : 35);
+      direction = gaze(tall ? 70 : 35);
     } else if (this.view === 'tools') {
       points = this.toolShelf.points();
       target = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
@@ -1040,6 +1040,8 @@ export class Stage {
     canvas.dataset.ticket = JSON.stringify(screen(new THREE.Vector3(0, FACE_Y, 0)));
     canvas.dataset.view = this.view;
     canvas.dataset.robots = JSON.stringify(screen(this.robots.group.localToWorld(new THREE.Vector3(0, 1.9, .4))));
+    canvas.dataset.robotOffers = JSON.stringify(Object.fromEntries(Object.entries(this.robots.offerAnchors()).map(([action, point]) => [action, screen(point)])));
+    canvas.dataset.robotSlots = JSON.stringify(this.robots.robotAnchors().map(screen));
     canvas.dataset.busy = this.busy || !this.settled ? '1' : '0';
   }
 
