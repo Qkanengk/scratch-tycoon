@@ -2,9 +2,42 @@ import { describe, expect, it } from 'vitest';
 import { BALANCE } from '../data/balance';
 import { TOOLS, toolDef } from '../data/tools';
 import { createInitialState } from './state';
-import { buyTool, equipTool, toolRadius, toolUpgradePrice, upgradeTool } from './tools';
+import { applyToolIntent, buyTool, equipTool, toolIntent, toolRadius, toolUpgradePrice, upgradeTool } from './tools';
 
 describe('scratching tools', () => {
+  it('applies displayed buy, equip and upgrade intents only once', () => {
+    const state = { ...createInitialState(1), money: 1000 };
+    const buy = toolIntent(state, 'key')!;
+    const bought = applyToolIntent(state, buy);
+    expect(bought).toEqual(buyTool(state, 'key'));
+    expect(applyToolIntent(bought, buy)).toBe(bought);
+    const equip = toolIntent(bought, 'coin')!;
+    const equipped = applyToolIntent(bought, equip);
+    expect(equipped.equippedTool).toBe('coin');
+    expect(applyToolIntent(equipped, equip)).toBe(equipped);
+    const upgrade = toolIntent(equipped, 'coin')!;
+    const upgraded = applyToolIntent(equipped, upgrade);
+    expect(upgraded.toolLevels.coin).toBe(1);
+    expect(applyToolIntent(upgraded, upgrade)).toBe(upgraded);
+  });
+
+  it('ignores stale levels, ownership and equipment and unaffordable actions', () => {
+    const state = buyTool({ ...createInitialState(1), money: 1000 }, 'key');
+    const upgrade = toolIntent(state, 'key')!;
+    const equipped = equipTool(state, 'coin');
+    expect(applyToolIntent(equipped, upgrade)).toBe(equipped);
+    const equip = toolIntent(equipped, 'key')!;
+    const changedLevel = upgradeTool(equipped, 'key');
+    expect(applyToolIntent(changedLevel, equip)).toBe(changedLevel);
+    const unowned = { ...state, ownedTools: ['coin'] as typeof state.ownedTools };
+    expect(applyToolIntent(unowned, upgrade)).toBe(unowned);
+    const poor = { ...state, money: 0 };
+    expect(applyToolIntent(poor, upgrade)).toBe(poor);
+    const maxed = { ...state, toolLevels: { ...state.toolLevels, key: 10 } };
+    expect(toolIntent(maxed, 'key')).toBeNull();
+    expect(applyToolIntent(maxed, upgrade)).toBe(maxed);
+  });
+
   it('starts with only the level-zero coin and the original brush radius', () => {
     const state = createInitialState(1);
     expect(state.ownedTools).toEqual(['coin']);

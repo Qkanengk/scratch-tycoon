@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { TOOLS, toolDef, type ToolId } from '../data/tools';
 import { formatMoney } from '../game/format';
 import type { GameState } from '../game/state';
-import { toolUpgradePrice } from '../game/tools';
+import { toolIntent, toolUpgradePrice } from '../game/tools';
 import { t } from '../i18n';
 import { canvasTexture } from './assets';
 import { palette } from './palette';
@@ -95,6 +95,9 @@ export class ToolShelf {
       const key = JSON.stringify([offer, level, failed]);
       if (key === slot.key) continue;
       slot.key = key;
+      slot.group.traverse(node => {
+        if (node.userData.action?.kind === 'tool') node.userData.action = { kind: 'tool', intent: toolIntent(state, tool.id) };
+      });
       for (const child of [...slot.model.children]) disposeToolObject(child);
       const model = buildToolModel(tool.id, level, !offer.owned);
       model.scale.multiplyScalar(0.34);

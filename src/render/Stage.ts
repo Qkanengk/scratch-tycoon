@@ -5,7 +5,7 @@ import { ticketDef, type TicketId } from '../data/tickets';
 import { TOOLS, type ToolId } from '../data/tools';
 import { createMask, encodeMask, restoreMask, scratchProgress, scratchSegment, ticketContentKey, type Point, type ScratchMask } from '../game/scratch';
 import type { GameState, Ticket } from '../game/state';
-import { toolRadius } from '../game/tools';
+import { toolRadius, type ToolIntent } from '../game/tools';
 import { jackpotTier } from '../game/tickets';
 import { allText } from '../i18n';
 import { canvasTexture, loadFonts, patternTexture, preloadImages, type ParticleName } from './assets';
@@ -34,11 +34,11 @@ export interface StageCallbacks {
   onCollect(): void;
   /** The player pressed the licence board while reading it. */
   onBoard(): void;
-  onTool(id: ToolId): void;
+  onTool(intent: ToolIntent): void;
   onView(view: View): void;
 }
 
-type Action = { kind: 'ticket'; id: TicketId } | { kind: 'board' } | { kind: 'collect' } | { kind: 'tools' } | { kind: 'tool'; id: ToolId };
+type Action = { kind: 'ticket'; id: TicketId } | { kind: 'board' } | { kind: 'collect' } | { kind: 'tools' } | { kind: 'tool'; intent: ToolIntent | null };
 
 const FACE_PX = 1024;
 const FOIL_PX = 768;
@@ -680,7 +680,7 @@ export class Stage {
   private press(action: Action): void {
     if (action.kind === 'ticket') this.callbacks.onTicket(action.id);
     else if (action.kind === 'tools') this.look('tools');
-    else if (action.kind === 'tool') this.callbacks.onTool(action.id);
+    else if (action.kind === 'tool' && action.intent) this.callbacks.onTool(action.intent);
     else if (action.kind === 'collect') this.callbacks.onCollect();
     else if (this.view === 'board') this.callbacks.onBoard();
     else this.look('board');

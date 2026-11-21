@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { isMuted, play, setMuted } from '../audio/sfx';
 import { ticketDef, TICKETS, type TicketId } from '../data/tickets';
-import type { ToolId } from '../data/tools';
-import { buyTool, equipTool, upgradeTool } from '../game/tools';
+import { applyToolIntent, type ToolIntent } from '../game/tools';
 import { shelfOffer } from '../render/toolShelf';
 import { buyTicket, canBuyTicket, claimPromo, collectTicket, isUnlocked, selectTicket } from '../game/economy';
 import { buyLicense, unlockProgress } from '../game/unlocks';
@@ -89,7 +88,8 @@ export function App() {
     }
   };
 
-  const tool = (id: ToolId) => {
+  const tool = (intent: ToolIntent) => {
+    const { id } = intent;
     const offer = shelfOffer(state, id);
     if (offer.kind === 'max') return;
     if (!offer.affordable) {
@@ -98,10 +98,7 @@ export function App() {
       return;
     }
     play(offer.kind === 'upgrade' ? 'unlock' : offer.kind === 'buy' ? 'coin-2' : 'ui-select');
-    apply(current => {
-      const latest = shelfOffer(current, id);
-      return latest.kind === 'buy' ? buyTool(current, id) : latest.kind === 'equip' ? equipTool(current, id) : latest.kind === 'upgrade' ? upgradeTool(current, id) : current;
-    });
+    apply(current => applyToolIntent(current, intent));
   };
 
   const handlers = useRef<StageCallbacks>(null as unknown as StageCallbacks);
