@@ -136,6 +136,38 @@ export class Stage {
   private down: { x: number; y: number } | null = null;
   private stroke: { x: number; y: number } | null = null;
   private readonly pointer = new THREE.Vector3();
+  private hudBounds = '';
+  private touchTop = 70;
+  private touchBottom = 120;
+
+  private touchLayout(): boolean {
+    return window.matchMedia('(pointer: coarse), (hover: none), (max-height: 500px)').matches;
+  }
+
+  private measureHud(): void {
+    if (!this.touchLayout()) return;
+    const app = this.host.parentElement;
+    const prompt = app?.querySelector('.prompt')?.getBoundingClientRect();
+    if (!app || !prompt) return;
+    const promptHeight = `${prompt.height}px`;
+    if (app.style.getPropertyValue('--prompt-height') !== promptHeight) {
+      app.style.setProperty('--prompt-height', promptHeight);
+    }
+    const height = this.host.clientHeight;
+    let top = 0;
+    let bottom = height - prompt.top;
+    for (const element of app.querySelectorAll('.purse, .corner, .look')) {
+      const rect = element.getBoundingClientRect();
+      if (rect.top < height / 3) top = Math.max(top, rect.bottom);
+      else bottom = Math.max(bottom, height - rect.top);
+    }
+    const bounds = `${top}:${bottom}:${this.view}:${height}`;
+    if (bounds === this.hudBounds) return;
+    this.hudBounds = bounds;
+    this.touchTop = top + 6;
+    this.touchBottom = bottom + 6;
+    this.aim();
+  }
 
   constructor(
     private readonly host: HTMLElement,
@@ -579,8 +611,8 @@ export class Stage {
   private frameUp(target: THREE.Vector3, direction: THREE.Vector3, points: THREE.Vector3[]): THREE.Vector3 {
     const height = Math.max(1, this.host.clientHeight);
     // The HUD covers a strip at the top and the bottom of the picture.
-    const top = 1 - (2 * 70) / height;
-    const bottom = -1 + (2 * 120) / height;
+    const top = 1 - (2 * (this.touchLayout() ? this.touchTop : 70)) / height;
+    const bottom = -1 + (2 * (this.touchLayout() ? this.touchBottom : 120)) / height;
     const probe = this.camera.clone();
     let near = 0.4;
     let far = 30;
@@ -602,25 +634,32 @@ export class Stage {
   /** Sets where the eye should go for the current view. */
   private aim(): void {
     const tall = this.camera.aspect < 0.8;
+    const touch = this.touchLayout();
+    if (touch) {
+      const width = this.host.clientWidth;
+      const height = this.host.clientHeight;
+      const center = (this.touchTop + height - this.touchBottom) / 2;
+      this.camera.setViewOffset(width, height, 0, height / 2 - center, width, height);
+    } else if (this.camera.view?.enabled) this.camera.clearViewOffset();
     let target: THREE.Vector3;
     let direction: THREE.Vector3;
     let points: THREE.Vector3[];
     // Looking at the rack, the eye rests a little above it so the shop behind shows.
     let lift = 0;
     if (this.view === 'desk') {
-      const margin = tall ? 0.03 : MAT_MARGIN;
+      const margin = tall || touch ? 0.03 : MAT_MARGIN;
       const halfW = 0.5 + margin;
       const halfH = this.metrics.height / 2 + margin;
       target = new THREE.Vector3(0, 0, 0);
-      direction = gaze(tall ? 60 : 50);
+      direction = gaze(touch && !tall ? 85 : tall ? 60 : 50);
       points = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => new THREE.Vector3(sx * halfW, FACE_Y, sz * halfH)));
     } else if (this.view === 'shop') {
       points = this.rack.points();
-      if (!tall) points.push(...this.board.points());
+      if (!tall && !touch) points.push(...this.board.points());
       const box = new THREE.Box3().setFromPoints(points);
       target = box.getCenter(new THREE.Vector3());
       direction = gaze(13);
-      lift = 0.34;
+      lift = touch ? 0 : 0.34;
     } else {
       points = this.board.points();
       target = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
@@ -670,6 +709,7 @@ export class Stage {
 
   private readonly tick = (time: number): void => {
     this.frame = requestAnimationFrame(this.tick);
+    this.measureHud();
     const dt = Math.min(0.05, (time - this.last) / 1000 || 0);
     this.last = time;
 
