@@ -130,6 +130,8 @@ export class Stage {
 
   private pressed = false;
   private scratching = false;
+  /** Whether the current press has rubbed the ticket; such a press is never read as a click or a look. */
+  private stroked = false;
   private hovering = false;
   private down: { x: number; y: number } | null = null;
   private stroke: { x: number; y: number } | null = null;
@@ -455,9 +457,11 @@ export class Stage {
     event.preventDefault();
     this.renderer.domElement.setPointerCapture(event.pointerId);
     this.pressed = true;
+    this.stroked = false;
     this.down = { x: event.clientX, y: event.clientY };
     if (this.canScratch() && this.locate(event)) {
       this.scratching = true;
+      this.stroked = true;
       this.hovering = true;
       this.stroke = null;
       this.scratchTo(event.timeStamp);
@@ -472,6 +476,7 @@ export class Stage {
     // A press that began while the ticket was still landing turns into a stroke once it can.
     if (this.pressed && !this.scratching && this.canScratch()) {
       this.scratching = true;
+      this.stroked = true;
       this.stroke = null;
     }
     if (this.scratching) {
@@ -486,7 +491,8 @@ export class Stage {
 
   private readonly onUp = (event: PointerEvent): void => {
     const down = this.down;
-    const wasScratching = this.scratching;
+    // The reveal ends the stroke before the pointer lifts, so ask what the whole press did.
+    const wasScratching = this.stroked;
     this.pressed = false;
     this.scratching = false;
     this.stroke = null;
@@ -499,7 +505,7 @@ export class Stage {
       const action = this.pick(event);
       if (action) this.press(action);
     } else if (this.mask === null && Math.abs(dy) > 50 && Math.abs(dy) > Math.abs(dx)) {
-      // With foil still on the mat a drag is always an attempt to scratch, never a look.
+      // With foil still on the mat a drag is an attempt to scratch, not a look.
       // Dragging the scene down looks up, like turning your head.
       this.nod(dy > 0 ? 'up' : 'down');
     }
