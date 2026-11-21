@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TICKET_IDS } from '../data/tickets';
-import { buyTicket, revealTicket } from './economy';
+import { buyTicket, collectTicket, revealTicket } from './economy';
 import { deserialize, migrate, serialize } from './save';
 import { createInitialState, SAVE_VERSION } from './state';
 
@@ -62,6 +62,25 @@ describe('save', () => {
     });
     expect(state?.version).toBe(SAVE_VERSION);
     expect(state?.stats.dong).toEqual({ scratched: 250, wins: 100, jackpots: 2, bigWins: 2 });
+  });
+
+  it.each([
+    { seed: 4, prize: 50, revealed: true, migratedWins: 1 },
+    { seed: 43, prize: 200, revealed: true, migratedWins: 1 },
+    { seed: 4, prize: 50, revealed: false, migratedWins: 0 },
+  ])('credits an in-flight v1 prize of $prize xu once (revealed=$revealed)', ({ seed, prize, revealed, migratedWins }) => {
+    const bought = buyTicket(createInitialState(seed), 'dong');
+    expect(bought.ticket?.prize).toBe(prize);
+    const state = revealed ? revealTicket(bought) : bought;
+    const { scratched, wins, jackpots } = state.stats.dong;
+    const saved = deserialize(JSON.stringify({
+      ...state, version: 1, stats: { dong: { scratched, wins, jackpots } },
+    }))!;
+    expect(saved.stats.dong.bigWins).toBe(migratedWins);
+
+    const collected = collectTicket(revealTicket(saved));
+    expect(collected.totalEarned).toBe(prize);
+    expect(collected.stats.dong.bigWins).toBe(1);
   });
 
   it.each(TICKET_IDS)('keeps a %s ticket through a save', (id) => {

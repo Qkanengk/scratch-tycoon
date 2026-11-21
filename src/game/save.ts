@@ -1,6 +1,6 @@
-import { TICKET_IDS, ticketDef, type TicketId, type TicketRules } from '../data/tickets';
+import { BIG_WIN_MULTIPLIER, TICKET_IDS, ticketDef, type TicketId, type TicketRules } from '../data/tickets';
 import { createInitialState, emptyStats, SAVE_VERSION, type GameState, type Ticket } from './state';
-import { cellCount } from './tickets';
+import { cellCount, jackpotTier } from './tickets';
 
 export const SAVE_KEY = 'scratch-tycoon-save';
 
@@ -14,9 +14,15 @@ const MIGRATIONS: Record<number, (save: RawSave) => RawSave> = {
   1: (save) => {
     if (!isRecord(save.stats)) return { ...save, version: 2 };
     const stats = { ...save.stats };
+    const ticket = readTicket(save.ticket);
+    let revealedBigWin: TicketId | undefined;
+    if (ticket?.revealed) {
+      const def = ticketDef(ticket.type);
+      if (ticket.tier !== jackpotTier(def) && ticket.prize >= def.price * BIG_WIN_MULTIPLIER) revealedBigWin = ticket.type;
+    }
     for (const id of TICKET_IDS) {
       const entry = stats[id];
-      if (isRecord(entry)) stats[id] = { ...entry, bigWins: amount(entry.jackpots, 0) };
+      if (isRecord(entry)) stats[id] = { ...entry, bigWins: amount(entry.jackpots, 0) + (id === revealedBigWin ? 1 : 0) };
     }
     return { ...save, version: 2, stats };
   },
