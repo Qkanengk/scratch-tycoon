@@ -29,7 +29,8 @@ export function wearTool(state: GameState, wear: number): GameState {
 }
 
 export function repairPrice(state: GameState, id: ToolId): number {
-  return Math.ceil(toolDef(id).price * BALANCE.repairPriceFraction * (1 - state.durability[id]));
+  const price = toolDef(id).price * BALANCE.repairPriceFraction * (1 - state.durability[id]);
+  return Math.ceil(Math.round(price * 1e9) / 1e9);
 }
 
 export function repairTool(state: GameState, id: ToolId): GameState {

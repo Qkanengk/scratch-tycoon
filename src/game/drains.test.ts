@@ -13,6 +13,12 @@ function rich(seed = 1): GameState {
 }
 
 describe('drains', () => {
+  it('does not round floating-point noise up to an extra repair coin', () => {
+    const scratched = startScratch(buyTicket(buyTool(rich(), 'scraper'), 'dong'));
+    expect(repairPrice(scratched, 'scraper')).toBe(36);
+    expect(repairPrice({ ...scratched, durability: { ...scratched.durability, scraper: .9879 } }, 'scraper')).toBe(37);
+    expect(repairPrice(buyTool(rich(), 'scraper'), 'scraper')).toBe(0);
+  });
   it('taxes only profit and preserves gross/tax/net through a save', () => {
     for (const id of TICKETS.map(t => t.id)) {
       for (let seed = 1; seed < 100; seed++) {
