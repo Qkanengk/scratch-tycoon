@@ -152,6 +152,6 @@ export function fitToSize(root: THREE.Object3D, size = 1): THREE.Group {
   const centre = box.getCenter(new THREE.Vector3());
   const s = size / Math.max(dims.x, dims.y, dims.z, 1e-6);
   root.scale.multiplyScalar(s);
-  root.position.sub(new THREE.Vector3(centre.x, box.min.y, centre.z).multiplyScalar(s));
+  root.position.sub(new THREE.Vector3(centre.x, box.min.y, centre.z)).multiplyScalar(s);
   return holder;
 }
