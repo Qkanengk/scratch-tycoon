@@ -18,6 +18,8 @@ export interface TicketMetrics {
 const MARGIN = 0.055;
 const HEADER = 0.2;
 const FOOTER = 0.125;
+const FOIL_GROW = 0.006;
+const FOIL_OUTLINE = 6;
 const FONT = '"Baloo 2", system-ui, sans-serif';
 
 export function ticketMetrics(id: TicketId): TicketMetrics {
@@ -193,14 +195,24 @@ export function drawFoil(canvas: HTMLCanvasElement, id: TicketId): void {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   for (const r of m.layout.cells) {
-    const grow = 0.006;
-    const x = (r.x - grow) * unit;
-    const y = (r.y - grow) * unit;
-    const w = (r.w + 2 * grow) * unit;
-    const h = (r.h + 2 * grow) * unit;
-    plate(ctx, x, y, w, h, r.h * unit * 0.16, foil, 6);
+    const x = (r.x - FOIL_GROW) * unit;
+    const y = (r.y - FOIL_GROW) * unit;
+    const w = (r.w + 2 * FOIL_GROW) * unit;
+    const h = (r.h + 2 * FOIL_GROW) * unit;
+    plate(ctx, x, y, w, h, r.h * unit * 0.16, foil, FOIL_OUTLINE);
     text(ctx, '?', x + w / 2, y + h * 0.56, h * 0.6, '#8d94a6');
   }
+}
+
+/** Removes the remaining rim of just one patch, including its antialiased outline. */
+export function peelFoil(canvas: HTMLCanvasElement, cell: Rect): void {
+  const unit = canvas.width;
+  const pad = FOIL_GROW * unit + FOIL_OUTLINE / 2 + 1;
+  const left = Math.floor(cell.x * unit - pad);
+  const top = Math.floor(cell.y * unit - pad);
+  const right = Math.ceil((cell.x + cell.w) * unit + pad);
+  const bottom = Math.ceil((cell.y + cell.h) * unit + pad);
+  canvas.getContext('2d')!.clearRect(left, top, right - left, bottom - top);
 }
 
 /** Rubs the foil off along a stroke given in layout units. */
