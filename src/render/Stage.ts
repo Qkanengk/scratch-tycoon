@@ -256,6 +256,8 @@ export class Stage {
     if (host.parentElement) this.hudChanges.observe(host.parentElement, { childList: true });
     this.observeHud();
     document.addEventListener('visibilitychange', this.visibilityChanged);
+    window.addEventListener('focus', this.visibilityChanged);
+    window.addEventListener('blur', this.visibilityChanged);
 
     void this.load();
   }
@@ -330,7 +332,7 @@ export class Stage {
   repairedTool(id: ToolId): void { this.toolShelf.repairedTool(id); }
 
   private clock(now: number): void {
-    const elapsed = this.playClock.update(now, !this.paused && !document.hidden);
+    const elapsed = this.playClock.update(now, !this.paused && !document.hidden && document.hasFocus());
     if (elapsed) this.callbacks.onPlayTime(elapsed);
   }
 
@@ -350,6 +352,8 @@ export class Stage {
   dispose(): void {
     this.disposed = true;
     document.removeEventListener('visibilitychange', this.visibilityChanged);
+    window.removeEventListener('focus', this.visibilityChanged);
+    window.removeEventListener('blur', this.visibilityChanged);
     this.playClock.update(performance.now(), false);
     stopScratch();
     cancelAnimationFrame(this.frame);

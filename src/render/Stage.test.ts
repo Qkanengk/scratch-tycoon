@@ -1,8 +1,25 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ToolIntent } from '../game/tools';
 import { Stage } from './Stage';
+import { PlayClock } from './playClock';
 
 describe('stage shelf interactions', () => {
+  it('counts rent only while this window owns focus', () => {
+    const document = { hidden: false, hasFocus: () => true };
+    vi.stubGlobal('document', document);
+    const onPlayTime = vi.fn();
+    const stage = Object.assign(Object.create(Stage.prototype), { playClock: new PlayClock(), paused: false, callbacks: { onPlayTime } });
+    stage.clock(0);
+    document.hasFocus = () => false;
+    stage.clock(350);
+    stage.clock(9350);
+    expect(onPlayTime).toHaveBeenCalledExactlyOnceWith(350);
+    document.hasFocus = () => true;
+    stage.clock(10000);
+    stage.clock(11000);
+    expect(onPlayTime.mock.calls).toEqual([[350], [1000]]);
+    vi.unstubAllGlobals();
+  });
   it('stops an ongoing scratch while paused or hidden', () => {
     const stage = Object.assign(Object.create(Stage.prototype), { mask: {}, busy: false, view: 'desk', settled: true, paused: true });
     expect(stage.canScratch()).toBe(false);
