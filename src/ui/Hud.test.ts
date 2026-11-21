@@ -26,6 +26,7 @@ describe('promptFor', () => {
     const broke: GameState = { ...fresh(), money: 0, promoReadyAt: 1000 };
     expect(promptFor(broke, 500, 'desk', 0).button).toMatchObject({ command: 'promo', disabled: true });
     expect(promptFor(broke, 1000, 'desk', 0).button).toMatchObject({ command: 'promo', disabled: false });
+    expect(promptFor({ ...broke, licenses: ['bac'] }, 1000, 'desk', 0).message).toContain('Vé Bạc');
   });
 
   it('offers the next licence at the board and disables it until the requirements are met', () => {
@@ -33,11 +34,12 @@ describe('promptFor', () => {
     const state = fresh();
     const ready: GameState = {
       ...state,
-      money: 500,
-      totalEarned: 5000,
-      stats: { ...state.stats, dong: { scratched: 200, wins: 80, jackpots: 1 } },
+      money: 150,
+      totalEarned: 250,
+      stats: { ...state.stats, dong: { scratched: 30, wins: 8, jackpots: 0 } },
     };
     expect(promptFor(ready, 0, 'board', 0).button).toMatchObject({ command: 'license', disabled: false });
+    expect(promptFor({ ...ready, money: 149 }, 0, 'board', 0).button).toMatchObject({ command: 'license', disabled: true });
   });
 
   it('has nothing to sell at the board once every ticket is unlocked', () => {

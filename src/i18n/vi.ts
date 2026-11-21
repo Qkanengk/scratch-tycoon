@@ -36,7 +36,7 @@ export const vi = {
   'table.collect': 'Nhận {amount}',
   'table.discard': 'Bỏ vé',
   'table.promoWait': 'Hết tiền rồi. Vé khuyến mãi miễn phí sau {seconds} giây.',
-  'table.promoReady': 'Vé khuyến mãi đã sẵn sàng.',
+  'table.promoReady': '{name} khuyến mãi đã sẵn sàng.',
   'table.promoClaim': 'Nhận vé miễn phí',
 
   'rack.locked': 'Cần giấy phép',
@@ -55,8 +55,8 @@ export const vi = {
 
   'shop.req.revenue': 'Tổng thu {current} / {target}',
   'shop.req.scratched': 'Cào {current} / {target} {name}',
-  'shop.req.jackpot': 'Trúng độc đắc {name}: {current} / {target}',
-  'shop.req.license': 'Giấy phép: {cost}',
+  'shop.req.wins': 'Trúng {name}: {current} / {target}',
+  'shop.req.license': 'Cần {required} (phí {cost} + vé đầu)',
   'shop.buyLicense': 'Mua giấy phép · {cost}',
   'shop.unlockedToast': 'Đã mở khoá {name}!',
 

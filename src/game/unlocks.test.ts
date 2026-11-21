@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { BALANCE } from '../data/balance';
 import { TICKETS, ticketDef } from '../data/tickets';
-import { buyTicket, isUnlocked, selectTicket } from './economy';
+import { buyTicket, claimPromo, collectTicket, isBroke, isUnlocked, revealTicket, selectTicket, updatePromo } from './economy';
 import { createInitialState, type GameState } from './state';
 import { buyLicense, unlockProgress } from './unlocks';
 
@@ -9,9 +10,9 @@ function readyForBac(): GameState {
   const state = createInitialState(1);
   return {
     ...state,
-    money: 500,
-    totalEarned: 5_000,
-    stats: { ...state.stats, dong: { scratched: 200, wins: 90, jackpots: 1 } },
+    money: 150,
+    totalEarned: 250,
+    stats: { ...state.stats, dong: { scratched: 30, wins: 8, jackpots: 0 } },
   };
 }
 
@@ -25,9 +26,9 @@ describe('unlock data', () => {
       const previous = TICKETS[i - 1];
       const unlock = TICKETS[i]?.unlock;
       expect(unlock?.mission.ticket).toBe(previous?.id);
-      expect(unlock?.licenseCost).toBe((previous?.price ?? 0) * 50);
+      expect(unlock?.licenseCost).toBe((previous?.price ?? 0) * 5);
     }
-    expect(TICKETS.map((def) => def.unlock?.totalEarned ?? 0)).toEqual([0, 5_000, 150_000, 5_000_000, 200_000_000]);
+    expect(TICKETS.map((def) => def.unlock?.totalEarned ?? 0)).toEqual([0, 250, 7_500, 120_000, 2_000_000]);
   });
 });
 
@@ -40,17 +41,18 @@ describe('licenses', () => {
       unlocked: false,
       revenueDone: false,
       scratchedDone: false,
-      jackpotDone: false,
+      winsDone: false,
       affordable: false,
+      requiredMoney: 150,
       canBuyLicense: false,
     });
   });
 
   it.each([
-    ['revenue', (s: GameState) => ({ ...s, totalEarned: 4_999 })],
-    ['tickets scratched', (s: GameState) => ({ ...s, stats: { ...s.stats, dong: { ...s.stats.dong, scratched: 199 } } })],
-    ['jackpot', (s: GameState) => ({ ...s, stats: { ...s.stats, dong: { ...s.stats.dong, jackpots: 0 } } })],
-    ['license money', (s: GameState) => ({ ...s, money: 499 })],
+    ['revenue', (s: GameState) => ({ ...s, totalEarned: 249 })],
+    ['tickets scratched', (s: GameState) => ({ ...s, stats: { ...s.stats, dong: { ...s.stats.dong, scratched: 29 } } })],
+    ['wins', (s: GameState) => ({ ...s, stats: { ...s.stats, dong: { ...s.stats.dong, wins: 7 } } })],
+    ['license and first ticket money', (s: GameState) => ({ ...s, money: 149 })],
   ])('is refused while the %s requirement is short', (_name, shorten) => {
     const state = shorten(readyForBac());
     expect(unlockProgress(state, 'bac').canBuyLicense).toBe(false);
@@ -58,17 +60,17 @@ describe('licenses', () => {
   });
 
   it('is sold once every requirement is met, and then the ticket can be bought', () => {
-    const ready = { ...readyForBac(), money: 700 };
+    const ready = readyForBac();
     expect(unlockProgress(ready, 'bac').canBuyLicense).toBe(true);
     const licensed = buyLicense(ready, 'bac');
-    expect(licensed.money).toBe(200);
+    expect(licensed.money).toBe(100);
     expect(licensed.licenses).toEqual(['bac']);
     expect(unlockProgress(licensed, 'bac').unlocked).toBe(true);
     expect(buyLicense(licensed, 'bac')).toBe(licensed);
 
     const bought = buyTicket(selectTicket(licensed, 'bac'), 'bac');
     expect(bought.ticket?.type).toBe('bac');
-    expect(bought.money).toBe(100);
+    expect(bought.money).toBe(0);
     expect(bought.selected).toBe('bac');
   });
 
@@ -78,8 +80,31 @@ describe('licenses', () => {
     expect(selectTicket(state, 'vang')).toBe(state);
   });
 
-  it('missions count jackpots of the right ticket', () => {
+  it('missions count wins of the right ticket', () => {
+    const state = { ...readyForBac(), money: 1e6, totalEarned: 1e6 };
     const unlock = ticketDef('vang').unlock;
-    expect(unlock?.mission).toEqual({ ticket: 'bac', scratched: 200, jackpots: 1 });
+    expect(unlock?.mission).toEqual({ ticket: 'bac', scratched: 75, wins: 20 });
+    expect(unlockProgress(state, 'vang').winsDone).toBe(false);
+    const withBacWins = { ...state, stats: { ...state.stats, bac: { scratched: 75, wins: 20, jackpots: 0 } } };
+    expect(unlockProgress(withBacWins, 'vang').canBuyLicense).toBe(true);
+  });
+
+  it('can recover a broke starter run and buy a first Bạc ticket without a jackpot', () => {
+    let state = createInitialState(453);
+    let promos = 0;
+    for (let i = 0; i < 30; i++) {
+      if (isBroke(state)) {
+        state = claimPromo(updatePromo(state, 0), BALANCE.promoIntervalMs);
+        expect(state.ticket?.free).toBe(true);
+        promos++;
+      } else {
+        state = buyTicket(state, 'dong');
+      }
+      state = collectTicket(revealTicket(state));
+    }
+    expect(promos).toBe(1);
+    expect(state.stats.dong.jackpots).toBe(0);
+    expect(unlockProgress(state, 'bac').canBuyLicense).toBe(true);
+    expect(buyTicket(buyLicense(state, 'bac'), 'bac').ticket?.type).toBe('bac');
   });
 });
