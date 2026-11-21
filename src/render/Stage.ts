@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { play, playScratch } from '../audio/sfx';
 import { BALANCE } from '../data/balance';
 import { ticketDef, type TicketId } from '../data/tickets';
-import { coverage, createMask, scratchSegment, type ScratchMask } from '../game/scratch';
+import { coverage, createMask, encodeMask, restoreMask, scratchSegment, ticketContentKey, type ScratchMask } from '../game/scratch';
 import type { GameState, Ticket } from '../game/state';
 import { jackpotTier } from '../game/tickets';
 import { allText } from '../i18n';
@@ -12,7 +12,7 @@ import { Particles } from './particles';
 import { Rack } from './rack';
 import { buildRoom } from './room';
 import { flat, roundedRect } from './shapes';
-import { drawFace, drawFoil, eraseFoil, ticketMetrics, type TicketMetrics } from './ticketFace';
+import { drawFace, drawFoil, eraseFoil, restoreFoil, ticketMetrics, type TicketMetrics } from './ticketFace';
 import { fitToSize, INK, toonify } from './toon';
 
 /** Where the player is looking: down at the scratch mat, up at the ticket rack, or at the licence board. */
@@ -23,6 +23,7 @@ export interface StageCallbacks {
   onRevealed(): void;
   /** Scratch progress toward the reveal, 0 to 1. */
   onProgress(done: number): void;
+  onScratch(ticket: Ticket, scratch: string): void;
   /** The player picked a ticket type on the rack. */
   onTicket(id: TicketId): void;
   /** The player picked up the scratched ticket. */
@@ -109,7 +110,10 @@ export class Stage {
   private pose: Pose = { ...REST };
   private mask: ScratchMask | null = null;
   private state: GameState | null = null;
-  private shown: { serial: number; type: TicketId; revealed: boolean } | null = null;
+  private shown: Ticket | null = null;
+  private readonly pendingScratch = new Set<string>();
+  private lastScratchSave = 0;
+  private lastScratchSent: string | undefined;
   private first = true;
   private ready = false;
   private disposed = false;
@@ -206,6 +210,7 @@ export class Stage {
 
   look(view: View): void {
     if (this.view === view) return;
+    this.saveScratch();
     this.view = view;
     if (!this.ready) return;
     this.aim();
@@ -244,11 +249,17 @@ export class Stage {
       return;
     }
     if (before && ticket && before.serial === ticket.serial && before.type === ticket.type) {
-      if (ticket.revealed && !before.revealed) this.reveal(ticket);
-      else if (!ticket.revealed && before.revealed) {
-        // An imported save can put the same ticket back under its foil.
+      if (ticketContentKey(before) !== ticketContentKey(ticket)) {
         this.show(ticket);
         this.setState(ticket);
+      } else if (ticket.revealed && !before.revealed) this.reveal(ticket);
+      else if (ticket.revealed !== before.revealed || ticket.scratch !== before.scratch) {
+        if (!ticket.revealed && ticket.scratch && this.pendingScratch.delete(ticket.scratch)) {
+          before.scratch = ticket.scratch;
+        } else {
+          this.show(ticket);
+          this.setState(ticket);
+        }
       }
       return;
     }
@@ -256,6 +267,7 @@ export class Stage {
     const deal = () => {
       if (!ticket) {
         this.ticket.visible = false;
+        this.callbacks.onProgress(0);
         this.setState(null);
         return;
       }
@@ -266,6 +278,7 @@ export class Stage {
     };
     this.shown = null;
     this.mask = null;
+    this.pendingScratch.clear();
     if (before) {
       play('ticket-collect');
       this.move(this.pose, TILL, 0.3, easeOut, deal);
@@ -293,10 +306,14 @@ export class Stage {
     this.foilMaterial.opacity = 1;
     this.foilMaterial.visible = !ticket.revealed;
     this.mask = ticket.revealed ? null : createMask(this.metrics.layout.cells, this.metrics.layout.height);
-    this.shown = { serial: ticket.serial, type: ticket.type, revealed: ticket.revealed };
+    if (this.mask && restoreMask(this.mask, ticket.scratch)) restoreFoil(this.foilCanvas, this.mask);
+    this.shown = { ...ticket };
+    this.pendingScratch.clear();
+    this.lastScratchSent = ticket.scratch;
+    this.lastScratchSave = performance.now();
     this.ticket.visible = true;
     this.stroke = null;
-    this.callbacks.onProgress(0);
+    this.callbacks.onProgress(this.mask ? Math.min(1, coverage(this.mask) / BALANCE.scratchThreshold) : 0);
   }
 
   /** Rebuilds the ticket and its mat when the ticket type (and so its height) changes. */
@@ -343,7 +360,8 @@ export class Stage {
 
   private reveal(ticket: Ticket): void {
     if (!this.shown) return;
-    this.shown.revealed = true;
+    this.shown = { ...ticket };
+    this.pendingScratch.clear();
     this.mask = null;
     this.scratching = false;
     this.setState(ticket);
@@ -490,6 +508,7 @@ export class Stage {
   };
 
   private readonly onUp = (event: PointerEvent): void => {
+    this.saveScratch();
     const down = this.down;
     // The reveal ends the stroke before the pointer lifts, so ask what the whole press did.
     const wasScratching = this.stroked;
@@ -512,6 +531,7 @@ export class Stage {
   };
 
   private readonly onCancel = (): void => {
+    this.saveScratch();
     this.pressed = false;
     this.scratching = false;
     this.stroke = null;
@@ -570,7 +590,19 @@ export class Stage {
       this.mask = null;
       play('reveal', 0.5);
       this.callbacks.onRevealed();
+    } else if (now - this.lastScratchSave >= 500) {
+      this.saveScratch();
     }
+  }
+
+  private saveScratch(): void {
+    if (!this.mask || !this.shown || this.mask.scratched === 0) return;
+    const scratch = encodeMask(this.mask);
+    if (scratch === this.lastScratchSent) return;
+    this.lastScratchSent = scratch;
+    this.lastScratchSave = performance.now();
+    this.pendingScratch.add(scratch);
+    this.callbacks.onScratch(this.shown, scratch);
   }
 
   // --- camera -----------------------------------------------------------------------------------

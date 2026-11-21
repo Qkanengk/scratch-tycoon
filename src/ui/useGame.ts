@@ -33,11 +33,11 @@ export function useGame(): Game {
   const [now, setNow] = useState(() => Date.now());
 
   const apply = useCallback<Game['apply']>((transition) => {
-    const commit = (locked: boolean) => {
+    const commit = () => {
       const time = Date.now();
       try {
         current.current = updateStoredSave(localStorage, current.current, newGame,
-          (value) => updatePromo(transition(value, time), time), time, locked);
+          (value) => updatePromo(transition(value, time), time), time);
       } catch {
         current.current = { ...current.current, state: updatePromo(transition(current.current.state, time), time), writable: false };
       }
@@ -45,8 +45,8 @@ export function useGame(): Game {
       setState(current.current.state);
     };
     // Include actions queued before a storage event in the cross-tab transaction.
-    if (navigator.locks) void navigator.locks.request(SAVE_KEY, () => commit(true)).catch(() => commit(false));
-    else commit(false); // Without locking, keep storage read-only rather than risk progress.
+    if (navigator.locks) void navigator.locks.request(SAVE_KEY, commit).catch(commit);
+    else commit();
   }, []);
 
   useEffect(() => {

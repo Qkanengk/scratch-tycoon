@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { BALANCE } from '../data/balance';
-import { TICKET_IDS } from '../data/tickets';
+import { ticketDef, TICKET_IDS } from '../data/tickets';
+import { layoutTicket } from '../render/layout';
 import { buyTicket, revealTicket } from './economy';
-import { deserialize, loadStoredSave, migrate, SAVE_BACKUP_KEY, SAVE_KEY, serialize, updateStoredSave } from './save';
+import { deserialize, loadStoredSave, migrate, recordScratch, SAVE_BACKUP_KEY, SAVE_KEY, serialize, updateStoredSave } from './save';
+import { coverage, createMask, encodeMask, restoreMask, scratchSegment } from './scratch';
 import { createInitialState, SAVE_VERSION } from './state';
 
 describe('save', () => {
@@ -207,11 +209,79 @@ describe('stored saves', () => {
     expect(storage.setItem).not.toHaveBeenCalled();
   });
 
-  it('keeps storage read-only when no cross-tab lock is available', () => {
+  it('continues in memory if writing the updated save fails', () => {
     const storage = memory(serialize(fresh()));
+    storage.setItem.mockImplementation(() => { throw new Error('full'); });
     const next = updateStoredSave(storage, loadStoredSave(storage, fresh), fresh,
-      (state) => buyTicket(state, 'dong'), 1000, false);
+      (state) => buyTicket(state, 'dong'), 1000);
     expect(next.state.money).toBe(90);
-    expect(storage.setItem).not.toHaveBeenCalled();
+    expect(storage.setItem).toHaveBeenCalledTimes(1);
+    expect(storage.getItem(SAVE_KEY)).toBe(serialize(fresh()));
+  });
+});
+
+describe('saved scratching', () => {
+  const bought = () => buyTicket(createInitialState(4), 'dong');
+  const maskFor = (id = 'dong' as (typeof TICKET_IDS)[number]) => {
+    const layout = layoutTicket(ticketDef(id).rules);
+    return createMask(layout.cells, layout.height);
+  };
+
+  it.each(TICKET_IDS)('round-trips optional scratch progress for %s without a version change', (id) => {
+    const state = buyTicket({ ...createInitialState(4), money: 1e9, licenses: TICKET_IDS.slice(1) }, id);
+    const mask = maskFor(id);
+    scratchSegment(mask, 0.1, 0.1, 0.25, 0.1, 0.04);
+    const saved = { ...state, ticket: { ...state.ticket!, scratch: encodeMask(mask) } };
+    expect(deserialize(serialize(saved))).toEqual(saved);
+    expect(saved.version).toBe(1);
+  });
+
+  it.each([undefined, null, '', 'garbage', 'A'.repeat(10000), 123])('ignores a malformed mask (%s) without dropping or refunding the ticket', (scratch) => {
+    const state = bought();
+    expect(migrate({ ...state, ticket: { ...state.ticket, scratch } })).toEqual(state);
+  });
+
+  it('ignores a mask that would already require a reveal', () => {
+    const state = bought();
+    const mask = maskFor();
+    scratchSegment(mask, 0, 0.2, 1, 0.2, 1);
+    expect(migrate({ ...state, ticket: { ...state.ticket, scratch: encodeMask(mask) } })).toEqual(state);
+  });
+
+  it('records a partial stroke, merges other tabs\' areas, and does not re-save identical progress', () => {
+    const state = bought();
+    const first = maskFor(), second = maskFor();
+    scratchSegment(first, 0.1, 0.1, 0.25, 0.1, 0.04);
+    scratchSegment(second, 0.7, 0.1, 0.85, 0.1, 0.04);
+    const saved = recordScratch(state, state.ticket!, encodeMask(first));
+    const merged = recordScratch(saved, state.ticket!, encodeMask(second));
+    const restored = maskFor();
+    expect(restoreMask(restored, merged.ticket?.scratch)).toBe(true);
+    expect(restored.scratched).toBe(first.scratched + second.scratched);
+    expect(coverage(restored)).toBeGreaterThan(coverage(first));
+    expect(recordScratch(merged, state.ticket!, encodeMask(second))).toBe(merged);
+  });
+
+  it('ignores stale strokes for a replaced, changed, revealed or absent ticket and malformed masks', () => {
+    const state = bought();
+    const scratch = encodeMask(maskFor());
+    for (const current of [
+      { ...state, ticket: null },
+      revealTicket(state),
+      { ...state, ticket: { ...state.ticket!, serial: 99 } },
+      { ...state, ticket: { ...state.ticket!, cells: [] } },
+    ]) expect(recordScratch(current, state.ticket!, scratch)).toBe(current);
+    expect(recordScratch(state, state.ticket!, 'bad')).toBe(state);
+    expect(buyTicket({ ...state, ticket: null }, 'dong').ticket?.scratch).toBeUndefined();
+  });
+
+  it('uses the existing reveal transition if merged progress reaches the normal threshold', () => {
+    const state = bought();
+    const mask = maskFor();
+    scratchSegment(mask, 0, 0.2, 1, 0.2, 1);
+    const revealed = recordScratch(state, state.ticket!, encodeMask(mask));
+    expect(revealed.ticket?.revealed).toBe(true);
+    expect(revealed.stats.dong.scratched).toBe(1);
+    expect(recordScratch(revealed, state.ticket!, encodeMask(mask))).toBe(revealed);
   });
 });

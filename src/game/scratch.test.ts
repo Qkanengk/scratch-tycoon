@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { BALANCE } from '../data/balance';
 import { TICKETS } from '../data/tickets';
 import { layoutTicket } from '../render/layout';
-import { coverage, createMask, scratchSegment } from './scratch';
+import { coverage, createMask, encodeMask, restoreMask, scratchSegment, ticketContentKey } from './scratch';
+import { buyTicket } from './economy';
+import { createInitialState } from './state';
 
 const cell = { x: 0.1, y: 0.1, w: 0.4, h: 0.2 };
 
@@ -46,6 +48,40 @@ describe('scratch mask', () => {
       }
       expect(coverage(mask)).toBe(1);
     }
+  });
+
+  it('packs six grid points per character and restores exactly the same coverage', () => {
+    const mask = createMask([cell], 0.4);
+    scratchSegment(mask, 0.1, 0.2, 0.5, 0.2, 0.05);
+    const text = encodeMask(mask);
+    expect(text.length).toBe(Math.ceil(mask.points.length / 6));
+    const restored = createMask([cell], 0.4);
+    expect(restoreMask(restored, text)).toBe(true);
+    expect(restored).toEqual(mask);
+    expect(restoreMask(restored, text)).toBe(true);
+    expect(restored).toEqual(mask);
+  });
+
+  it('round-trips an empty mask and rejects garbage, incorrect lengths and bits outside prize cells atomically', () => {
+    const mask = createMask([cell], 0.4);
+    const text = encodeMask(mask);
+    expect(restoreMask(mask, text)).toBe(true);
+    for (const invalid of [undefined, null, 7, '', text.slice(1), text + 'A', '!'.repeat(text.length), 'B' + text.slice(1)]) {
+      expect(restoreMask(mask, invalid)).toBe(false);
+      expect(coverage(mask)).toBe(0);
+    }
+  });
+
+  it('rejects nonzero padding bits', () => {
+    const mask = createMask([{ x: 0, y: 0, w: 1, h: 1 }], 1, 1);
+    expect(restoreMask(mask, 'C')).toBe(false);
+    expect(restoreMask(mask, 'B')).toBe(true);
+  });
+
+  it('diffs printed content even when serial/type/revealed match, independently of scratch progress', () => {
+    const ticket = buyTicket(createInitialState(4), 'dong').ticket!;
+    expect(ticketContentKey({ ...ticket, cells: [{ type: 'bomb' }] })).not.toBe(ticketContentKey(ticket));
+    expect(ticketContentKey({ ...ticket, scratch: 'mask', revealed: true })).toBe(ticketContentKey(ticket));
   });
 });
 

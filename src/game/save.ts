@@ -1,5 +1,8 @@
 import { BALANCE } from '../data/balance';
 import { TICKET_IDS, ticketDef, type TicketId, type TicketRules } from '../data/tickets';
+import { layoutTicket } from '../render/layout';
+import { revealTicket } from './economy';
+import { coverage, createMask, encodeMask, restoreMask, ticketContentKey } from './scratch';
 import { createInitialState, emptyStats, SAVE_VERSION, type GameState, type Ticket } from './state';
 import { cellCount } from './tickets';
 
@@ -56,6 +59,10 @@ function readTicket(value: unknown): Ticket | null {
   const tier = amount(value.tier, -1);
   if (value.cells.length !== cellCount(def.rules) || !def.prizes[tier]) return null;
   if (!value.cells.every((cell) => isCell(cell, def.rules))) return null;
+  const layout = layoutTicket(def.rules);
+  const mask = createMask(layout.cells, layout.height);
+  const scratch = value.revealed !== true && restoreMask(mask, value.scratch)
+    && coverage(mask) < BALANCE.scratchThreshold ? encodeMask(mask) : undefined;
   return {
     serial: amount(value.serial, 0),
     type: value.type,
@@ -64,6 +71,7 @@ function readTicket(value: unknown): Ticket | null {
     prize: (def.prizes[tier]?.multiplier ?? 0) * def.price,
     free: value.free === true,
     revealed: value.revealed === true,
+    ...(scratch === undefined ? {} : { scratch }),
   };
 }
 
@@ -149,14 +157,13 @@ export function loadStoredSave(storage: Pick<Storage, 'getItem' | 'setItem'>, fr
   }
 }
 
-/** Call under the save's cross-tab lock; without a lock, pass writable = false. */
+/** Call under the save's cross-tab lock when available. */
 export function updateStoredSave(
   storage: Pick<Storage, 'getItem' | 'setItem'>,
   previous: LoadedSave,
   fresh: () => GameState,
   transition: (state: GameState) => GameState,
   now: number,
-  writable = true,
 ): LoadedSave {
   let current = previous;
   try {
@@ -166,7 +173,7 @@ export function updateStoredSave(
   }
   const state = transition(current.state);
   const text = serialize(state);
-  if (writable && current.writable && text !== current.text) {
+  if (current.writable && text !== current.text) {
     try {
       storage.setItem(SAVE_KEY, text);
       return { ...current, state, text };
@@ -175,4 +182,17 @@ export function updateStoredSave(
     }
   }
   return { ...current, state };
+}
+
+export function recordScratch(state: GameState, ticket: Ticket, scratch: string): GameState {
+  const current = state.ticket;
+  if (!current || current.revealed || ticketContentKey(current) !== ticketContentKey(ticket)) return state;
+  const layout = layoutTicket(ticketDef(current.type).rules);
+  const mask = createMask(layout.cells, layout.height);
+  if (!restoreMask(mask, scratch)) return state;
+  if (current.scratch) restoreMask(mask, current.scratch);
+  const merged = encodeMask(mask);
+  if (merged === current.scratch) return state;
+  const next = { ...state, ticket: { ...current, scratch: merged } };
+  return coverage(mask) >= BALANCE.scratchThreshold ? revealTicket(next) : next;
 }

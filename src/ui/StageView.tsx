@@ -19,6 +19,7 @@ export function StageView({ state, handlers, stage }: Props) {
     const created = new Stage(host.current, {
       onRevealed: () => handlers.current.onRevealed(),
       onProgress: (done) => handlers.current.onProgress(done),
+      onScratch: (ticket, scratch) => handlers.current.onScratch(ticket, scratch),
       onTicket: (id) => handlers.current.onTicket(id),
       onCollect: () => handlers.current.onCollect(),
       onBoard: () => handlers.current.onBoard(),

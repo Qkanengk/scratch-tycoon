@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { TICKETS } from '../data/tickets';
-import { ticketMetrics } from './ticketFace';
+import { createMask, scratchSegment } from '../game/scratch';
+import { restoreFoil, ticketMetrics } from './ticketFace';
 
 describe('ticketMetrics', () => {
   it.each(TICKETS.map((def) => def.id))('keeps the scratch window of %s inside the ticket', (id) => {
@@ -21,6 +22,21 @@ describe('ticketMetrics', () => {
         expect(cell.x + cell.w).toBeLessThanOrEqual(1);
         expect(cell.y + cell.h).toBeLessThanOrEqual(layout.height);
       }
+    }
+  });
+
+  it('restores only the saved scratched grid squares on the foil', () => {
+    const clearRect = vi.fn();
+    const canvas = { width: 768, getContext: () => ({ clearRect }) } as unknown as HTMLCanvasElement;
+    const mask = createMask([{ x: 0, y: 0, w: 1, h: 1 }], 1);
+    restoreFoil(canvas, mask);
+    expect(clearRect).not.toHaveBeenCalled();
+    scratchSegment(mask, 0.2, 0.2, 0.5, 0.2, 0.05);
+    restoreFoil(canvas, mask);
+    expect(clearRect).toHaveBeenCalledTimes(mask.scratched);
+    for (const [x, y, w, h] of clearRect.mock.calls) {
+      expect(mask.points[(y / 16) * mask.cols + x / 16]).toBe(2);
+      expect([w, h]).toEqual([16, 16]);
     }
   });
 });

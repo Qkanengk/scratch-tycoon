@@ -1,6 +1,6 @@
 import { ticketDef, TICKETS, type TicketDef, type TicketId } from '../data/tickets';
 import { formatCompact } from '../game/format';
-import type { Rect } from '../game/scratch';
+import type { Rect, ScratchMask } from '../game/scratch';
 import type { Cell, Ticket } from '../game/state';
 import { t } from '../i18n';
 import { image, rasterize } from './assets';
@@ -214,4 +214,12 @@ export function eraseFoil(canvas: HTMLCanvasElement, x0: number, y0: number, x1:
   ctx.moveTo(x0 * unit, y0 * unit);
   ctx.lineTo(x1 * unit + 0.01, y1 * unit + 0.01);
   ctx.stroke();
+}
+
+export function restoreFoil(canvas: HTMLCanvasElement, mask: ScratchMask): void {
+  const ctx = canvas.getContext('2d')!;
+  const size = canvas.width / mask.cols;
+  for (let i = 0; i < mask.points.length; i++) {
+    if (mask.points[i] === 2) ctx.clearRect((i % mask.cols) * size, Math.floor(i / mask.cols) * size, size, size);
+  }
 }

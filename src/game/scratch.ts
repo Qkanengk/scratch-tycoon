@@ -1,3 +1,5 @@
+import type { Ticket } from './state';
+
 /** Rectangle in ticket units: the scratch area is 1 wide and `height` tall. */
 export interface Rect {
   x: number;
@@ -8,6 +10,7 @@ export interface Rect {
 
 const COVERED = 1;
 const SCRATCHED = 2;
+const MASK_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 
 /**
  * Coarse grid over the scratch area. Only points inside a prize cell count,
@@ -76,3 +79,39 @@ export function coverage(mask: ScratchMask): number {
   return mask.total === 0 ? 1 : mask.scratched / mask.total;
 }
 
+export function encodeMask(mask: ScratchMask): string {
+  let text = '';
+  for (let start = 0; start < mask.points.length; start += 6) {
+    let bits = 0;
+    for (let bit = 0; bit < 6; bit++) if (mask.points[start + bit] === SCRATCHED) bits |= 1 << bit;
+    text += MASK_CHARS[bits];
+  }
+  return text;
+}
+
+/** Restores only scratched prize points; malformed input leaves the mask untouched. */
+export function restoreMask(mask: ScratchMask, text: unknown): boolean {
+  if (typeof text !== 'string' || text.length !== Math.ceil(mask.points.length / 6)) return false;
+  const indices: number[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const bits = MASK_CHARS.indexOf(text[i]!);
+    if (bits < 0) return false;
+    for (let bit = 0; bit < 6; bit++) {
+      if (!(bits & (1 << bit))) continue;
+      const index = i * 6 + bit;
+      if (!mask.points[index]) return false;
+      indices.push(index);
+    }
+  }
+  for (const index of indices) {
+    if (mask.points[index] !== SCRATCHED) {
+      mask.points[index] = SCRATCHED;
+      mask.scratched++;
+    }
+  }
+  return true;
+}
+
+export function ticketContentKey(ticket: Ticket): string {
+  return JSON.stringify([ticket.serial, ticket.type, ticket.cells, ticket.tier, ticket.prize, ticket.free]);
+}
