@@ -96,6 +96,8 @@ export function App() {
       if (key === 'escape') setPaused((open) => !open);
       if (paused) return;
       if (key === ' ' || key === 'enter') {
+        // A focused button keeps its own Space and Enter.
+        if (event.target instanceof Element && event.target.closest('button, a, input, select')) return;
         event.preventDefault();
         if (prompt.button && !prompt.button.disabled) run(prompt.button.command);
       } else if (key === 'arrowup' || key === 'w') stage.current?.nod('up');
