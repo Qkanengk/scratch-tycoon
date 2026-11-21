@@ -34,12 +34,12 @@ describe('promptFor', () => {
     const state = fresh();
     const ready: GameState = {
       ...state,
-      money: 150,
-      totalEarned: 250,
-      stats: { ...state.stats, dong: { scratched: 30, wins: 8, jackpots: 0 } },
+      money: 5_100,
+      totalEarned: 5_000,
+      stats: { ...state.stats, dong: { scratched: 200, wins: 90, jackpots: 1 } },
     };
     expect(promptFor(ready, 0, 'board', 0).button).toMatchObject({ command: 'license', disabled: false });
-    expect(promptFor({ ...ready, money: 149 }, 0, 'board', 0).button).toMatchObject({ command: 'license', disabled: true });
+    expect(promptFor({ ...ready, money: 5_099 }, 0, 'board', 0).button).toMatchObject({ command: 'license', disabled: true });
   });
 
   it('has nothing to sell at the board once every ticket is unlocked', () => {

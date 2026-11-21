@@ -8,5 +8,5 @@ export const BALANCE = {
   brushRadius: 0.05,
   /** The promotional ticket before the player buys any licenses. */
   promoTicket: 'dong' as TicketId,
-  promoIntervalMs: 5_000,
+  promoIntervalMs: 20_000,
 } as const;

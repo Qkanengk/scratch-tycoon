@@ -5,7 +5,7 @@ export interface UnlockProgress {
   unlocked: boolean;
   revenueDone: boolean;
   scratchedDone: boolean;
-  winsDone: boolean;
+  jackpotDone: boolean;
   affordable: boolean;
   requiredMoney: number;
   /** Every requirement is met and the license can be paid for. */
@@ -19,7 +19,7 @@ export function unlockProgress(state: GameState, id: TicketId): UnlockProgress {
       unlocked: true,
       revenueDone: true,
       scratchedDone: true,
-      winsDone: true,
+      jackpotDone: true,
       affordable: true,
       requiredMoney: 0,
       canBuyLicense: false,
@@ -28,17 +28,17 @@ export function unlockProgress(state: GameState, id: TicketId): UnlockProgress {
   const stats = state.stats[unlock.mission.ticket];
   const revenueDone = state.totalEarned >= unlock.totalEarned;
   const scratchedDone = stats.scratched >= unlock.mission.scratched;
-  const winsDone = stats.wins >= unlock.mission.wins;
+  const jackpotDone = stats.jackpots >= unlock.mission.jackpots;
   const requiredMoney = unlock.licenseCost + price;
   const affordable = state.money >= requiredMoney;
   return {
     unlocked: false,
     revenueDone,
     scratchedDone,
-    winsDone,
+    jackpotDone,
     affordable,
     requiredMoney,
-    canBuyLicense: revenueDone && scratchedDone && winsDone && affordable,
+    canBuyLicense: revenueDone && scratchedDone && jackpotDone && affordable,
   };
 }
 

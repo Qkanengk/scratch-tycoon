@@ -86,6 +86,7 @@ describe('promo ticket', () => {
   it('becomes claimable after the interval', () => {
     const waiting = updatePromo(broke, 1000);
     expect(waiting.promoReadyAt).toBe(1000 + BALANCE.promoIntervalMs);
+    expect(waiting.promoReadyAt).toBe(21_000);
     expect(updatePromo(waiting, 5000)).toBe(waiting);
     expect(canClaimPromo(waiting, 1000 + BALANCE.promoIntervalMs - 1)).toBe(false);
     expect(claimPromo(waiting, 2000)).toBe(waiting);
