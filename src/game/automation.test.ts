@@ -133,6 +133,51 @@ describe('robot work', () => {
   });
 });
 
+describe('away receipts', () => {
+  const prepared = () => {
+    let s = automationAction({ ...hired(2), selected: 'vang' as const }, 'autoBuy');
+    s = automationAction(s, 'away', 0, 1000);
+    return s;
+  };
+
+  it('records the exact wallet delta after purchases and tax, not the prize total', () => {
+    const s = prepared();
+    const done = settleAway(s, 1000 + 3600_000);
+    expect(done.money).toBeGreaterThan(s.money);
+    expect(done.automation.awaySummary).toEqual({ countedMs: 3600_000, tickets: done.automation.report.tickets,
+      credited: done.money - s.money, limits: ['battery'] });
+    expect(done.automation.awaySummary!.credited).toBeLessThan(done.automation.report.net);
+    expect(deserialize(serialize(done))?.automation.awaySummary).toEqual(done.automation.awaySummary);
+    const active = advanceAutomation(done, 1000);
+    expect(active.automation.awaySummary).toEqual(done.automation.awaySummary);
+    expect(settleAway(active, active.automation.lastSeenAt).automation.awaySummary).toEqual(done.automation.awaySummary);
+    expect(automationAction(active, 'dismissAway').automation.awaySummary).toBeNull();
+  });
+
+  it('reports capped time and each resource limit, or the end of the absence', () => {
+    const capped = settleAway(prepared(), 1000 + 12 * 3600_000).automation.awaySummary!;
+    expect(capped.countedMs).toBe(2 * 3600_000);
+    expect(capped.limits).toEqual(['battery', 'cap']);
+    const s = loadRobot(prepared(), 0);
+    s.automation.robots[0]!.progressMs = 3999;
+    s.automation.robots[0]!.tray = { ...s.automation.robots[0]!.tray!, net: 5, gross: 5, prize: 5 };
+    s.money = 0;
+    expect(settleAway(s, 1002).automation.awaySummary).toEqual({ countedMs: 2, tickets: 1, credited: 5, limits: ['money'] });
+    expect(settleAway({ ...s, money: 10000 }, 1001).automation.awaySummary?.limits).toEqual([]);
+  });
+
+  it('does not create receipts without a positive credit or for invalid elapsed time', () => {
+    const s = prepared();
+    s.automation.robots[0]!.charge = 0;
+    expect(settleAway(s, 3600_000).automation.awaySummary).toBeNull();
+    expect(settleAway(s, NaN).automation.awaySummary).toBeNull();
+    expect(settleAway(s, 999).automation.awaySummary).toBeNull();
+    expect(settleAway({ ...s, money: 0 }, 3600_000).automation.awaySummary).toBeNull();
+    const malformed = migrate({ ...s, automation: { ...s.automation, awaySummary: { credited: -1, countedMs: Infinity } } });
+    expect(malformed?.automation.awaySummary).toBeNull();
+  });
+});
+
 describe('away work and saves', () => {
   function awayState() {
     let s = automationAction(automationAction(hired(), 'autoBuy'), 'away', 0, 1000);

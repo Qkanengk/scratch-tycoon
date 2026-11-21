@@ -11,6 +11,7 @@ import { drawFace, ticketMetrics } from './ticketFace';
 import { disposeToolObject } from './toolModels';
 import { INK, toonify } from './toon';
 import { robotOfferLabel } from './robotOffers';
+import { awaySummaryText } from '../ui/awaySummary';
 
 function rounded(w: number, h: number, d: number, color: number, radius = .06): THREE.Mesh {
   const mesh = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 3, radius), new THREE.MeshStandardMaterial({ color }));
@@ -44,7 +45,7 @@ function payoutText() {
   return { canvas, texture, sprite };
 }
 
-const OFFERS: AutomationAction[] = ['robot', 'speed', 'capacity', 'autoBuy', 'away', 'cap'];
+const OFFERS = ['robot', 'speed', 'capacity', 'autoBuy', 'away', 'cap'] as const satisfies readonly AutomationAction[];
 
 export class RobotStation {
   readonly group = new THREE.Group();
@@ -54,6 +55,7 @@ export class RobotStation {
   private readonly hiring = new THREE.Group();
   private readonly header = new Paper(1.24, .19);
   private readonly receipt = new Paper(.9, .28);
+  private readonly awayReceipt = new Paper(1.8, 1.05);
   private readonly offers = OFFERS.map(action => {
     const paper = new Paper(action === 'robot' ? .66 : .83, .25);
     paper.group.traverse(n => { n.userData.action = { kind: 'automation', action }; });
@@ -183,6 +185,9 @@ export class RobotStation {
     this.hiring.add(tin, coinSlot);
     this.mountTag('robot', this.hiring, new THREE.Vector3(0, .065, .37));
     this.receipt.group.rotation.x = -Math.PI / 2;
+    this.awayReceipt.group.rotation.x = -Math.PI / 3;
+    this.awayReceipt.group.traverse(n => { n.userData.action = { kind: 'automation', action: 'dismissAway' }; });
+    this.group.add(this.awayReceipt.group);
     this.group.add(this.board, this.charger, this.motor, this.hiring, this.receipt.group, ...this.slots.map(s => s.group));
     this.group.traverse(n => { if (!n.userData.action) n.userData.action = { kind: 'robots' }; });
     this.layout(false);
@@ -204,6 +209,7 @@ export class RobotStation {
     this.motor.position.set(phone ? .95 : 1.40, 0, phone ? 1.50 : 1.25);
     this.hiring.position.set(phone ? .95 : .10, 0, phone ? .30 : 1.25);
     this.receipt.group.position.set(phone ? .45 : 2.64, .015, phone ? 3.90 : 1.91);
+    this.awayReceipt.group.position.set(phone ? .45 : 1.25, .32, phone ? 3.25 : 1.45);
   }
 
   update(state: GameState): void {
@@ -256,8 +262,15 @@ export class RobotStation {
         slot.texture.needsUpdate = true;
       }
     });
-    this.receipt.draw([{ text: t('robot.report', { tickets: a.report.tickets, net: formatCompact(a.report.net) }), size: 64 },
+    this.receipt.draw([{ text: t('robot.report', { tickets: a.report.tickets, net: formatCompact(a.report.net) }), size: 57 },
+      { text: t('robot.reportCosts'), size: 55 },
       { text: t('robot.selected', { name: t(`ticket.${state.selected}.name`) }), size: 62 }]);
+    this.awayReceipt.group.visible = !!a.awaySummary;
+    if (a.awaySummary) {
+      const text = awaySummaryText(a.awaySummary);
+      this.awayReceipt.draw([{ text: t('robot.awayTitle'), size: 66 }, { text: text.time }, { text: text.tickets },
+        { text: text.credited, size: 63, color: '#34704d' }, { text: text.limits, size: 57 }, { text: t('robot.awayDismiss'), size: 54 }]);
+    }
   }
 
   tick(dt: number, time: number): void {
@@ -275,7 +288,7 @@ export class RobotStation {
   }
 
   offerAnchors(): Record<string, THREE.Vector3> {
-    return Object.fromEntries(this.offers.map(({ action, paper }) => [action, paper.group.getWorldPosition(new THREE.Vector3())]));
+    return Object.fromEntries([...this.offers.map(({ action, paper }) => [action, paper.group.getWorldPosition(new THREE.Vector3())]), ['dismissAway', this.awayReceipt.group.getWorldPosition(new THREE.Vector3())]]);
   }
 
   robotAnchors(): THREE.Vector3[] {
@@ -289,7 +302,7 @@ export class RobotStation {
   }
 
   dispose(): void {
-    this.header.dispose(); this.receipt.dispose();
+    this.header.dispose(); this.receipt.dispose(); this.awayReceipt.dispose();
     this.offers.forEach(o => o.paper.dispose());
     this.slots.forEach(s => { s.status.dispose(); s.texture.dispose(); s.payout.texture.dispose(); });
     disposeToolObject(this.group);

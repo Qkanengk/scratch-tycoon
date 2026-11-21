@@ -81,7 +81,8 @@ export function App() {
   };
 
   const run = (command: Command) => {
-    if (command === 'robot') automate('context', 0);
+    if (command === 'awayReceipt') stage.current?.look('robots');
+    else if (command === 'robot') automate('context', 0);
     else if (command === 'buy') buy(state.selected);
     else if (command === 'collect') collect();
     else if (command === 'license') license();

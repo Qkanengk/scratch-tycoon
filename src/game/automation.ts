@@ -19,12 +19,20 @@ export interface Automation {
   capLevel: number;
   lastSeenAt: number;
   report: { tickets: number; net: number };
+  awaySummary: AwaySummary | null;
 }
 
-export type AutomationAction = 'robot' | 'speed' | 'capacity' | 'autoBuy' | 'away' | 'cap' | 'load' | 'recharge';
+export interface AwaySummary {
+  countedMs: number;
+  tickets: number;
+  credited: number;
+  limits: ('battery' | 'cap' | 'money')[];
+}
+
+export type AutomationAction = 'robot' | 'speed' | 'capacity' | 'autoBuy' | 'away' | 'cap' | 'load' | 'recharge' | 'dismissAway';
 
 export function initialAutomation(): Automation {
-  return { robots: [], speed: 0, capacity: 0, autoBuy: false, away: false, capLevel: 0, lastSeenAt: 0, report: { tickets: 0, net: 0 } };
+  return { robots: [], speed: 0, capacity: 0, autoBuy: false, away: false, capLevel: 0, lastSeenAt: 0, report: { tickets: 0, net: 0 }, awaySummary: null };
 }
 
 export const batteryCapacity = (s: GameState) => A.baseCapacity * A.capacityGrowth ** s.automation.capacity;
@@ -32,7 +40,7 @@ export const robotInterval = (s: GameState) => A.ticketMs * A.speedFactor ** s.a
 export const awayCapMs = (s: GameState) => (A.capHours + s.automation.capLevel * 2) * 3_600_000;
 export const ticketCharge = (t: Ticket) => 1 + t.cells.filter(c => c.type === 'bomb').length * A.bombDrain;
 
-export function robotContext(s: GameState, index = 0): AutomationAction {
+export function robotContext(s: GameState, index = 0): 'robot' | 'recharge' | 'load' {
   const r = s.automation.robots[index];
   return !r ? 'robot' : r.charging || r.charge <= 0 ? 'recharge' : 'load';
 }
@@ -60,6 +68,7 @@ export function loadRobot(s: GameState, index: number): GameState {
 }
 
 export function automationAction(s: GameState, action: AutomationAction, index = 0, now = 0): GameState {
+  if (action === 'dismissAway') return { ...s, automation: { ...s.automation, awaySummary: null } };
   if (action === 'load') return loadRobot(s, index);
   const price = automationPrice(s, action, index);
   if (!Number.isFinite(price) || s.money < price || (action !== 'robot' && !s.automation.robots.length)) return s;
@@ -132,5 +141,14 @@ export function settleAway(s: GameState, now: number, minimumMs = 0): GameState 
   if (!Number.isFinite(elapsed) || elapsed < 0) return s;
   const ready = s.automation.away && s.automation.autoBuy && s.automation.lastSeenAt > 0 && Number.isFinite(elapsed) && elapsed >= minimumMs && elapsed > 0;
   const prepared = { ...s, automation: { ...s.automation, lastSeenAt: now, report: { tickets: 0, net: 0 } } };
-  return ready ? advanceAutomation(prepared, Math.min(elapsed, awayCapMs(s)), true) : prepared;
+  if (!ready) return prepared;
+  const countedMs = Math.min(elapsed, awayCapMs(s));
+  const result = advanceAutomation(prepared, countedMs, true);
+  const credited = result.money - s.money;
+  if (credited <= 0) return result;
+  const limits: AwaySummary['limits'] = [];
+  if (result.automation.robots.some(r => r.charging || r.charge <= 1e-9)) limits.push('battery');
+  if (elapsed >= awayCapMs(s)) limits.push('cap');
+  if (result.automation.robots.some(r => !r.tray && !r.charging && r.charge > 1e-9) && result.money < ticketDef(result.selected).price) limits.push('money');
+  return { ...result, automation: { ...result.automation, awaySummary: { countedMs, tickets: result.automation.report.tickets, credited, limits } } };
 }

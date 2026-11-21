@@ -7,23 +7,27 @@ import { t } from '../i18n';
 import type { View } from '../render/Stage';
 import { money } from './money';
 import { automationPrice, robotContext } from '../game/automation';
+import { awaySummaryText } from './awaySummary';
 
-export type Command = 'buy' | 'collect' | 'promo' | 'license' | 'robot';
+export type Command = 'buy' | 'collect' | 'promo' | 'license' | 'robot' | 'awayReceipt';
 
 interface Prompt {
   tone: 'idle' | 'win' | 'jackpot' | 'lose';
   message: string;
   button?: { label: string; command: Command; disabled?: boolean };
   progress?: number;
+  wrap?: boolean;
 }
 
 /** What the game asks of the player right now, given what is on the desk and where they are looking. */
 export function promptFor(state: GameState, now: number, view: View, progress: number): Prompt {
   const ticket = state.ticket;
+  if (state.automation.awaySummary) return { tone: 'win', wrap: true, message: awaySummaryText(state.automation.awaySummary).prompt,
+    button: view === 'robots' ? undefined : { label: t('robot.awayView'), command: 'awayReceipt' } };
   if (view === 'robots') {
     const action = robotContext(state);
     const busy = !!state.automation.robots[0]?.tray && action !== 'recharge';
-    return { tone: 'idle', message: state.rentDebt ? t('robot.debtHint') : t('robot.hint', { tickets: state.automation.report.tickets, net: money(state.automation.report.net) }),
+    return { tone: 'idle', wrap: true, message: state.rentDebt ? t('robot.debtHint') : t('robot.hint', { tickets: state.automation.report.tickets, net: money(state.automation.report.net) }),
       button: busy || state.rentDebt > 0 ? undefined : { label: `${t(`robot.${action}`, { level: state.automation.robots.length })} · ${money(automationPrice(state, action))}`, command: 'robot', disabled: state.money < automationPrice(state, action) } };
   }
   if (view === 'tools') return { tone: 'idle', message: t('tools.hint') };
@@ -67,7 +71,7 @@ export function promptFor(state: GameState, now: number, view: View, progress: n
 export function PromptChip({ prompt, onCommand }: { prompt: Prompt; onCommand: (command: Command) => void }) {
   const button = prompt.button;
   return (
-    <div className={`prompt prompt-${prompt.tone}`}>
+    <div className={`prompt prompt-${prompt.tone}${prompt.wrap ? ' prompt-wrap' : ''}`}>
       <p className="prompt-message" role="status" data-testid="status">
         {prompt.message}
       </p>
