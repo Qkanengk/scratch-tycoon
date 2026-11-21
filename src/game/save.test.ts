@@ -6,8 +6,35 @@ import { buyTicket, collectTicket, revealTicket } from './economy';
 import { deserialize, loadStoredSave, migrate, recordReveal, recordScratch, SAVE_BACKUP_KEY, SAVE_KEY, serialize, updateStoredSave } from './save';
 import { createMask, encodeMask, restoreMask, scratchProgress, scratchSegment } from './scratch';
 import { createInitialState, SAVE_VERSION } from './state';
+import { buyTool, upgradeTool } from './tools';
 
 describe('save', () => {
+  it('migrates v2 saves to a level-zero coin without losing progress', () => {
+    const state = createInitialState(9);
+    expect(migrate({ ...state, version: 2, ownedTools: undefined, toolLevels: undefined, equippedTool: undefined })).toEqual(state);
+  });
+
+  it('round-trips owned tools, upgrades and the equipped tool', () => {
+    const state = upgradeTool(buyTool({ ...createInitialState(9), money: 1000 }, 'key'), 'key');
+    expect(deserialize(serialize(state))).toEqual(state);
+  });
+
+  it.each([undefined, null, [], 'bad', 42])('defaults malformed tool collections (%s)', (value) => {
+    const base = createInitialState(9);
+    expect(migrate({ ...base, ownedTools: value, toolLevels: value, equippedTool: 'laser' })).toEqual(base);
+  });
+
+  it.each([-1, 1.5, 11, Infinity, NaN, '2', null])('defaults invalid tool levels (%s)', (level) => {
+    const state = buyTool({ ...createInitialState(9), money: 1000 }, 'key');
+    expect(migrate({ ...state, toolLevels: { coin: level, key: level, laser: 5 } })).toEqual(state);
+  });
+
+  it('filters unknown and duplicate tools, always owns coin, and defaults unowned equipment', () => {
+    const state = migrate({ ...createInitialState(9), ownedTools: ['key', 'key', 'bad'], equippedTool: 'laser' });
+    expect(state?.ownedTools).toEqual(['coin', 'key']);
+    expect(state?.equippedTool).toBe('coin');
+  });
+
   it('round-trips a game with a ticket on the table', () => {
     const state = revealTicket(buyTicket(createInitialState(123), 'dong'));
     expect(deserialize(serialize(state))).toEqual(state);

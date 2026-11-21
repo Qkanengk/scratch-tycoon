@@ -1,4 +1,5 @@
 import { BALANCE } from '../data/balance';
+import { initialToolLevels, TOOLS, type ToolId } from '../data/tools';
 import { BIG_WIN_MULTIPLIER, TICKET_IDS, ticketDef, type TicketId, type TicketRules } from '../data/tickets';
 import { layoutTicket } from '../render/layout';
 import { revealTicket } from './economy';
@@ -16,6 +17,7 @@ type RawSave = Record<string, unknown>;
  * Add an entry (and a test) whenever the shape of GameState changes.
  */
 const MIGRATIONS: Record<number, (save: RawSave) => RawSave> = {
+  2: (save) => ({ ...save, version: 3, ownedTools: ['coin'], toolLevels: initialToolLevels(), equippedTool: 'coin' }),
   1: (save) => {
     if (!isRecord(save.stats)) return { ...save, version: 2 };
     const stats = { ...save.stats };
@@ -105,6 +107,16 @@ export function migrate(raw: unknown, now = Date.now()): GameState | null {
   if (version !== SAVE_VERSION) return null;
 
   const base = createInitialState(0);
+  const ownedTools: ToolId[] = TOOLS.filter(tool => tool.id === 'coin'
+    || (Array.isArray(save.ownedTools) && save.ownedTools.includes(tool.id))).map(tool => tool.id);
+  const toolLevels = initialToolLevels();
+  for (const tool of TOOLS) {
+    const level = isRecord(save.toolLevels) ? save.toolLevels[tool.id] : undefined;
+    if (ownedTools.includes(tool.id) && typeof level === 'number' && Number.isInteger(level) && level >= 0 && level <= tool.maxLevel) {
+      toolLevels[tool.id] = level;
+    }
+  }
+  const equippedTool = ownedTools.find(id => id === save.equippedTool) ?? 'coin';
   const stats = emptyStats();
   if (isRecord(save.stats)) {
     for (const id of TICKET_IDS) {
@@ -130,6 +142,9 @@ export function migrate(raw: unknown, now = Date.now()): GameState | null {
   return {
     version: SAVE_VERSION,
     money: amount(save.money, base.money) + refund,
+    ownedTools,
+    toolLevels,
+    equippedTool,
     totalEarned: amount(save.totalEarned, 0),
     rngState: amount(save.rngState, 0) >>> 0,
     nextSerial: amount(save.nextSerial, 1),

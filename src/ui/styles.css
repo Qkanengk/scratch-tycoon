@@ -477,6 +477,11 @@ textarea {
     top: 74px;
     bottom: auto;
   }
+
+  .app[data-view='shop'] .look-left {
+    top: 74px;
+    bottom: auto;
+  }
 }
 
 /* Phone: the prompt stacks and spans the width; key hints go away. */

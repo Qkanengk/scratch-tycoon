@@ -23,6 +23,7 @@ export function StageView({ state, handlers, stage }: Props) {
       onTicket: (id) => handlers.current.onTicket(id),
       onCollect: () => handlers.current.onCollect(),
       onBoard: () => handlers.current.onBoard(),
+      onTool: (id) => handlers.current.onTool(id),
       onView: (view) => handlers.current.onView(view),
     });
     stage.current = created;
