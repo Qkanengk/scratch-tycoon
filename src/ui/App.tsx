@@ -135,11 +135,11 @@ export function App() {
       </dl>
 
       <div className="corner">
-        <button className="btn btn-round" onClick={toggleSound} aria-label={t(muted ? 'app.soundOn' : 'app.soundOff')} aria-pressed={muted}>
+        <button className="btn btn-round" onClick={toggleSound} aria-label={t(muted ? 'app.soundOn' : 'app.soundOff')} title={t(muted ? 'app.soundOn' : 'app.soundOff')} aria-pressed={muted}>
           <Icon name={muted ? 'audio-off' : 'audio-on'} />
         </button>
-        <button className="btn btn-round" data-testid="open-save" onClick={() => setPaused(true)} aria-label={t('hud.pause')}>
-          <Icon name="gear" />
+        <button className="btn btn-round" data-testid="open-save" onClick={() => setPaused(true)} aria-label={t('hud.pause')} title={t('hud.pause')}>
+          <Icon name="pause" />
         </button>
       </div>
 

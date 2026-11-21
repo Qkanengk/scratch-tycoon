@@ -137,6 +137,12 @@ textarea:focus-visible {
   mask: var(--icon) center / contain no-repeat;
 }
 
+.hud-glyph {
+  width: 26px;
+  height: 26px;
+  flex: none;
+}
+
 .meter {
   display: block;
   height: 14px;
@@ -446,6 +452,27 @@ textarea {
 .fineprint {
   font-size: 0.85rem;
   color: var(--muted);
+}
+
+@media (min-width: 701px) {
+  .app {
+    --hud-scale: clamp(1, calc(100vw / 1280px), 1.5);
+  }
+
+  .purse, .corner, .look, .prompt {
+    zoom: var(--hud-scale);
+  }
+
+  .look-down {
+    left: 12px;
+    bottom: 22px;
+    transform: none;
+  }
+
+  .app[data-view='board'] .look-left {
+    top: 74px;
+    bottom: auto;
+  }
 }
 
 /* Phone: the prompt stacks and spans the width; key hints go away. */

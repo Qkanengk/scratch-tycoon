@@ -66,9 +66,11 @@ export function buildRoom(): THREE.Group {
 
   const stand = async (file: string, size: number, x: number, y: number, z: number, turn: number, parent: THREE.Group = room) => {
     const model = fitToSize(await loadModel(file), size);
+    model.name = file.split('/').pop()!.replace('.glb', '');
     toonify(model, { outline: 0.011 });
     model.position.set(x, y, z);
     model.rotation.y = turn;
+    if (window.innerWidth > 700 && ['cash-register', 'gold-bag', 'coins'].includes(model.name)) model.visible = false;
     parent.add(model);
   };
   const shelfY = 1.02;
