@@ -45,7 +45,7 @@ export function SavePanel({ game, onClose }: { game: Game; onClose: () => void }
           {t('hud.resume')}
         </button>
         <hr />
-        <p>{t('save.auto')}</p>
+        <p role={game.saveFailed ? 'status' : undefined}>{t(game.saveFailed ? 'save.unsaved' : 'save.auto')}</p>
         <textarea
           value={text}
           onChange={(event) => setText(event.target.value)}

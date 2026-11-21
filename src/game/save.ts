@@ -158,6 +158,7 @@ export interface LoadedSave {
   text: string | null;
   recovered: boolean;
   writable: boolean;
+  saveFailed: boolean;
 }
 
 export function loadStoredSave(storage: Pick<Storage, 'getItem' | 'setItem'>, fresh: () => GameState, now = Date.now()): LoadedSave {
@@ -165,12 +166,12 @@ export function loadStoredSave(storage: Pick<Storage, 'getItem' | 'setItem'>, fr
   try {
     text = storage.getItem(SAVE_KEY);
     const saved = text === null ? null : deserialize(text, now);
-    if (saved) return { state: saved, text, recovered: false, writable: true };
+    if (saved) return { state: saved, text, recovered: false, writable: true, saveFailed: false };
     if (text !== null) storage.setItem(SAVE_BACKUP_KEY, text);
-    return { state: fresh(), text, recovered: text !== null, writable: true };
+    return { state: fresh(), text, recovered: text !== null, writable: true, saveFailed: false };
   } catch {
     // If the backup cannot be kept, leave the original save untouched.
-    return { state: fresh(), text, recovered: false, writable: false };
+    return { state: fresh(), text, recovered: false, writable: false, saveFailed: true };
   }
 }
 
@@ -186,16 +187,17 @@ export function updateStoredSave(
   try {
     if (storage.getItem(SAVE_KEY) !== current.text) current = loadStoredSave(storage, fresh, now);
   } catch {
-    current = { ...current, writable: false };
+    current = { ...current, writable: false, saveFailed: true };
   }
   const state = transition(current.state);
   const text = serialize(state);
   if (current.writable && text !== current.text) {
     try {
       storage.setItem(SAVE_KEY, text);
-      return { ...current, state, text };
+      return { ...current, state, text, saveFailed: false };
     } catch {
       // Keep playing in memory if storage is unavailable.
+      return { ...current, state, saveFailed: true };
     }
   }
   return { ...current, state };

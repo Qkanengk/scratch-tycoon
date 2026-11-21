@@ -196,10 +196,11 @@ describe('stored saves', () => {
     const storage = memory('garbage');
     storage.setItem.mockImplementation(() => { throw new Error('full'); });
     const loaded = loadStoredSave(storage, fresh);
-    expect(loaded).toMatchObject({ recovered: false, writable: false });
+    expect(loaded).toMatchObject({ recovered: false, writable: false, saveFailed: true });
     updateStoredSave(storage, loaded, fresh, (state) => state, 1000);
     expect(storage.getItem(SAVE_KEY)).toBe('garbage');
     expect(storage.setItem).toHaveBeenCalledTimes(1);
+    expect(updateStoredSave(storage, loaded, fresh, (state) => buyTicket(state, 'dong'), 1000).saveFailed).toBe(true);
   });
 
   it('plays in memory when storage cannot be read or written', () => {
@@ -275,8 +276,39 @@ describe('stored saves', () => {
     const next = updateStoredSave(storage, loadStoredSave(storage, fresh), fresh,
       (state) => buyTicket(state, 'dong'), 1000);
     expect(next.state.money).toBe(90);
+    expect(next.saveFailed).toBe(true);
     expect(storage.setItem).toHaveBeenCalledTimes(1);
     expect(storage.getItem(SAVE_KEY)).toBe(serialize(fresh()));
+  });
+
+  it('reports a failed initial write and clears the failure after a later successful commit', () => {
+    const storage = memory();
+    const loaded = loadStoredSave(storage, fresh);
+    expect(loaded.saveFailed).toBe(false);
+    storage.setItem.mockImplementationOnce(() => { throw new DOMException('full', 'QuotaExceededError'); });
+    const failed = updateStoredSave(storage, loaded, fresh, (state) => state, 1000);
+    expect(failed.saveFailed).toBe(true);
+    expect(failed.state).toEqual(fresh());
+    expect(failed.writable).toBe(true);
+    expect(storage.getItem(SAVE_KEY)).toBeNull();
+    const saved = updateStoredSave(storage, failed, fresh, (state) => buyTicket(state, 'dong'), 1000);
+    expect(saved.saveFailed).toBe(false);
+    expect(saved.state.money).toBe(90);
+    expect(deserialize(storage.getItem(SAVE_KEY)!)).toEqual(saved.state);
+  });
+
+  it.each(['QuotaExceededError', 'SecurityError'])('retains unsaved progress and retries after %s', (name) => {
+    const storage = memory(serialize(fresh()));
+    const loaded = loadStoredSave(storage, fresh);
+    storage.setItem.mockImplementationOnce(() => { throw new DOMException('blocked', name); });
+    const failed = updateStoredSave(storage, loaded, fresh, (state) => buyTicket(state, 'dong'), 1000);
+    expect(failed.saveFailed).toBe(true);
+    expect(failed.state.money).toBe(90);
+    expect(failed.state.ticket).not.toBeNull();
+    const saved = updateStoredSave(storage, failed, fresh, (state) => state, 1000);
+    expect(saved.saveFailed).toBe(false);
+    expect(saved.state).toBe(failed.state);
+    expect(deserialize(storage.getItem(SAVE_KEY)!)).toEqual(failed.state);
   });
 });
 
