@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { isMuted, play, setMuted } from '../audio/sfx';
 import { ticketDef, TICKETS, type TicketId } from '../data/tickets';
-import { buyTicket, canBuyTicket, claimPromo, collectTicket, isUnlocked, revealTicket, selectTicket } from '../game/economy';
+import { buyTicket, canBuyTicket, claimPromo, collectTicket, isUnlocked, selectTicket } from '../game/economy';
 import { buyLicense, unlockProgress } from '../game/unlocks';
+import { recordReveal, recordScratch } from '../game/save';
 import { t } from '../i18n';
 import type { Stage, StageCallbacks, View } from '../render/Stage';
 import { LookButton, PromptChip, promptFor, type Command } from './Hud';
@@ -20,7 +21,7 @@ export function App() {
   const [view, setView] = useState<View>('shop');
   const [muted, setMutedState] = useState(isMuted);
   const [paused, setPaused] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(() => game.recovered ? t('save.recovered') : null);
 
   useEffect(() => {
     if (!toast) return;
@@ -83,8 +84,9 @@ export function App() {
   const keys = useRef<(event: KeyboardEvent) => void>(() => undefined);
   useEffect(() => {
     handlers.current = {
-      onRevealed: () => apply(revealTicket),
+      onRevealed: (ticket) => apply((current) => recordReveal(current, ticket)),
       onProgress: (done) => setProgress(done),
+      onScratch: (ticket, scratch) => apply((current) => recordScratch(current, ticket, scratch)),
       onTicket: buy,
       onCollect: collect,
       onBoard: license,

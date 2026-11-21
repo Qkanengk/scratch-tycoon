@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { BALANCE } from '../data/balance';
 import { TICKETS } from '../data/tickets';
 import { layoutTicket } from '../render/layout';
+import { createMask, encodeMask, restoreMask, scratchProgress, scratchSegment, ticketContentKey } from './scratch';
+import { buyTicket } from './economy';
+import { createInitialState } from './state';
 import { ticketMetrics } from '../render/ticketFace';
-import { createMask, scratchProgress, scratchSegment } from './scratch';
 
 const cell = { x: 0.1, y: 0.1, w: 0.4, h: 0.2 };
 
@@ -61,6 +63,57 @@ describe('scratch mask', () => {
     }
     expect(peeled.sort((a, b) => a - b)).toEqual(layout.cells.map((_, index) => index));
     expect(scratchProgress(mask)).toBe(1);
+  });
+
+  it('packs six grid points per character and restores exactly the same coverage', () => {
+    const mask = createMask([cell], 0.4, 0.5);
+    scratchSegment(mask, { x: 0.1, y: 0.2 }, { x: 0.5, y: 0.2 }, 0.05);
+    const text = encodeMask(mask);
+    expect(text.length).toBe(Math.ceil(mask.points.length / 6));
+    const restored = createMask([cell], 0.4, 0.5);
+    expect(restoreMask(restored, text)).toBe(true);
+    expect(restored).toEqual(mask);
+    expect(restoreMask(restored, text)).toBe(true);
+    expect(restored).toEqual(mask);
+  });
+
+  it('round-trips an empty mask and rejects garbage, incorrect lengths and bits outside prize cells atomically', () => {
+    const mask = createMask([cell], 0.4, 0.5);
+    const text = encodeMask(mask);
+    expect(restoreMask(mask, text)).toBe(true);
+    for (const invalid of [undefined, null, 7, '', text.slice(1), text + 'A', '!'.repeat(text.length), 'B' + text.slice(1)]) {
+      expect(restoreMask(mask, invalid)).toBe(false);
+      expect(scratchProgress(mask)).toBe(0);
+    }
+  });
+
+  it('rejects nonzero padding bits', () => {
+    const mask = createMask([{ x: 0, y: 0, w: 1, h: 1 }], 1, 1, 1);
+    expect(restoreMask(mask, 'C')).toBe(false);
+    expect(restoreMask(mask, 'B')).toBe(true);
+  });
+
+  it('restores peeled cells and keeps merged cell progress bounded', () => {
+    const cells = [{ x: 0, y: 0, w: 1, h: 1 }];
+    const mask = createMask(cells, 1, 0.25, 8);
+    scratchSegment(mask, { x: 0, y: 0.125 }, { x: 1, y: 0.125 }, 0.15);
+    const restored = createMask(cells, 1, 0.25, 8);
+    expect(restoreMask(restored, encodeMask(mask))).toBe(true);
+    expect(restored).toEqual(mask);
+    const other = createMask(cells, 1, 0.25, 8);
+    scratchSegment(other, { x: 0, y: 0.875 }, { x: 1, y: 0.875 }, 0.15);
+    expect(encodeMask(other)).not.toBe(encodeMask(mask));
+    expect(restoreMask(restored, encodeMask(other))).toBe(true);
+    expect(scratchProgress(restored)).toBe(1);
+    expect(restored.cells.every((entry) => entry.scratched === entry.target)).toBe(true);
+    expect(restored.removed.reduce((sum, bit) => sum + bit, 0)).toBe(32);
+    expect(scratchSegment(restored, { x: 0, y: 0 }, { x: 1, y: 0.4 }, 1).cleared).toEqual([]);
+  });
+
+  it('diffs printed content even when serial/type/revealed match, independently of scratch progress', () => {
+    const ticket = buyTicket(createInitialState(4), 'dong').ticket!;
+    expect(ticketContentKey({ ...ticket, cells: [{ type: 'bomb' }] })).not.toBe(ticketContentKey(ticket));
+    expect(ticketContentKey({ ...ticket, scratch: 'mask', revealed: true })).toBe(ticketContentKey(ticket));
   });
 });
 

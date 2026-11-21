@@ -1,3 +1,5 @@
+import type { Ticket } from './state';
+
 /** Rectangle in ticket units: the scratch area is 1 wide and `height` tall. */
 export interface Rect {
   x: number;
@@ -5,6 +7,8 @@ export interface Rect {
   w: number;
   h: number;
 }
+
+const MASK_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 
 /**
  * Sample grid over the scratch area. Zero means no foil; other values point
@@ -14,6 +18,7 @@ export interface ScratchMask {
   cols: number;
   rows: number;
   points: Uint8Array;
+  removed: Uint8Array;
   cells: { target: number; scratched: number }[];
 }
 
@@ -37,7 +42,7 @@ export function createMask(cells: readonly Rect[], height: number, threshold: nu
       }
     }
   }
-  return { cols, rows, points, cells: totals.map((total) => ({ target: Math.ceil(total * threshold), scratched: 0 })) };
+  return { cols, rows, points, removed: new Uint8Array(points.length), cells: totals.map((total) => ({ target: Math.ceil(total * threshold), scratched: 0 })) };
 }
 
 /** Removes foil swept by the coin and reports any cells ready to peel clean. */
@@ -71,6 +76,7 @@ export function scratchSegment(mask: ScratchMask, from: Point, to: Point, radius
       const ey = py - (y0 + t * dy);
       if (ex * ex + ey * ey <= radius * radius) {
         points[index] = 0;
+        mask.removed[index] = 1;
         if (++cell.scratched === cell.target) cleared.push(cellIndex);
         const distance = (px - x1) ** 2 + (py - y1) ** 2;
         if (distance < nearest) {
@@ -86,4 +92,43 @@ export function scratchSegment(mask: ScratchMask, from: Point, to: Point, radius
 export function scratchProgress({ cells }: ScratchMask): number {
   if (!cells.length) return 1;
   return cells.reduce((sum, cell) => sum + (cell.target ? cell.scratched / cell.target : 1), 0) / cells.length;
+}
+
+export function encodeMask(mask: ScratchMask): string {
+  let text = '';
+  for (let start = 0; start < mask.points.length; start += 6) {
+    let bits = 0;
+    for (let bit = 0; bit < 6; bit++) if (mask.removed[start + bit]) bits |= 1 << bit;
+    text += MASK_CHARS[bits];
+  }
+  return text;
+}
+
+/** Restores only scratched prize points; malformed input leaves the mask untouched. */
+export function restoreMask(mask: ScratchMask, text: unknown): boolean {
+  if (typeof text !== 'string' || text.length !== Math.ceil(mask.points.length / 6)) return false;
+  const indices: number[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const bits = MASK_CHARS.indexOf(text[i]!);
+    if (bits < 0) return false;
+    for (let bit = 0; bit < 6; bit++) {
+      if (!(bits & (1 << bit))) continue;
+      const index = i * 6 + bit;
+      if (!mask.points[index] && !mask.removed[index]) return false;
+      indices.push(index);
+    }
+  }
+  for (const index of indices) {
+    if (!mask.removed[index]) {
+      const cell = mask.cells[mask.points[index]! - 1]!;
+      mask.points[index] = 0;
+      mask.removed[index] = 1;
+      cell.scratched = Math.min(cell.target, cell.scratched + 1);
+    }
+  }
+  return true;
+}
+
+export function ticketContentKey(ticket: Ticket): string {
+  return JSON.stringify([ticket.serial, ticket.type, ticket.cells, ticket.tier, ticket.prize, ticket.free]);
 }
