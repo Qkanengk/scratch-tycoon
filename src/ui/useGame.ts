@@ -11,13 +11,14 @@ function loadGame() {
   try {
     return loadStoredSave(localStorage, newGame);
   } catch {
-    return { state: newGame(), text: null, recovered: false, writable: false };
+    return { state: newGame(), text: null, recovered: false, writable: false, saveFailed: true };
   }
 }
 
 export interface Game {
   state: GameState;
   recovered: boolean;
+  saveFailed: boolean;
   /** Current time in ms, refreshed while a countdown is running. */
   now: number;
   /** Applies a pure transition that takes the current time as its last argument. */
@@ -29,6 +30,7 @@ export interface Game {
 export function useGame(): Game {
   const [loaded] = useState(loadGame);
   const [state, setState] = useState(loaded.state);
+  const [saveFailed, setSaveFailed] = useState(loaded.saveFailed);
   const current = useRef(loaded);
   const [now, setNow] = useState(() => Date.now());
 
@@ -39,10 +41,11 @@ export function useGame(): Game {
         current.current = updateStoredSave(localStorage, current.current, newGame,
           (value) => updatePromo(transition(value, time), time), time);
       } catch {
-        current.current = { ...current.current, state: updatePromo(transition(current.current.state, time), time), writable: false };
+        current.current = { ...current.current, state: updatePromo(transition(current.current.state, time), time), writable: false, saveFailed: true };
       }
       setNow(time);
       setState(current.current.state);
+      setSaveFailed(current.current.saveFailed);
     };
     // Include actions queued before a storage event in the cross-tab transaction.
     if (navigator.locks) void navigator.locks.request(SAVE_KEY, commit).catch(commit);
@@ -57,6 +60,7 @@ export function useGame(): Game {
       current.current = next;
       setNow(Date.now());
       setState(next.state);
+      setSaveFailed(next.saveFailed);
     };
     window.addEventListener('storage', onStorage);
     apply((value) => value);
@@ -73,5 +77,5 @@ export function useGame(): Game {
   const reset = useCallback(() => apply(() => newGame()), [apply]);
   const replace = useCallback((next: GameState) => apply(() => next), [apply]);
 
-  return { state, recovered: loaded.recovered, now, apply, reset, replace };
+  return { state, recovered: loaded.recovered, saveFailed, now, apply, reset, replace };
 }

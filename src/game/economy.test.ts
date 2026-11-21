@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE } from '../data/balance';
+import { ticketDef } from '../data/tickets';
 import {
   buyTicket,
   canBuyTicket,
@@ -67,6 +68,15 @@ describe('buying and collecting', () => {
     expect(revealed.stats.dong.scratched).toBe(1);
   });
 
+  it.each([[2, 0], [5, 1], [20, 1]])('credits a big win for qualifying ×%i prizes', (multiplier, expected) => {
+    const state = buyTicket(createInitialState(1), 'dong');
+    const def = ticketDef('dong');
+    const ticket = { ...state.ticket!, tier: def.prizes.findIndex(prize => prize.multiplier === multiplier), prize: multiplier * def.price };
+    const revealed = revealTicket({ ...state, ticket });
+    expect(revealed.stats.dong.bigWins).toBe(expected);
+    expect(revealTicket(revealed).stats.dong.bigWins).toBe(expected);
+  });
+
   it('gives the same tickets for the same seed', () => {
     const a = play(play(createInitialState(77)));
     const b = play(play(createInitialState(77)));
@@ -86,6 +96,7 @@ describe('promo ticket', () => {
   it('becomes claimable after the interval', () => {
     const waiting = updatePromo(broke, 1000);
     expect(waiting.promoReadyAt).toBe(1000 + BALANCE.promoIntervalMs);
+    expect(waiting.promoReadyAt).toBe(21_000);
     expect(updatePromo(waiting, 5000)).toBe(waiting);
     expect(canClaimPromo(waiting, 1000 + BALANCE.promoIntervalMs - 1)).toBe(false);
     expect(claimPromo(waiting, 2000)).toBe(waiting);

@@ -55,13 +55,15 @@ export const vi = {
 
   'shop.req.revenue': 'Tổng thu {current} / {target}',
   'shop.req.scratched': 'Cào {current} / {target} {name}',
-  'shop.req.wins': 'Trúng {name}: {current} / {target}',
+  'shop.req.bigWins': 'Trúng từ ×{multiplier} · {name}: {current} / {target}',
   'shop.req.license': 'Cần {required} (phí {cost} + vé đầu)',
   'shop.buyLicense': 'Mua giấy phép · {cost}',
   'shop.unlockedToast': 'Đã mở khoá {name}!',
 
   'save.title': 'Lưu game',
   'save.auto': 'Game tự lưu trên trình duyệt này.',
+  'save.failed': 'Không lưu được tiến độ: bộ nhớ trình duyệt đầy hoặc bị chặn. Hãy xuất save để giữ lại.',
+  'save.unsaved': 'Chưa lưu được trên trình duyệt này — hãy xuất save.',
   'save.export': 'Xuất save',
   'save.import': 'Nhập save',
   'save.reset': 'Chơi lại từ đầu',

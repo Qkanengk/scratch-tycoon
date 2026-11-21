@@ -1,10 +1,10 @@
 import { BALANCE } from '../data/balance';
-import { TICKET_IDS, ticketDef, type TicketId, type TicketRules } from '../data/tickets';
+import { BIG_WIN_MULTIPLIER, TICKET_IDS, ticketDef, type TicketId, type TicketRules } from '../data/tickets';
 import { layoutTicket } from '../render/layout';
 import { revealTicket } from './economy';
 import { createMask, encodeMask, restoreMask, scratchProgress, ticketContentKey } from './scratch';
 import { createInitialState, emptyStats, SAVE_VERSION, type GameState, type Ticket } from './state';
-import { cellCount } from './tickets';
+import { cellCount, jackpotTier } from './tickets';
 
 export const SAVE_KEY = 'scratch-tycoon-save';
 export const SAVE_BACKUP_KEY = `${SAVE_KEY}-backup`;
@@ -15,7 +15,23 @@ type RawSave = Record<string, unknown>;
  * One entry per old version: turns a save of that version into the next one.
  * Add an entry (and a test) whenever the shape of GameState changes.
  */
-const MIGRATIONS: Record<number, (save: RawSave) => RawSave> = {};
+const MIGRATIONS: Record<number, (save: RawSave) => RawSave> = {
+  1: (save) => {
+    if (!isRecord(save.stats)) return { ...save, version: 2 };
+    const stats = { ...save.stats };
+    const ticket = readTicket(save.ticket);
+    let revealedBigWin: TicketId | undefined;
+    if (ticket?.revealed) {
+      const def = ticketDef(ticket.type);
+      if (ticket.tier !== jackpotTier(def) && ticket.prize >= def.price * BIG_WIN_MULTIPLIER) revealedBigWin = ticket.type;
+    }
+    for (const id of TICKET_IDS) {
+      const entry = stats[id];
+      if (isRecord(entry)) stats[id] = { ...entry, bigWins: amount(entry.jackpots, 0) + (id === revealedBigWin ? 1 : 0) };
+    }
+    return { ...save, version: 2, stats };
+  },
+};
 
 function isRecord(value: unknown): value is RawSave {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -98,6 +114,7 @@ export function migrate(raw: unknown, now = Date.now()): GameState | null {
         scratched: amount(entry.scratched, 0),
         wins: amount(entry.wins, 0),
         jackpots: amount(entry.jackpots, 0),
+        bigWins: amount(entry.bigWins, 0),
       };
     }
   }
@@ -141,6 +158,7 @@ export interface LoadedSave {
   text: string | null;
   recovered: boolean;
   writable: boolean;
+  saveFailed: boolean;
 }
 
 export function loadStoredSave(storage: Pick<Storage, 'getItem' | 'setItem'>, fresh: () => GameState, now = Date.now()): LoadedSave {
@@ -148,12 +166,12 @@ export function loadStoredSave(storage: Pick<Storage, 'getItem' | 'setItem'>, fr
   try {
     text = storage.getItem(SAVE_KEY);
     const saved = text === null ? null : deserialize(text, now);
-    if (saved) return { state: saved, text, recovered: false, writable: true };
+    if (saved) return { state: saved, text, recovered: false, writable: true, saveFailed: false };
     if (text !== null) storage.setItem(SAVE_BACKUP_KEY, text);
-    return { state: fresh(), text, recovered: text !== null, writable: true };
+    return { state: fresh(), text, recovered: text !== null, writable: true, saveFailed: false };
   } catch {
     // If the backup cannot be kept, leave the original save untouched.
-    return { state: fresh(), text, recovered: false, writable: false };
+    return { state: fresh(), text, recovered: false, writable: false, saveFailed: true };
   }
 }
 
@@ -169,16 +187,17 @@ export function updateStoredSave(
   try {
     if (storage.getItem(SAVE_KEY) !== current.text) current = loadStoredSave(storage, fresh, now);
   } catch {
-    current = { ...current, writable: false };
+    current = { ...current, writable: false, saveFailed: true };
   }
   const state = transition(current.state);
   const text = serialize(state);
   if (current.writable && text !== current.text) {
     try {
       storage.setItem(SAVE_KEY, text);
-      return { ...current, state, text };
+      return { ...current, state, text, saveFailed: false };
     } catch {
       // Keep playing in memory if storage is unavailable.
+      return { ...current, state, saveFailed: true };
     }
   }
   return { ...current, state };

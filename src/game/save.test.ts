@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { BALANCE } from '../data/balance';
 import { ticketDef, TICKET_IDS } from '../data/tickets';
 import { layoutTicket } from '../render/layout';
-import { buyTicket, revealTicket } from './economy';
+import { buyTicket, collectTicket, revealTicket } from './economy';
 import { deserialize, loadStoredSave, migrate, recordReveal, recordScratch, SAVE_BACKUP_KEY, SAVE_KEY, serialize, updateStoredSave } from './save';
 import { createMask, encodeMask, restoreMask, scratchProgress, scratchSegment } from './scratch';
 import { createInitialState, SAVE_VERSION } from './state';
@@ -21,7 +21,7 @@ describe('save', () => {
       totalEarned: 9_999_999,
       licenses: ['bac' as const, 'vang' as const],
       selected: 'vang' as const,
-      stats: { ...base.stats, bac: { scratched: 250, wins: 100, jackpots: 2 } },
+      stats: { ...base.stats, bac: { scratched: 250, wins: 100, jackpots: 2, bigWins: 16 } },
     };
     expect(deserialize(serialize(state))).toEqual(state);
   });
@@ -54,8 +54,36 @@ describe('save', () => {
       selected: 'dong',
       ticket: null,
     });
-    expect(state?.stats.dong).toEqual({ scratched: 12, wins: 0, jackpots: 0 });
-    expect(state?.stats.rong).toEqual({ scratched: 0, wins: 0, jackpots: 0 });
+    expect(state?.stats.dong).toEqual({ scratched: 12, wins: 0, jackpots: 0, bigWins: 0 });
+    expect(state?.stats.rong).toEqual({ scratched: 0, wins: 0, jackpots: 0, bigWins: 0 });
+  });
+
+  it('credits known jackpots from saves that did not track big wins', () => {
+    const state = migrate({
+      version: 1,
+      stats: { dong: { scratched: 250, wins: 100, jackpots: 2 } },
+    });
+    expect(state?.version).toBe(SAVE_VERSION);
+    expect(state?.stats.dong).toEqual({ scratched: 250, wins: 100, jackpots: 2, bigWins: 2 });
+  });
+
+  it.each([
+    { seed: 4, prize: 50, revealed: true, migratedWins: 1 },
+    { seed: 43, prize: 200, revealed: true, migratedWins: 1 },
+    { seed: 4, prize: 50, revealed: false, migratedWins: 0 },
+  ])('credits an in-flight v1 prize of $prize xu once (revealed=$revealed)', ({ seed, prize, revealed, migratedWins }) => {
+    const bought = buyTicket(createInitialState(seed), 'dong');
+    expect(bought.ticket?.prize).toBe(prize);
+    const state = revealed ? revealTicket(bought) : bought;
+    const { scratched, wins, jackpots } = state.stats.dong;
+    const saved = deserialize(JSON.stringify({
+      ...state, version: 1, stats: { dong: { scratched, wins, jackpots } },
+    }))!;
+    expect(saved.stats.dong.bigWins).toBe(migratedWins);
+
+    const collected = collectTicket(revealTicket(saved));
+    expect(collected.totalEarned).toBe(prize);
+    expect(collected.stats.dong.bigWins).toBe(1);
   });
 
   it.each(TICKET_IDS)('keeps a %s ticket through a save', (id) => {
@@ -142,7 +170,7 @@ describe('stored saves', () => {
     };
   };
 
-  it.each(['garbage', '{broken', JSON.stringify({ ...fresh(), version: 2 })])('backs up unreadable text verbatim: %s', (text) => {
+  it.each(['garbage', '{broken', JSON.stringify({ ...fresh(), version: SAVE_VERSION + 1 })])('backs up unreadable text verbatim: %s', (text) => {
     const storage = memory(text);
     const loaded = loadStoredSave(storage, fresh);
     expect(loaded).toMatchObject({ state: fresh(), recovered: true, writable: true });
@@ -168,10 +196,11 @@ describe('stored saves', () => {
     const storage = memory('garbage');
     storage.setItem.mockImplementation(() => { throw new Error('full'); });
     const loaded = loadStoredSave(storage, fresh);
-    expect(loaded).toMatchObject({ recovered: false, writable: false });
+    expect(loaded).toMatchObject({ recovered: false, writable: false, saveFailed: true });
     updateStoredSave(storage, loaded, fresh, (state) => state, 1000);
     expect(storage.getItem(SAVE_KEY)).toBe('garbage');
     expect(storage.setItem).toHaveBeenCalledTimes(1);
+    expect(updateStoredSave(storage, loaded, fresh, (state) => buyTicket(state, 'dong'), 1000).saveFailed).toBe(true);
   });
 
   it('plays in memory when storage cannot be read or written', () => {
@@ -247,8 +276,39 @@ describe('stored saves', () => {
     const next = updateStoredSave(storage, loadStoredSave(storage, fresh), fresh,
       (state) => buyTicket(state, 'dong'), 1000);
     expect(next.state.money).toBe(90);
+    expect(next.saveFailed).toBe(true);
     expect(storage.setItem).toHaveBeenCalledTimes(1);
     expect(storage.getItem(SAVE_KEY)).toBe(serialize(fresh()));
+  });
+
+  it('reports a failed initial write and clears the failure after a later successful commit', () => {
+    const storage = memory();
+    const loaded = loadStoredSave(storage, fresh);
+    expect(loaded.saveFailed).toBe(false);
+    storage.setItem.mockImplementationOnce(() => { throw new DOMException('full', 'QuotaExceededError'); });
+    const failed = updateStoredSave(storage, loaded, fresh, (state) => state, 1000);
+    expect(failed.saveFailed).toBe(true);
+    expect(failed.state).toEqual(fresh());
+    expect(failed.writable).toBe(true);
+    expect(storage.getItem(SAVE_KEY)).toBeNull();
+    const saved = updateStoredSave(storage, failed, fresh, (state) => buyTicket(state, 'dong'), 1000);
+    expect(saved.saveFailed).toBe(false);
+    expect(saved.state.money).toBe(90);
+    expect(deserialize(storage.getItem(SAVE_KEY)!)).toEqual(saved.state);
+  });
+
+  it.each(['QuotaExceededError', 'SecurityError'])('retains unsaved progress and retries after %s', (name) => {
+    const storage = memory(serialize(fresh()));
+    const loaded = loadStoredSave(storage, fresh);
+    storage.setItem.mockImplementationOnce(() => { throw new DOMException('blocked', name); });
+    const failed = updateStoredSave(storage, loaded, fresh, (state) => buyTicket(state, 'dong'), 1000);
+    expect(failed.saveFailed).toBe(true);
+    expect(failed.state.money).toBe(90);
+    expect(failed.state.ticket).not.toBeNull();
+    const saved = updateStoredSave(storage, failed, fresh, (state) => state, 1000);
+    expect(saved.saveFailed).toBe(false);
+    expect(saved.state).toBe(failed.state);
+    expect(deserialize(storage.getItem(SAVE_KEY)!)).toEqual(failed.state);
   });
 });
 
@@ -275,7 +335,7 @@ describe('saved scratching', () => {
     scratchSegment(mask, { x: 0.1, y: 0.1 }, { x: 0.25, y: 0.1 }, 0.04);
     const saved = { ...state, ticket: { ...state.ticket!, scratch: encodeMask(mask) } };
     expect(deserialize(serialize(saved))).toEqual(saved);
-    expect(saved.version).toBe(1);
+    expect(saved.version).toBe(SAVE_VERSION);
   });
 
   it.each([undefined, null, '', 'garbage', 'A'.repeat(10000), 123])('ignores a malformed mask (%s) without dropping or refunding the ticket', (scratch) => {
