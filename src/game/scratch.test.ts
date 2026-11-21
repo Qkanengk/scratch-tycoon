@@ -2,50 +2,65 @@ import { describe, expect, it } from 'vitest';
 import { BALANCE } from '../data/balance';
 import { TICKETS } from '../data/tickets';
 import { layoutTicket } from '../render/layout';
-import { coverage, createMask, scratchSegment } from './scratch';
+import { ticketMetrics } from '../render/ticketFace';
+import { createMask, scratchProgress, scratchSegment } from './scratch';
 
 const cell = { x: 0.1, y: 0.1, w: 0.4, h: 0.2 };
 
 describe('scratch mask', () => {
   it('starts fully covered', () => {
-    expect(coverage(createMask([cell], 0.4))).toBe(0);
+    expect(scratchProgress(createMask([cell], 0.4, 1))).toBe(0);
   });
 
   it('ignores scratching outside the prize cells', () => {
-    const mask = createMask([cell], 0.4);
-    scratchSegment(mask, 0.6, 0.35, 0.95, 0.35, 0.03);
-    expect(coverage(mask)).toBe(0);
+    const mask = createMask([cell], 0.4, 0.5);
+    expect(scratchSegment(mask, { x: 0.6, y: 0.35 }, { x: 0.95, y: 0.35 }, 0.03)).toEqual({ cleared: [], contact: null });
+    expect(scratchProgress(mask)).toBe(0);
   });
 
   it('measures the scratched share of a cell', () => {
-    const mask = createMask([cell], 0.4);
+    const mask = createMask([cell], 0.4, 1);
     // One pass along the middle with a brush half as tall as the cell.
-    scratchSegment(mask, 0.1, 0.2, 0.5, 0.2, 0.05);
-    expect(coverage(mask)).toBeGreaterThan(0.4);
-    expect(coverage(mask)).toBeLessThan(0.6);
+    scratchSegment(mask, { x: 0.1, y: 0.2 }, { x: 0.5, y: 0.2 }, 0.05);
+    expect(scratchProgress(mask)).toBeGreaterThan(0.4);
+    expect(scratchProgress(mask)).toBeLessThan(0.6);
   });
 
   it('does not count the same spot twice', () => {
-    const mask = createMask([cell], 0.4);
-    scratchSegment(mask, 0.1, 0.2, 0.5, 0.2, 0.05);
-    const once = coverage(mask);
-    scratchSegment(mask, 0.5, 0.2, 0.1, 0.2, 0.05);
-    expect(coverage(mask)).toBe(once);
+    const mask = createMask([cell], 0.4, 1);
+    const a = { x: 0.1, y: 0.2 };
+    const b = { x: 0.5, y: 0.2 };
+    scratchSegment(mask, a, b, 0.05);
+    const once = scratchProgress(mask);
+    expect(scratchSegment(mask, b, a, 0.05).contact).toBeNull();
+    expect(scratchProgress(mask)).toBe(once);
   });
 
-  it('a single tap is not enough, a full pass over every cell is', () => {
-    for (const def of TICKETS) {
-      const layout = layoutTicket(def.rules);
-      const mask = createMask(layout.cells, layout.height);
-      const first = layout.cells[0];
-      if (!first) throw new Error('no cells');
-      scratchSegment(mask, first.x + first.w / 2, first.y + first.h / 2, first.x + first.w / 2, first.y + first.h / 2, BALANCE.brushRadius);
-      expect(coverage(mask)).toBeLessThan(BALANCE.scratchThreshold);
-      for (let y = 0; y <= layout.height; y += BALANCE.brushRadius) {
-        scratchSegment(mask, 0, y, 1, y, BALANCE.brushRadius);
-      }
-      expect(coverage(mask)).toBe(1);
+  it('peels only the cells hit by a fast stroke and never reports a peeled cell again', () => {
+    const cells = [cell, { ...cell, x: 0.55, w: 0.12 }, { ...cell, x: 0.75, w: 0.2 }];
+    const mask = createMask(cells, 0.4, 0.5);
+    const a = { x: 0.05, y: 0.2 };
+    const b = { x: 0.675, y: 0.2 };
+    expect(scratchSegment(mask, a, b, 0.07).cleared).toEqual([0, 1]);
+    expect(scratchProgress(mask)).toBe(2 / 3);
+    expect(scratchSegment(mask, a, b, 0.07)).toEqual({ cleared: [], contact: null });
+    expect(scratchSegment(mask, { x: 0.76, y: 0.2 }, { x: 1, y: 0.2 }, 0.07).cleared).toEqual([2]);
+    expect(scratchProgress(mask)).toBe(1);
+  });
+
+  it.each(TICKETS)('$id requires more than a dab and peels all tiles after sweeping them', (def) => {
+    const { layout, window } = ticketMetrics(def.id);
+    const radius = BALANCE.brushRadius / window.w;
+    const mask = createMask(layout.cells, layout.height, BALANCE.scratchThreshold);
+    const first = layout.cells[0]!;
+    const centre = { x: first.x + first.w / 2, y: first.y + first.h / 2 };
+    expect(scratchSegment(mask, centre, centre, radius).cleared).toEqual([]);
+    const peeled = [];
+    for (let y = 0; y <= layout.height; y += radius) {
+      peeled.push(...scratchSegment(mask, { x: 0, y }, { x: 1, y }, radius).cleared);
     }
+    expect(peeled.sort((a, b) => a - b)).toEqual(layout.cells.map((_, index) => index));
+    expect(scratchProgress(mask)).toBe(1);
   });
 });
 
