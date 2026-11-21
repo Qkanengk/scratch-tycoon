@@ -55,6 +55,7 @@ export function buildRoom(): THREE.Group {
   const rail = new THREE.Mesh(new THREE.PlaneGeometry(14, 0.035), new THREE.MeshBasicMaterial({ color: palette.ink }));
   rail.position.set(0, 0.5, WALL_Z + 0.006);
   const sign = inkCard(2.2, 0.55, signTexture(), 0.03);
+  sign.name = 'shop-sign';
   sign.position.set(0, 1.8, WALL_Z + 0.03);
   // The prize shelf is its own group so a tall window can lift it out of the rack's way.
   const shelf = new THREE.Group();
@@ -70,7 +71,7 @@ export function buildRoom(): THREE.Group {
     toonify(model, { outline: 0.011 });
     model.position.set(x, y, z);
     model.rotation.y = turn;
-    if (window.innerWidth > 700 && ['cash-register', 'gold-bag', 'coins'].includes(model.name)) model.visible = false;
+    if (window.innerWidth > 700) layoutCounterProp(model, true);
     parent.add(model);
   };
   const shelfY = 1.02;
@@ -89,4 +90,18 @@ export function buildRoom(): THREE.Group {
     stand('quaternius/coins.glb', 0.22, 0.95, 0, 0.4, -0.2),
   ]);
   return room;
+}
+
+export function layoutCounterProp(model: THREE.Object3D, desktop: boolean): void {
+  const poses: Record<string, readonly [number, number, number, number, number, number]> = {
+    'cash-register': [-0.77, -0.16, 0.5, -1.15, -0.3, 1],
+    'gold-bag': [-0.76, 0.42, 0.7, -0.95, 0.35, 1],
+    coins: [0.76, 0.36, 0.7, 0.95, 0.4, 1],
+    'ticket-machine': [-1.45, -1.18, 0.7, -1.8, -1.05, 1],
+  };
+  const pose = poses[model.name];
+  if (!pose) return;
+  model.position.x = pose[desktop ? 0 : 3];
+  model.position.z = pose[desktop ? 1 : 4];
+  model.scale.setScalar(pose[desktop ? 2 : 5]);
 }

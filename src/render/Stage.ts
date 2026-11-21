@@ -10,7 +10,7 @@ import { canvasTexture, loadFonts, loadModel, patternTexture, preloadImages, typ
 import { LicenseBoard } from './board';
 import { Particles } from './particles';
 import { Rack } from './rack';
-import { buildRoom } from './room';
+import { buildRoom, layoutCounterProp, WALL_Z } from './room';
 import { flat, roundedRect } from './shapes';
 import { drawFace, drawFoil, eraseFoil, ticketMetrics, type TicketMetrics } from './ticketFace';
 import { fitToSize, INK, toonify } from './toon';
@@ -84,6 +84,7 @@ export class Stage {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(50, 1, 0.1, 40);
+  private fovGoal = 50;
   private readonly ticket = new THREE.Group();
   private readonly mat = new THREE.Group();
   private readonly tool = new THREE.Group();
@@ -583,6 +584,8 @@ export class Stage {
     const top = 1 - (2 * 70) / height;
     const bottom = -1 + (2 * 120) / height;
     const probe = this.camera.clone();
+    probe.fov = this.fovGoal;
+    probe.updateProjectionMatrix();
     let near = 0.4;
     let far = 30;
     for (let i = 0; i < 26; i++) {
@@ -604,6 +607,7 @@ export class Stage {
   private aim(): void {
     const tall = this.camera.aspect < 0.8;
     const desktop = this.host.clientWidth > 700;
+    this.fovGoal = desktop && this.view === 'shop' ? this.camera.aspect < 1.5 ? 85 : 65 : 50;
     let target: THREE.Vector3;
     let direction: THREE.Vector3;
     let points: THREE.Vector3[];
@@ -614,18 +618,18 @@ export class Stage {
       const halfW = 0.5 + margin;
       const halfH = this.metrics.height / 2 + margin;
       target = new THREE.Vector3(0, 0, 0);
-      direction = gaze(desktop ? 68 : tall ? 60 : 50);
+      direction = gaze(desktop ? 72 : tall ? 60 : 50);
       points = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => new THREE.Vector3(sx * halfW, FACE_Y, sz * halfH)));
     } else if (this.view === 'shop') {
       points = this.rack.points();
       if (!tall) points.push(...this.board.points());
       if (desktop) {
-        points.push(...[-2.4, 2.4].flatMap((x) => [0.95, 2.16].map((y) => new THREE.Vector3(x, y, -1.7))));
+        points.push(...[-1.5, 1.5].flatMap((x) => [0.68, 1.6].map((y) => new THREE.Vector3(x, y, -1.7))));
       }
       const box = new THREE.Box3().setFromPoints(points);
       target = box.getCenter(new THREE.Vector3());
       direction = gaze(13);
-      lift = desktop ? 0 : 0.34;
+      lift = desktop ? this.camera.aspect < 1.5 ? 0.2 : 0.03 : 0.34;
     } else {
       points = this.board.points();
       target = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
@@ -647,12 +651,19 @@ export class Stage {
     const tall = this.camera.aspect < 0.8;
     this.rack.layout(tall);
     const shelf = this.room.getObjectByName('shelf');
-    if (shelf) shelf.position.y = tall ? 3 : 0;
-    for (const name of ['cash-register', 'gold-bag', 'coins']) {
-      const prop = this.room.getObjectByName(name);
-      if (prop) prop.visible = width <= 700;
+    if (shelf) {
+      shelf.position.y = width > 700 ? 0.2 : tall ? 3 : 0;
+      shelf.position.z = width > 700 ? WALL_Z * 0.38 : 0;
+      shelf.scale.setScalar(width > 700 ? 0.62 : 1);
     }
-    this.board.group.position.set(width > 700 ? 1.95 : tall ? 1.22 : 1.75, 0, RACK_Z - 0.05);
+    const sign = this.room.getObjectByName('shop-sign');
+    if (sign) {
+      sign.position.y = width > 700 ? 1.5 : 1.8;
+      sign.scale.setScalar(width > 700 ? 0.85 : 1);
+    }
+    this.room.children.forEach((prop) => layoutCounterProp(prop, width > 700));
+    this.board.group.scale.setScalar(width > 700 ? 0.86 : 1);
+    this.board.group.position.set(width > 700 ? 1.8 : tall ? 1.22 : 1.75, 0, RACK_Z - 0.05);
     this.board.group.rotation.y = tall ? -0.3 : -0.38;
     this.aim();
   }
@@ -697,7 +708,11 @@ export class Stage {
     const ease = Math.min(1, dt * 7);
     this.eye.lerp(this.eyeGoal, ease);
     this.focus.lerp(this.focusGoal, ease);
-    this.settled = this.eye.distanceTo(this.eyeGoal) < 0.004 && this.focus.distanceTo(this.focusGoal) < 0.004;
+    if (Math.abs(this.camera.fov - this.fovGoal) > 0.001) {
+      this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, this.fovGoal, ease);
+      this.camera.updateProjectionMatrix();
+    }
+    this.settled = this.eye.distanceTo(this.eyeGoal) < 0.004 && this.focus.distanceTo(this.focusGoal) < 0.004 && Math.abs(this.camera.fov - this.fovGoal) < 0.02;
     if (this.settled) {
       this.eye.copy(this.eyeGoal);
       this.focus.copy(this.focusGoal);
