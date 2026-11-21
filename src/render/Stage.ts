@@ -770,6 +770,18 @@ export class Stage {
       target = new THREE.Vector3(0, 0, 0);
       direction = gaze(desktop ? 72 : touch && !tall ? 85 : tall ? 60 : 50);
       points = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => new THREE.Vector3(sx * halfW, FACE_Y, sz * halfH)));
+      if (desktop) {
+        for (const name of ['cash-register', 'gold-bag', 'coins']) {
+          const prop = this.room.getObjectByName(name);
+          if (!prop) continue;
+          const box = new THREE.Box3().setFromObject(prop);
+          points.push(...[-1, 1].flatMap((sx) => [-1, 1].flatMap((sy) => [-1, 1].map((sz) => new THREE.Vector3(
+            sx < 0 ? box.min.x : box.max.x,
+            sy < 0 ? box.min.y : box.max.y,
+            sz < 0 ? box.min.z : box.max.z,
+          )))));
+        }
+      }
     } else if (this.view === 'shop') {
       points = this.rack.points();
       const sign = touch && tall ? this.room.getObjectByName('shop-sign') : null;
