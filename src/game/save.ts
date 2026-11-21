@@ -1,8 +1,10 @@
+import { BALANCE } from '../data/balance';
 import { TICKET_IDS, ticketDef, type TicketId, type TicketRules } from '../data/tickets';
 import { createInitialState, emptyStats, SAVE_VERSION, type GameState, type Ticket } from './state';
 import { cellCount } from './tickets';
 
 export const SAVE_KEY = 'scratch-tycoon-save';
+export const SAVE_BACKUP_KEY = `${SAVE_KEY}-backup`;
 
 type RawSave = Record<string, unknown>;
 
@@ -65,7 +67,7 @@ function readTicket(value: unknown): Ticket | null {
   };
 }
 
-export function migrate(raw: unknown): GameState | null {
+export function migrate(raw: unknown, now = Date.now()): GameState | null {
   if (!isRecord(raw) || typeof raw.version !== 'number') return null;
   let save = raw;
   let version = raw.version;
@@ -91,17 +93,26 @@ export function migrate(raw: unknown): GameState | null {
       };
     }
   }
+  const ticket = readTicket(save.ticket);
+  const damaged = save.ticket;
+  // Only explicitly paid, unrevealed tickets qualify; never pay an unverified prize.
+  const refund = ticket === null && isRecord(damaged) && isTicketId(damaged.type)
+    && damaged.free === false && damaged.revealed === false ? ticketDef(damaged.type).price : 0;
+  const latestPromo = now + BALANCE.promoIntervalMs;
+  const promoReadyAt = typeof save.promoReadyAt === 'number'
+    ? Number.isFinite(save.promoReadyAt) ? Math.min(save.promoReadyAt, latestPromo) : latestPromo
+    : null;
   return {
     version: SAVE_VERSION,
-    money: amount(save.money, base.money),
+    money: amount(save.money, base.money) + refund,
     totalEarned: amount(save.totalEarned, 0),
     rngState: amount(save.rngState, 0) >>> 0,
     nextSerial: amount(save.nextSerial, 1),
-    ticket: readTicket(save.ticket),
+    ticket,
     licenses: Array.isArray(save.licenses) ? TICKET_IDS.filter((id) => (save.licenses as unknown[]).includes(id)) : [],
     stats,
     selected: isTicketId(save.selected) ? save.selected : base.selected,
-    promoReadyAt: typeof save.promoReadyAt === 'number' ? save.promoReadyAt : null,
+    promoReadyAt,
   };
 }
 
@@ -109,10 +120,59 @@ export function serialize(state: GameState): string {
   return JSON.stringify(state);
 }
 
-export function deserialize(text: string): GameState | null {
+export function deserialize(text: string, now = Date.now()): GameState | null {
   try {
-    return migrate(JSON.parse(text));
+    return migrate(JSON.parse(text), now);
   } catch {
     return null;
   }
+}
+
+export interface LoadedSave {
+  state: GameState;
+  text: string | null;
+  recovered: boolean;
+  writable: boolean;
+}
+
+export function loadStoredSave(storage: Pick<Storage, 'getItem' | 'setItem'>, fresh: () => GameState, now = Date.now()): LoadedSave {
+  let text: string | null = null;
+  try {
+    text = storage.getItem(SAVE_KEY);
+    const saved = text === null ? null : deserialize(text, now);
+    if (saved) return { state: saved, text, recovered: false, writable: true };
+    if (text !== null) storage.setItem(SAVE_BACKUP_KEY, text);
+    return { state: fresh(), text, recovered: text !== null, writable: true };
+  } catch {
+    // If the backup cannot be kept, leave the original save untouched.
+    return { state: fresh(), text, recovered: false, writable: false };
+  }
+}
+
+/** Call under the save's cross-tab lock; without a lock, pass writable = false. */
+export function updateStoredSave(
+  storage: Pick<Storage, 'getItem' | 'setItem'>,
+  previous: LoadedSave,
+  fresh: () => GameState,
+  transition: (state: GameState) => GameState,
+  now: number,
+  writable = true,
+): LoadedSave {
+  let current = previous;
+  try {
+    if (storage.getItem(SAVE_KEY) !== current.text) current = loadStoredSave(storage, fresh, now);
+  } catch {
+    current = { ...current, writable: false };
+  }
+  const state = transition(current.state);
+  const text = serialize(state);
+  if (writable && current.writable && text !== current.text) {
+    try {
+      storage.setItem(SAVE_KEY, text);
+      return { ...current, state, text };
+    } catch {
+      // Keep playing in memory if storage is unavailable.
+    }
+  }
+  return { ...current, state };
 }

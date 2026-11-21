@@ -20,7 +20,7 @@ export function App() {
   const [view, setView] = useState<View>('shop');
   const [muted, setMutedState] = useState(isMuted);
   const [paused, setPaused] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(() => game.recovered ? t('save.recovered') : null);
 
   useEffect(() => {
     if (!toast) return;

@@ -73,6 +73,7 @@ export const vi = {
   'save.exported': 'Đã xuất save vào ô bên dưới. Hãy chép lại để giữ.',
   'save.imported': 'Đã nhập save.',
   'save.invalid': 'Save không hợp lệ.',
+  'save.recovered': 'Không đọc được save cũ. Đã giữ một bản sao lưu.',
 } as const;
 
 export type MessageKey = keyof typeof vi;
