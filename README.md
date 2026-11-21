@@ -2,6 +2,15 @@
 
 Idle game cào vé số: cào vé kiếm tiền, nâng cấp dụng cụ, mở khoá vé mới. Toàn bộ tiền trong game là tiền ảo.
 
+## Playing
+
+The game is first person: you sit behind the desk of a lottery kiosk. Look up at the rack and click a ticket to buy
+it, look down at the mat and drag the coin over the foil to scratch, then click the ticket to cash it in. The board
+next to the rack shows what the next ticket type needs before its licence can be bought.
+
+Keys: `Space` does what the prompt says, `W`/`S` or the arrow keys (or the mouse wheel, or a vertical drag) look up
+and down, `D`/`A` look at the licence board and back, `Esc` opens the pause menu (save export/import, reset).
+
 ## Development
 
 Requires Node 22 (`.nvmrc`).
@@ -24,8 +33,9 @@ npm start          # serve the production build
 src/
   game/   Pure game logic, no UI dependencies
   data/   Balance numbers (tickets, prizes, unlocks)
-  ui/     React components
-  render/ Three.js toon shader and palette
+  ui/     React shell and the small HUD (purse, prompt, pause menu)
+  render/ Three.js first-person kiosk: stage, ticket rack, licence board, toon shader
+  audio/  Sound effects
   gallery/ Asset board (dev only, open /gallery.html)
   i18n/   UI strings (Vietnamese)
 ```

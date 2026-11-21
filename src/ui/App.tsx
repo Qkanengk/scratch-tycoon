@@ -1,12 +1,163 @@
+import { useEffect, useRef, useState } from 'react';
+import { isMuted, play, setMuted } from '../audio/sfx';
+import { ticketDef, TICKETS, type TicketId } from '../data/tickets';
+import { buyTicket, canBuyTicket, claimPromo, collectTicket, isUnlocked, revealTicket, selectTicket } from '../game/economy';
+import { buyLicense, unlockProgress } from '../game/unlocks';
 import { t } from '../i18n';
+import type { Stage, StageCallbacks, View } from '../render/Stage';
+import { LookButton, PromptChip, promptFor, type Command } from './Hud';
+import { Icon, Sticker } from './Icon';
+import { money } from './money';
+import { SavePanel } from './SavePanel';
+import { StageView } from './StageView';
+import { useGame } from './useGame';
 
 export function App() {
+  const game = useGame();
+  const { state, now, apply } = game;
+  const stage = useRef<Stage | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [view, setView] = useState<View>('shop');
+  const [muted, setMutedState] = useState(isMuted);
+  const [paused, setPaused] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 2800);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  const refuse = (message: string) => {
+    play('ui-error');
+    setToast(message);
+  };
+
+  const collect = () => {
+    play(state.ticket && state.ticket.prize > 0 ? 'coin-2' : 'ui-click');
+    apply(collectTicket);
+  };
+
+  const buy = (id: TicketId) => {
+    const name = t(`ticket.${id}.name`);
+    if (state.ticket && !state.ticket.revealed) {
+      refuse(t('hud.tableBusy'));
+      stage.current?.look('desk');
+    } else if (!isUnlocked(state, id)) {
+      refuse(t('hud.lockedTicket', { name }));
+      stage.current?.look('board');
+    } else if (!canBuyTicket(collectTicket(state), id)) {
+      refuse(t('table.notEnough', { name }));
+    } else {
+      play('ticket-buy');
+      // A scratched ticket still on the mat is cashed in on the way.
+      apply((s) => buyTicket(selectTicket(collectTicket(s), id), id));
+    }
+  };
+
+  const license = () => {
+    const next = TICKETS.find((def) => !unlockProgress(state, def.id).unlocked);
+    if (!next) return;
+    if (!unlockProgress(state, next.id).canBuyLicense) {
+      play('ui-error');
+      return;
+    }
+    play('unlock');
+    apply((s) => selectTicket(buyLicense(s, next.id), next.id));
+    setToast(t('shop.unlockedToast', { name: t(`ticket.${next.id}.name`) }));
+    stage.current?.look('shop');
+  };
+
+  const run = (command: Command) => {
+    if (command === 'buy') buy(state.selected);
+    else if (command === 'collect') collect();
+    else if (command === 'license') license();
+    else {
+      play('promo');
+      apply(claimPromo);
+    }
+  };
+
+  const handlers = useRef<StageCallbacks>(null as unknown as StageCallbacks);
+  const prompt = promptFor(state, now, view, progress);
+  const keys = useRef<(event: KeyboardEvent) => void>(() => undefined);
+  useEffect(() => {
+    handlers.current = {
+      onRevealed: () => apply(revealTicket),
+      onProgress: (done) => setProgress(done),
+      onTicket: buy,
+      onCollect: collect,
+      onBoard: license,
+      onView: (next) => setView(next),
+    };
+    keys.current = (event) => {
+      if (event.target instanceof HTMLTextAreaElement) return;
+      const key = event.key.toLowerCase();
+      if (key === 'escape') setPaused((open) => !open);
+      if (paused) return;
+      if (key === ' ' || key === 'enter') {
+        event.preventDefault();
+        if (prompt.button && !prompt.button.disabled) run(prompt.button.command);
+      } else if (key === 'arrowup' || key === 'w') stage.current?.nod('up');
+      else if (key === 'arrowdown' || key === 's') stage.current?.nod('down');
+      else if (key === 'arrowright' || key === 'd') stage.current?.look('board');
+      else if (key === 'arrowleft' || key === 'a') stage.current?.look('shop');
+    };
+  });
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => keys.current(event);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const toggleSound = () => {
+    setMuted(!muted);
+    setMutedState(!muted);
+    if (muted) play('ui-click');
+  };
+
+  const selected = ticketDef(state.selected);
   return (
-    <main className="splash">
-      <h1>{t('app.title')}</h1>
-      <p className="tagline">{t('app.tagline')}</p>
-      <p>{t('app.comingSoon')}</p>
-      <p className="fineprint">{t('app.playMoney')}</p>
-    </main>
+    <div className="app" data-view={view}>
+      <StageView state={state} handlers={handlers} stage={stage} />
+
+      <dl className="purse">
+        <Sticker name="coin-gold" />
+        <dt>{t('wallet.money')}</dt>
+        <dd data-testid="money">{money(state.money)}</dd>
+        <dt className="purse-total">{t('wallet.totalEarned')}</dt>
+        <dd className="purse-total">
+          {t('wallet.totalEarned')} <span data-testid="total-earned">{money(state.totalEarned)}</span>
+        </dd>
+      </dl>
+
+      <div className="corner">
+        <button className="btn btn-round" onClick={toggleSound} aria-label={t(muted ? 'app.soundOn' : 'app.soundOff')} aria-pressed={muted}>
+          <Icon name={muted ? 'audio-off' : 'audio-on'} />
+        </button>
+        <button className="btn btn-round" data-testid="open-save" onClick={() => setPaused(true)} aria-label={t('hud.pause')}>
+          <Icon name="gear" />
+        </button>
+      </div>
+
+      {toast && (
+        <p className="toast" role="status" data-testid="toast">
+          {toast}
+        </p>
+      )}
+
+      {view === 'desk' && <LookButton direction="up" testid="look-shop" label={t('look.shop')} onClick={() => stage.current?.look('shop')} />}
+      {view === 'shop' && <LookButton direction="right" testid="look-board" label={t('look.board')} onClick={() => stage.current?.look('board')} />}
+      {view === 'board' && <LookButton direction="left" testid="look-shop" label={t('look.shop')} onClick={() => stage.current?.look('shop')} />}
+      {view === 'shop' && <LookButton direction="down" testid="look-desk" label={t('look.desk')} onClick={() => stage.current?.look('desk')} />}
+
+      <PromptChip prompt={prompt} onCommand={run} />
+      <span hidden data-testid="selected">
+        {selected.id}
+      </span>
+
+      {paused && <SavePanel game={game} onClose={() => setPaused(false)} />}
+    </div>
   );
 }
