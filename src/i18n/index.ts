@@ -18,3 +18,8 @@ export function t(key: MessageKey, params: Record<string, string | number> = {})
     name in params ? String(params[name]) : match,
   );
 }
+
+/** Every UI string, for loading the font subsets a canvas is about to draw with. */
+export function allText(): string {
+  return Object.values(messages[current]).join('');
+}
