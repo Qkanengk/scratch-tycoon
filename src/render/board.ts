@@ -11,6 +11,7 @@ import { inkBox, inkCard } from './shapes';
 const W = 0.72;
 const H = 0.9;
 const PX = 720;
+const WIDE_PX = 1200;
 const FONT = '"Baloo 2", system-ui, sans-serif';
 const money = (value: number) => `${formatMoney(value)} xu`;
 
@@ -18,6 +19,20 @@ interface Row {
   label: string;
   done: boolean;
   share: number;
+}
+
+export function wrapBoardLabel(label: string, measure: (text: string) => number, width: number): string[] {
+  const lines: string[] = [];
+  let line = '';
+  for (const word of label.trim().split(/\s+/).filter(Boolean)) {
+    const next = line ? `${line} ${word}` : word;
+    if (line && measure(next) > width) {
+      lines.push(line);
+      line = word;
+    } else line = next;
+  }
+  if (line) lines.push(line);
+  return lines.length > 2 ? [lines[0]!, lines.slice(1).join(' ')] : lines;
 }
 
 /** The licence board beside the rack: what the next ticket type still needs, drawn on a clipboard. */
@@ -30,7 +45,7 @@ export class LicenseBoard {
   private drawn = '';
 
   constructor() {
-    this.canvas.width = PX;
+    this.canvas.width = WIDE_PX;
     this.canvas.height = Math.round((PX * H) / W);
     const card = inkCard(W, H, this.texture, 0.02);
     card.position.y = H / 2 + 0.05;
@@ -43,19 +58,21 @@ export class LicenseBoard {
     this.group.add(foot, lean);
   }
 
-  update(state: GameState): void {
+  update(state: GameState, landscape = false): void {
+    const width = landscape ? WIDE_PX : PX;
+    this.group.scale.x = this.group.scale.y * width / PX;
     const def = TICKETS.find((ticket) => !unlockProgress(state, ticket.id).unlocked);
     this.next = def?.id ?? null;
     const unlock = def?.unlock;
     if (!def || !unlock) {
-      this.draw('done', t('board.title'), [], t('board.allDone'), false, null);
+      this.draw('done', t('board.title'), [], t('board.allDone'), false, null, landscape);
       return;
     }
     const progress = unlockProgress(state, def.id);
     const stats = state.stats[unlock.mission.ticket];
     const previous = t(`ticket.${unlock.mission.ticket}.name`);
     const scratched = Math.min(stats.scratched, unlock.mission.scratched);
-    const jackpots = Math.min(stats.jackpots, unlock.mission.jackpots);
+    const wins = Math.min(stats.wins, unlock.mission.wins);
     const rows: Row[] = [
       {
         label: t('shop.req.revenue', { current: money(Math.min(state.totalEarned, unlock.totalEarned)), target: money(unlock.totalEarned) }),
@@ -68,22 +85,28 @@ export class LicenseBoard {
         share: scratched / unlock.mission.scratched,
       },
       {
-        label: t('shop.req.jackpot', { current: jackpots, target: unlock.mission.jackpots, name: previous }),
-        done: progress.jackpotDone,
-        share: jackpots / unlock.mission.jackpots,
+        label: t('shop.req.wins', { current: wins, target: unlock.mission.wins, name: previous }),
+        done: progress.winsDone,
+        share: wins / unlock.mission.wins,
       },
-      { label: t('shop.req.license', { cost: money(unlock.licenseCost) }), done: progress.affordable, share: state.money / unlock.licenseCost },
+      {
+        label: t('shop.req.license', { required: money(progress.requiredMoney), cost: money(unlock.licenseCost) }),
+        done: progress.affordable,
+        share: state.money / progress.requiredMoney,
+      },
     ];
     const key = JSON.stringify([def.id, rows, progress.canBuyLicense]);
-    this.draw(key, t('board.for', { name: t(`ticket.${def.id}.name`) }), rows, t('shop.buyLicense', { cost: money(unlock.licenseCost) }), progress.canBuyLicense, def.id);
+    this.draw(key, t('board.for', { name: t(`ticket.${def.id}.name`) }), rows, t('shop.buyLicense', { cost: money(unlock.licenseCost) }), progress.canBuyLicense, def.id, landscape);
   }
 
-  private draw(key: string, title: string, rows: Row[], footer: string, ready: boolean, id: TicketId | null): void {
+  private draw(key: string, title: string, rows: Row[], footer: string, ready: boolean, id: TicketId | null, landscape: boolean): void {
+    key = `${landscape}:${key}`;
     if (key === this.drawn) return;
     this.drawn = key;
     const ctx = this.canvas.getContext('2d')!;
-    const w = this.canvas.width;
+    const w = landscape ? WIDE_PX : PX;
     const h = this.canvas.height;
+    ctx.setTransform(this.canvas.width / w, 0, 0, 1, 0, 0);
     ctx.fillStyle = palette.paper;
     ctx.fillRect(0, 0, w, h);
     // Header band in the paper of the ticket the licence is for.
@@ -104,11 +127,11 @@ export class LicenseBoard {
     ctx.textAlign = 'center';
     plate(40, 34, w - 80, 102, palette.cream);
     ctx.fillStyle = palette.ink;
-    ctx.font = `800 54px ${FONT}`;
+    ctx.font = `800 ${landscape ? 80 : 54}px ${FONT}`;
     ctx.fillText(title, w / 2, 90);
 
-    const top = 220;
-    const step = (h - top - 190) / Math.max(rows.length, 1);
+    const top = landscape ? 180 : 220;
+    const step = (h - top - (landscape ? 120 : 190)) / Math.max(rows.length, 1);
     rows.forEach((row, i) => {
       const y = top + i * step;
       plate(44, y + 6, 64, 64, row.done ? palette.green : '#ffffff', 16);
@@ -125,24 +148,27 @@ export class LicenseBoard {
       }
       ctx.textAlign = 'left';
       ctx.fillStyle = palette.ink;
-      ctx.font = `700 37px ${FONT}`;
-      ctx.fillText(row.label, 128, y + 26, w - 170);
-      plate(128, y + 54, w - 172, 24, '#ffffff', 12);
+      ctx.font = `700 ${landscape ? 64 : 37}px ${FONT}`;
+      const lines = landscape ? wrapBoardLabel(row.label, (text) => ctx.measureText(text).width, w - 170) : [row.label];
+      lines.forEach((line, index) => ctx.fillText(line, 128, y + (landscape ? 50 + index * 64 : 26), w - 170));
+      const barY = y + (landscape ? 146 : 54);
+      const barH = landscape ? 12 : 24;
+      plate(128, barY, w - 172, barH, '#ffffff', barH / 2);
       const share = Math.max(0, Math.min(1, row.share));
       if (share > 0) {
         ctx.beginPath();
-        ctx.roundRect(132, y + 58, Math.max(16, (w - 180) * share), 16, 8);
+        ctx.roundRect(132, barY + 4, Math.max(16, (w - 180) * share), barH - 8, (barH - 8) / 2);
         ctx.fillStyle = palette.green;
         ctx.fill();
       }
     });
     if (rows.length === 0) ctx.drawImage(image('stickers/star-coin.png'), w / 2 - 150, h / 2 - 190, 300, 300);
 
-    plate(44, h - 150, w - 88, 104, ready ? palette.gold : '#e3d3b3');
+    plate(44, h - (landscape ? 100 : 150), w - 88, landscape ? 80 : 104, ready ? palette.gold : '#e3d3b3');
     ctx.textAlign = 'center';
     ctx.fillStyle = ready || rows.length === 0 ? palette.ink : '#8a7560';
-    ctx.font = `800 44px ${FONT}`;
-    ctx.fillText(footer, w / 2, h - 95, w - 120);
+    ctx.font = `800 ${landscape ? 78 : 44}px ${FONT}`;
+    ctx.fillText(footer, w / 2, h - (landscape ? 60 : 95), w - 120);
     this.texture.needsUpdate = true;
   }
 

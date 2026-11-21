@@ -71,7 +71,7 @@ export function buildRoom(): THREE.Group {
     toonify(model, { outline: 0.011 });
     model.position.set(x, y, z);
     model.rotation.y = turn;
-    if (window.innerWidth > 700) layoutCounterProp(model, true);
+    if (desktopLayout(window.innerWidth, window.innerHeight)) layoutCounterProp(model, true);
     parent.add(model);
   };
   const shelfY = 1.02;
@@ -90,6 +90,11 @@ export function buildRoom(): THREE.Group {
     stand('quaternius/coins.glb', 0.22, 0.95, 0, 0.4, -0.2),
   ]);
   return room;
+}
+
+export function desktopLayout(width: number, height: number): boolean {
+  return width > 700 && height > 500 && width / height >= 0.8
+    && (width >= 900 || !window.matchMedia('(pointer: coarse), (hover: none)').matches);
 }
 
 export function layoutCounterProp(model: THREE.Object3D, desktop: boolean): void {

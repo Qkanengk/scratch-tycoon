@@ -458,7 +458,7 @@ textarea {
   color: var(--muted);
 }
 
-@media (min-width: 701px) {
+@media (min-width: 900px) and (min-height: 501px) and (min-aspect-ratio: 4/5), (min-width: 701px) and (min-height: 501px) and (min-aspect-ratio: 4/5) and (pointer: fine) and (hover: hover) {
   .app {
     --hud-scale: clamp(1, calc(100vw / 1280px), 1.5);
   }
@@ -532,4 +532,69 @@ textarea {
     transition: none !important;
     animation: none !important;
   }
+}
+
+@media (max-width: 700px), (max-height: 500px), (aspect-ratio < 4/5), (max-width: 899px) and (pointer: coarse), (max-width: 899px) and (hover: none) {
+  .app {
+    --hud-top: max(12px, env(safe-area-inset-top));
+    --hud-left: max(12px, env(safe-area-inset-left));
+    --hud-right: max(12px, env(safe-area-inset-right));
+    --hud-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+
+  .purse { top: var(--hud-top); left: var(--hud-left); }
+  .corner { top: var(--hud-top); right: var(--hud-right); }
+  .purse dd.purse-total { font-size: 0.875rem; }
+  .fineprint { font-size: 0.875rem; }
+  textarea { font-size: 16px; flex-shrink: 0; }
+  .modal-card > * { flex-shrink: 0; }
+  .btn, .look { min-height: 44px; }
+  kbd { display: none; }
+
+  .prompt {
+    bottom: var(--hud-bottom);
+    left: var(--hud-left);
+    right: var(--hud-right);
+    transform: none;
+    width: calc(100% - var(--hud-left) - var(--hud-right));
+    max-width: none;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 8px 10px 12px;
+    border-radius: 22px;
+  }
+  .prompt-message { white-space: normal; text-align: center; font-size: 1rem; }
+  .prompt .meter { width: auto; margin: 0 6px 2px; }
+  .prompt .btn { min-height: 52px; }
+  .look-down, .look-left, .look-right {
+    bottom: calc(var(--hud-bottom) + var(--prompt-height, 110px) + 8px);
+  }
+  .look-left { left: var(--hud-left); }
+  .look-right { right: var(--hud-right); }
+  .look-up { top: calc(var(--hud-top) + 52px); }
+  .modal {
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .prompt {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 4px 10px;
+    border-radius: 22px;
+  }
+  .prompt-message { font-size: 0.875rem; }
+  .prompt-win .prompt-message, .prompt-jackpot .prompt-message { font-size: 1rem; }
+  .prompt .btn { min-height: 44px; font-size: 1rem; padding-inline: 12px; }
+  .prompt .meter { width: 100px; flex-shrink: 0; }
+  .look-up, .look-down, .look-left, .look-right {
+    top: var(--hud-top);
+    bottom: auto;
+  }
+  .look-up, .look-down, .look-left { left: 42%; transform: translateX(-50%); }
+  .look-right { right: calc(var(--hud-right) + 108px); }
 }

@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { play, playScratch } from '../audio/sfx';
+import { play, playScratch, stopScratch } from '../audio/sfx';
 import { BALANCE } from '../data/balance';
 import { ticketDef, type TicketId } from '../data/tickets';
-import { coverage, createMask, scratchSegment, type ScratchMask } from '../game/scratch';
+import { createMask, encodeMask, restoreMask, scratchProgress, scratchSegment, ticketContentKey, type Point, type ScratchMask } from '../game/scratch';
 import type { GameState, Ticket } from '../game/state';
 import { jackpotTier } from '../game/tickets';
 import { allText } from '../i18n';
@@ -10,9 +10,9 @@ import { canvasTexture, loadFonts, loadModel, patternTexture, preloadImages, typ
 import { LicenseBoard } from './board';
 import { Particles } from './particles';
 import { Rack } from './rack';
-import { buildRoom, layoutCounterProp, WALL_Z } from './room';
+import { buildRoom, desktopLayout, layoutCounterProp, WALL_Z } from './room';
 import { flat, roundedRect } from './shapes';
-import { drawFace, drawFoil, eraseFoil, ticketMetrics, type TicketMetrics } from './ticketFace';
+import { drawFace, drawFoil, eraseFoil, peelFoil, restoreFoil, ticketMetrics, type TicketMetrics } from './ticketFace';
 import { fitToSize, INK, toonify } from './toon';
 
 /** Where the player is looking: down at the scratch mat, up at the ticket rack, or at the licence board. */
@@ -20,9 +20,10 @@ export type View = 'desk' | 'shop' | 'board';
 
 export interface StageCallbacks {
   /** The player scratched enough of the ticket on the mat. */
-  onRevealed(): void;
+  onRevealed(ticket: Ticket): void;
   /** Scratch progress toward the reveal, 0 to 1. */
   onProgress(done: number): void;
+  onScratch(ticket: Ticket, scratch: string): void;
   /** The player picked a ticket type on the rack. */
   onTicket(id: TicketId): void;
   /** The player picked up the scratched ticket. */
@@ -88,6 +89,9 @@ export class Stage {
   private readonly ticket = new THREE.Group();
   private readonly mat = new THREE.Group();
   private readonly tool = new THREE.Group();
+  private toolLift = 0.045;
+  private toolLean = 0;
+  private lastFlakes = -Infinity;
   private readonly inkMaterial = new THREE.MeshBasicMaterial({ color: INK });
   private readonly faceCanvas = document.createElement('canvas');
   private readonly foilCanvas = document.createElement('canvas');
@@ -97,6 +101,9 @@ export class Stage {
   private readonly raycaster = new THREE.Raycaster();
   private readonly plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -FACE_Y);
   private readonly observer: ResizeObserver;
+  private readonly hudObserver: ResizeObserver;
+  private readonly hudChanges: MutationObserver;
+  private hudFrame = 0;
   private readonly tweens: Tween[] = [];
   // Created once the images and the font have loaded.
   private particles!: Particles;
@@ -110,7 +117,10 @@ export class Stage {
   private pose: Pose = { ...REST };
   private mask: ScratchMask | null = null;
   private state: GameState | null = null;
-  private shown: { serial: number; type: TicketId; revealed: boolean } | null = null;
+  private shown: Ticket | null = null;
+  private readonly pendingScratch = new Set<string>();
+  private lastScratchSave = 0;
+  private lastScratchSent: string | undefined;
   private first = true;
   private ready = false;
   private disposed = false;
@@ -135,9 +145,59 @@ export class Stage {
   /** Whether the current press has rubbed the ticket; such a press is never read as a click or a look. */
   private stroked = false;
   private hovering = false;
-  private down: { x: number; y: number } | null = null;
-  private stroke: { x: number; y: number } | null = null;
+  private down: Point | null = null;
+  private stroke: Point | null = null;
+  private activePointer: number | null = null;
+  private readonly pointerNdc = new THREE.Vector2();
   private readonly pointer = new THREE.Vector3();
+  private hudBounds = '';
+  private touchTop = 70;
+  private touchBottom = 120;
+
+  private touchLayout(): boolean {
+    return !desktopLayout(this.host.clientWidth, this.host.clientHeight);
+  }
+
+  private measureHud(): void {
+    if (!this.ready || !this.touchLayout()) return;
+    const app = this.host.parentElement;
+    const prompt = app?.querySelector('.prompt')?.getBoundingClientRect();
+    if (!app || !prompt) return;
+    const promptHeight = `${prompt.height}px`;
+    if (app.style.getPropertyValue('--prompt-height') !== promptHeight) {
+      app.style.setProperty('--prompt-height', promptHeight);
+    }
+    const height = this.host.clientHeight;
+    let top = 0;
+    let bottom = height - prompt.top;
+    for (const element of app.querySelectorAll('.purse, .corner, .look')) {
+      const rect = element.getBoundingClientRect();
+      if (rect.top < height / 3) top = Math.max(top, rect.bottom);
+      else bottom = Math.max(bottom, height - rect.top);
+    }
+    const bounds = `${top}:${bottom}:${this.view}:${height}`;
+    if (bounds === this.hudBounds) return;
+    this.hudBounds = bounds;
+    this.touchTop = top + 6;
+    this.touchBottom = bottom + 6;
+    this.aim();
+  }
+
+  private queueHudMeasurement(): void {
+    if (this.disposed || this.hudFrame) return;
+    this.hudFrame = requestAnimationFrame(() => {
+      this.hudFrame = 0;
+      this.measureHud();
+    });
+  }
+
+  private observeHud(): void {
+    this.hudObserver.disconnect();
+    for (const element of this.host.parentElement?.querySelectorAll('.prompt, .purse, .corner, .look') ?? []) {
+      this.hudObserver.observe(element);
+    }
+    this.queueHudMeasurement();
+  }
 
   constructor(
     private readonly host: HTMLElement,
@@ -160,10 +220,15 @@ export class Stage {
     canvas.addEventListener('pointermove', this.onMove);
     canvas.addEventListener('pointerup', this.onUp);
     canvas.addEventListener('pointercancel', this.onCancel);
+    canvas.addEventListener('lostpointercapture', this.onCancel);
     canvas.addEventListener('pointerleave', this.onLeave);
     canvas.addEventListener('wheel', this.onWheel, { passive: true });
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(host);
+    this.hudObserver = new ResizeObserver(() => this.queueHudMeasurement());
+    this.hudChanges = new MutationObserver(() => this.observeHud());
+    if (host.parentElement) this.hudChanges.observe(host.parentElement, { childList: true });
+    this.observeHud();
 
     void this.load();
   }
@@ -192,8 +257,9 @@ export class Stage {
     document.body.dataset.ready = '1';
 
     try {
-      const coin = fitToSize(await loadModel('kenney-platformer-kit/coin-gold.glb'), 0.2);
-      toonify(coin, { outline: 0.011 });
+      const coin = fitToSize(await loadModel('kenney-platformer-kit/coin-gold.glb'), 0.13);
+      if (this.disposed) return;
+      toonify(coin, { outline: 0.007 });
       this.tool.add(coin);
     } catch {
       // Without the coin model the pointer itself does the scratching.
@@ -208,16 +274,23 @@ export class Stage {
 
   look(view: View): void {
     if (this.view === view) return;
+    this.saveScratch();
     this.view = view;
+    this.stroke = null;
     if (!this.ready) return;
     this.aim();
     this.callbacks.onView(view);
+    this.queueHudMeasurement();
   }
 
   dispose(): void {
     this.disposed = true;
+    stopScratch();
     cancelAnimationFrame(this.frame);
+    cancelAnimationFrame(this.hudFrame);
     this.observer.disconnect();
+    this.hudObserver.disconnect();
+    this.hudChanges.disconnect();
     if (this.ready) this.particles.dispose();
     this.faceTexture.dispose();
     this.foilTexture.dispose();
@@ -231,7 +304,7 @@ export class Stage {
     const state = this.state;
     if (!state) return;
     this.rack.update(state);
-    this.board.update(state);
+    this.board.update(state, this.view === 'board' && this.touchLayout() && this.camera.aspect > 1);
     const ticket = state.ticket;
     const before = this.shown;
     if (this.first) {
@@ -246,11 +319,17 @@ export class Stage {
       return;
     }
     if (before && ticket && before.serial === ticket.serial && before.type === ticket.type) {
-      if (ticket.revealed && !before.revealed) this.reveal(ticket);
-      else if (!ticket.revealed && before.revealed) {
-        // An imported save can put the same ticket back under its foil.
+      if (ticketContentKey(before) !== ticketContentKey(ticket)) {
         this.show(ticket);
         this.setState(ticket);
+      } else if (ticket.revealed && !before.revealed) this.reveal(ticket);
+      else if (ticket.revealed !== before.revealed || ticket.scratch !== before.scratch) {
+        if (!ticket.revealed && ticket.scratch && this.pendingScratch.delete(ticket.scratch)) {
+          before.scratch = ticket.scratch;
+        } else {
+          this.show(ticket);
+          this.setState(ticket);
+        }
       }
       return;
     }
@@ -258,6 +337,7 @@ export class Stage {
     const deal = () => {
       if (!ticket) {
         this.ticket.visible = false;
+        this.callbacks.onProgress(0);
         this.setState(null);
         return;
       }
@@ -268,6 +348,7 @@ export class Stage {
     };
     this.shown = null;
     this.mask = null;
+    this.pendingScratch.clear();
     if (before) {
       play('ticket-collect');
       this.move(this.pose, TILL, 0.3, easeOut, deal);
@@ -292,13 +373,17 @@ export class Stage {
     drawFoil(this.foilCanvas, ticket.type);
     this.faceTexture.needsUpdate = true;
     this.foilTexture.needsUpdate = true;
-    this.foilMaterial.opacity = 1;
     this.foilMaterial.visible = !ticket.revealed;
-    this.mask = ticket.revealed ? null : createMask(this.metrics.layout.cells, this.metrics.layout.height);
-    this.shown = { serial: ticket.serial, type: ticket.type, revealed: ticket.revealed };
+    const { cells, height } = this.metrics.layout;
+    this.mask = ticket.revealed ? null : createMask(cells, height, BALANCE.scratchThreshold);
+    if (this.mask && restoreMask(this.mask, ticket.scratch)) restoreFoil(this.foilCanvas, this.mask, cells);
+    this.shown = { ...ticket };
+    this.pendingScratch.clear();
+    this.lastScratchSent = ticket.scratch;
+    this.lastScratchSave = performance.now();
     this.ticket.visible = true;
     this.stroke = null;
-    this.callbacks.onProgress(0);
+    this.callbacks.onProgress(this.mask ? scratchProgress(this.mask) : 0);
   }
 
   /** Rebuilds the ticket and its mat when the ticket type (and so its height) changes. */
@@ -345,18 +430,15 @@ export class Stage {
 
   private reveal(ticket: Ticket): void {
     if (!this.shown) return;
-    this.shown.revealed = true;
+    this.shown = { ...ticket };
+    this.pendingScratch.clear();
     this.mask = null;
     this.scratching = false;
+    stopScratch();
+    this.foilMaterial.visible = false;
     this.setState(ticket);
     drawFace(this.faceCanvas, ticket.type, ticket, true);
     this.faceTexture.needsUpdate = true;
-    this.tweens.push({
-      elapsed: 0,
-      duration: 0.35,
-      step: (k) => (this.foilMaterial.opacity = 1 - k),
-      done: () => (this.foilMaterial.visible = false),
-    });
     this.celebrate(ticket);
   }
 
@@ -366,8 +448,8 @@ export class Stage {
     const burst = (name: ParticleName, count: number, fast = 1) =>
       this.particles.emit(origin, { name, count, speed: [1.4 * fast, 2.6 * fast], spread: 0.75, size: [0.07, 0.13], life: [0.8, 1.3] });
     if (ticket.prize === 0) {
-      burst('smoke-puff', 3, 0.5);
-      play('lose', 0.45);
+      this.particles.emit(origin, { name: 'smoke-puff', count: 2, speed: [0.4, 0.65], spread: 0.5, size: [0.08, 0.12], life: [0.45, 0.65] });
+      play('lose', 0.62);
       return;
     }
     const jackpot = ticket.tier === jackpotTier(def);
@@ -377,9 +459,16 @@ export class Stage {
     if (big) burst('sparkle', 8, 1.2);
     if (jackpot) for (const name of CONFETTI) burst(name, 10, 1.3);
     play(jackpot ? 'win-jackpot' : big ? 'win-big' : 'win-small');
-    play(big ? 'coins-many' : 'coin-1', 0.5);
-    // A little hop for the winner.
-    this.tweens.push({ elapsed: 0, duration: 0.4, step: (k) => this.applyPose({ ...REST, y: Math.sin(k * Math.PI) * 0.12, turn: Math.sin(k * Math.PI * 2) * 0.04 }) });
+    const shown = this.shown;
+    this.tweens.push({
+      elapsed: 0,
+      duration: 0.4,
+      step: (k) => {
+        if (this.shown === shown && !this.busy) {
+          this.applyPose({ ...REST, y: Math.sin(k * Math.PI) * 0.12, turn: Math.sin(k * Math.PI * 2) * 0.04 });
+        }
+      },
+    });
   }
 
   private applyPose(pose: Pose): void {
@@ -430,9 +519,23 @@ export class Stage {
   }
 
   /** Finds where the pointer touches the ticket's surface, in world units. */
-  private locate(event: PointerEvent): boolean {
-    this.raycaster.setFromCamera(this.ndc(event), this.camera);
+  private locate(): boolean {
+    if (!this.hovering) return false;
+    this.raycaster.setFromCamera(this.pointerNdc, this.camera);
     return this.raycaster.ray.intersectPlane(this.plane, this.pointer) !== null;
+  }
+
+  private trackPointer(event: PointerEvent): void {
+    this.pointerNdc.copy(this.ndc(event));
+    this.hovering = Math.abs(this.pointerNdc.x) <= 1 && Math.abs(this.pointerNdc.y) <= 1;
+  }
+
+  private foilPoint(): Point {
+    const { height, window } = this.metrics;
+    return {
+      x: (this.pointer.x + 0.5 - window.x) / window.w,
+      y: (this.pointer.z + height / 2 - window.y) / window.w,
+    };
   }
 
   /** The thing under the pointer that can be pressed, if any. */
@@ -455,26 +558,26 @@ export class Stage {
   }
 
   private readonly onDown = (event: PointerEvent): void => {
-    if (!this.ready) return;
+    if (!this.ready || this.activePointer !== null || event.button !== 0) return;
     event.preventDefault();
     this.renderer.domElement.setPointerCapture(event.pointerId);
+    this.activePointer = event.pointerId;
     this.pressed = true;
     this.stroked = false;
     this.down = { x: event.clientX, y: event.clientY };
-    if (this.canScratch() && this.locate(event)) {
+    this.trackPointer(event);
+    if (this.canScratch() && this.locate()) {
       this.scratching = true;
       this.stroked = true;
-      this.hovering = true;
       this.stroke = null;
       this.scratchTo(event.timeStamp);
     }
   };
 
   private readonly onMove = (event: PointerEvent): void => {
-    if (!this.ready) return;
-    const ndc = this.ndc(event);
-    if (event.pointerType === 'mouse') this.swayGoal.copy(ndc);
-    if (this.locate(event)) this.hovering = true;
+    if (!this.ready || (this.activePointer !== null && this.activePointer !== event.pointerId)) return;
+    this.trackPointer(event);
+    if (event.pointerType === 'mouse') this.swayGoal.copy(this.pointerNdc);
     // A press that began while the ticket was still landing turns into a stroke once it can.
     if (this.pressed && !this.scratching && this.canScratch()) {
       this.scratching = true;
@@ -482,7 +585,8 @@ export class Stage {
       this.stroke = null;
     }
     if (this.scratching) {
-      if (this.canScratch()) this.scratchTo(event.timeStamp);
+      if (this.canScratch() && this.locate()) this.scratchTo(event.timeStamp);
+      else this.stroke = null;
       return;
     }
     if (event.pointerType !== 'mouse' || this.pressed) return;
@@ -492,6 +596,9 @@ export class Stage {
   };
 
   private readonly onUp = (event: PointerEvent): void => {
+    if (this.activePointer !== event.pointerId) return;
+    this.activePointer = null;
+    this.saveScratch();
     const down = this.down;
     // The reveal ends the stroke before the pointer lifts, so ask what the whole press did.
     const wasScratching = this.stroked;
@@ -513,11 +620,15 @@ export class Stage {
     }
   };
 
-  private readonly onCancel = (): void => {
+  private readonly onCancel = (event: PointerEvent): void => {
+    if (this.activePointer !== event.pointerId) return;
+    this.activePointer = null;
+    this.saveScratch();
     this.pressed = false;
     this.scratching = false;
     this.stroke = null;
     this.down = null;
+    this.hovering = false;
   };
 
   private readonly onLeave = (): void => {
@@ -546,33 +657,64 @@ export class Stage {
     const mask = this.mask;
     if (!mask) return;
     const m = this.metrics;
-    const x = (this.pointer.x + 0.5 - m.window.x) / m.window.w;
-    const y = (this.pointer.z + m.height / 2 - m.window.y) / m.window.w;
-    const from = this.stroke ?? { x, y };
-    this.stroke = { x, y };
+    const to = this.foilPoint();
+    const from = this.stroke ?? to;
+    this.stroke = to;
     const radius = BALANCE.brushRadius / m.window.w;
-    const before = mask.scratched;
-    scratchSegment(mask, from.x, from.y, x, y, radius);
-    eraseFoil(this.foilCanvas, from.x, from.y, x, y, radius);
+    this.toolLean = THREE.MathUtils.clamp((to.x - from.x) * 6, -0.18, 0.18);
+    const { cleared, contact } = scratchSegment(mask, from, to, radius);
+    if (!contact) return;
+    eraseFoil(this.foilCanvas, from.x, from.y, to.x, to.y, radius);
+    for (const index of cleared) peelFoil(this.foilCanvas, m.layout.cells[index]!);
     this.foilDirty = true;
-    const removed = mask.scratched - before;
-    if (removed === 0) return;
-    playScratch(now);
-    this.particles.emit(new THREE.Vector3(this.pointer.x, FACE_Y + 0.02, this.pointer.z), {
-      name: FLAKES[Math.floor(Math.random() * FLAKES.length)] as ParticleName,
-      count: Math.min(3, Math.ceil(removed / 8)),
-      speed: [0.5, 1.3],
-      spread: 1,
-      size: [0.035, 0.07],
-      life: [0.5, 0.9],
-    });
-    const done = coverage(mask) / BALANCE.scratchThreshold;
-    this.callbacks.onProgress(Math.min(1, done));
-    if (done >= 1) {
-      this.mask = null;
-      play('reveal', 0.5);
-      this.callbacks.onRevealed();
+    if (cleared.length || now - this.lastFlakes >= 45) {
+      this.lastFlakes = now;
+      this.particles.emit(new THREE.Vector3(m.window.x + contact.x * m.window.w - 0.5, FACE_Y + 0.02, m.window.y + contact.y * m.window.w - m.height / 2), {
+        name: FLAKES[Math.floor(Math.random() * FLAKES.length)] as ParticleName,
+        count: cleared.length ? 5 : 2,
+        speed: [0.45, 1],
+        spread: 1,
+        size: [0.035, 0.065],
+        life: [0.35, 0.6],
+      });
     }
+    const done = scratchProgress(mask);
+    this.callbacks.onProgress(done);
+    if (done === 1) {
+      this.mask = null;
+      if (this.shown) this.callbacks.onRevealed(this.shown);
+    } else {
+      playScratch();
+      if (now - this.lastScratchSave >= 500) this.saveScratch();
+    }
+  }
+
+  private updateTool(dt: number): void {
+    let overFoil = false;
+    if (this.canScratch() && this.locate()) {
+      const { x, y } = this.foilPoint();
+      const pad = BALANCE.brushRadius / this.metrics.window.w;
+      overFoil = x >= -pad && x <= 1 + pad && y >= -pad && y <= this.metrics.layout.height + pad;
+    }
+    this.tool.visible = overFoil && this.tool.children.length > 0;
+    const canvas = this.renderer.domElement;
+    canvas.style.cursor = this.tool.visible ? 'none' : overFoil ? 'crosshair' : canvas.dataset.hot === '1' ? 'pointer' : 'default';
+    this.toolLean = THREE.MathUtils.damp(this.toolLean, 0, 14, dt);
+    this.toolLift = THREE.MathUtils.damp(this.toolLift, this.scratching ? 0.012 : 0.045, 38, dt);
+    if (this.tool.visible) {
+      this.tool.position.set(this.pointer.x, FACE_Y + this.toolLift, this.pointer.z);
+      this.tool.rotation.set(-0.26, 0, -0.52 + this.toolLean);
+    }
+  }
+
+  private saveScratch(): void {
+    if (!this.mask || !this.shown || scratchProgress(this.mask) === 0) return;
+    const scratch = encodeMask(this.mask);
+    if (scratch === this.lastScratchSent) return;
+    this.lastScratchSent = scratch;
+    this.lastScratchSave = performance.now();
+    this.pendingScratch.add(scratch);
+    this.callbacks.onScratch(this.shown, scratch);
   }
 
   // --- camera -----------------------------------------------------------------------------------
@@ -581,8 +723,8 @@ export class Stage {
   private frameUp(target: THREE.Vector3, direction: THREE.Vector3, points: THREE.Vector3[]): THREE.Vector3 {
     const height = Math.max(1, this.host.clientHeight);
     // The HUD covers a strip at the top and the bottom of the picture.
-    const top = 1 - (2 * 70) / height;
-    const bottom = -1 + (2 * 120) / height;
+    const top = 1 - (2 * (this.touchLayout() ? this.touchTop : 70)) / height;
+    const bottom = -1 + (2 * (this.touchLayout() ? this.touchBottom : 120)) / height;
     const probe = this.camera.clone();
     probe.fov = this.fovGoal;
     probe.updateProjectionMatrix();
@@ -606,30 +748,47 @@ export class Stage {
   /** Sets where the eye should go for the current view. */
   private aim(): void {
     const tall = this.camera.aspect < 0.8;
-    const desktop = this.host.clientWidth > 700;
+    const desktop = desktopLayout(this.host.clientWidth, this.host.clientHeight);
     this.fovGoal = desktop && this.view === 'shop' ? this.camera.aspect < 1.5 ? 85 : 65 : 50;
+    const touch = this.touchLayout();
+    if (this.state) this.board.update(this.state, this.view === 'board' && touch && this.camera.aspect > 1);
+    if (touch) {
+      const width = this.host.clientWidth;
+      const height = this.host.clientHeight;
+      const center = (this.touchTop + height - this.touchBottom) / 2;
+      this.camera.setViewOffset(width, height, 0, height / 2 - center, width, height);
+    } else if (this.camera.view?.enabled) this.camera.clearViewOffset();
     let target: THREE.Vector3;
     let direction: THREE.Vector3;
     let points: THREE.Vector3[];
     // Looking at the rack, the eye rests a little above it so the shop behind shows.
     let lift = 0;
     if (this.view === 'desk') {
-      const margin = tall ? 0.03 : MAT_MARGIN;
+      const margin = tall || touch ? 0.03 : MAT_MARGIN;
       const halfW = 0.5 + margin;
       const halfH = this.metrics.height / 2 + margin;
       target = new THREE.Vector3(0, 0, 0);
-      direction = gaze(desktop ? 72 : tall ? 60 : 50);
+      direction = gaze(desktop ? 72 : touch && !tall ? 85 : tall ? 60 : 50);
       points = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => new THREE.Vector3(sx * halfW, FACE_Y, sz * halfH)));
     } else if (this.view === 'shop') {
       points = this.rack.points();
-      if (!tall) points.push(...this.board.points());
+      const sign = touch && tall ? this.room.getObjectByName('shop-sign') : null;
+      if (sign) {
+        const box = new THREE.Box3().setFromObject(sign);
+        points.push(...[-1, 1].flatMap((sx) => [-1, 1].map((sy) => new THREE.Vector3(
+          sx < 0 ? box.min.x : box.max.x,
+          sy < 0 ? box.min.y : box.max.y,
+          box.max.z,
+        ))));
+      }
+      if (!tall && !touch) points.push(...this.board.points());
       if (desktop) {
         points.push(...[-1.5, 1.5].flatMap((x) => [0.68, 1.6].map((y) => new THREE.Vector3(x, y, -1.7))));
       }
       const box = new THREE.Box3().setFromPoints(points);
       target = box.getCenter(new THREE.Vector3());
       direction = gaze(13);
-      lift = desktop ? this.camera.aspect < 1.5 ? 0.2 : 0.03 : 0.34;
+      lift = desktop ? this.camera.aspect < 1.5 ? 0.2 : 0.03 : touch ? 0 : 0.34;
     } else {
       points = this.board.points();
       target = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
@@ -649,23 +808,25 @@ export class Stage {
     this.camera.updateProjectionMatrix();
     if (!this.ready) return;
     const tall = this.camera.aspect < 0.8;
+    const desktop = desktopLayout(width, height);
     this.rack.layout(tall);
     const shelf = this.room.getObjectByName('shelf');
     if (shelf) {
-      shelf.position.y = width > 700 ? 0.2 : tall ? 3 : 0;
-      shelf.position.z = width > 700 ? WALL_Z * 0.38 : 0;
-      shelf.scale.setScalar(width > 700 ? 0.62 : 1);
+      shelf.position.y = desktop ? 0.2 : tall ? 3 : 0;
+      shelf.position.z = desktop ? WALL_Z * 0.38 : 0;
+      shelf.scale.setScalar(desktop ? 0.62 : 1);
     }
     const sign = this.room.getObjectByName('shop-sign');
     if (sign) {
-      sign.position.y = width > 700 ? 1.5 : 1.8;
-      sign.scale.setScalar(width > 700 ? 0.85 : 1);
+      sign.position.y = desktop ? 1.5 : 1.8;
+      sign.scale.setScalar(desktop ? 0.85 : 1);
     }
-    this.room.children.forEach((prop) => layoutCounterProp(prop, width > 700));
-    this.board.group.scale.setScalar(width > 700 ? 0.86 : 1);
-    this.board.group.position.set(width > 700 ? 1.8 : tall ? 1.22 : 1.75, 0, RACK_Z - 0.05);
+    this.room.children.forEach((prop) => layoutCounterProp(prop, desktop));
+    this.board.group.scale.setScalar(desktop ? 0.86 : 1);
+    this.board.group.position.set(desktop ? 1.8 : tall ? 1.22 : 1.75, 0, RACK_Z - 0.05);
     this.board.group.rotation.y = tall ? -0.3 : -0.38;
     this.aim();
+    this.queueHudMeasurement();
   }
 
   /** Screen positions of everything a play-through script needs to touch. */
@@ -728,15 +889,7 @@ export class Stage {
       this.foilDirty = false;
     }
 
-    // The coin follows the pointer and rocks while it rubs.
-    this.tool.visible = this.hovering && this.canScratch();
-    const canvas = this.renderer.domElement;
-    canvas.style.cursor = this.tool.visible ? 'none' : canvas.dataset.hot === '1' ? 'pointer' : 'default';
-    if (this.tool.visible) {
-      const lift = this.scratching ? 0.004 : 0.07;
-      this.tool.position.set(this.pointer.x, FACE_Y + lift, this.pointer.z);
-      this.tool.rotation.set(-0.5, 0, this.scratching ? Math.sin(time / 28) * 0.35 : -0.25);
-    }
+    this.updateTool(dt);
 
     this.particles.update(dt);
     if (this.ticks++ % 10 === 0) this.publish();
