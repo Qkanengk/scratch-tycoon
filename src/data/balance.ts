@@ -6,7 +6,7 @@ export const BALANCE = {
   scratchThreshold: 0.6,
   /** Radius of the starting tool (the coin), as a fraction of the ticket's width. */
   brushRadius: 0.05,
-  /** A broke player gets one free ticket of this type every interval. */
+  /** The promotional ticket before the player buys any licenses. */
   promoTicket: 'dong' as TicketId,
-  promoIntervalMs: 20_000,
+  promoIntervalMs: 5_000,
 } as const;
