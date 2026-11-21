@@ -4,6 +4,17 @@ import { TOOLS } from '../data/tools';
 import { animateToolModel, buildToolModel, disposeToolObject } from './toolModels';
 
 describe('handmade tool models', () => {
+  it('dulls and scuffs worn tools without changing locked silhouettes', () => {
+    const fresh = buildToolModel('key');
+    const worn = buildToolModel('key', 0, false, .2);
+    const locked = buildToolModel('key', 0, true, .2);
+    const color = (model: THREE.Group) => ((model.getObjectByName('key-bow') as THREE.Mesh).material as THREE.MeshToonMaterial).color.getHex();
+    expect(color(worn)).not.toBe(color(fresh));
+    expect(worn.getObjectsByProperty('name', 'wear-scuff').length).toBeGreaterThan(0);
+    expect(fresh.getObjectByName('wear-scuff')).toBeUndefined();
+    expect(locked.getObjectByName('wear-scuff')).toBeUndefined();
+    [fresh, worn, locked].forEach(disposeToolObject);
+  });
   it('spins the exposed rubber roller only while scratching', () => {
     const machine = buildToolModel('machine');
     const roller = machine.getObjectByName('scratch-roller')!;

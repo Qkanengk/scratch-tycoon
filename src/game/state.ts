@@ -18,8 +18,14 @@ export interface Ticket {
   cells: Cell[];
   /** Index into the ticket type's prize table, decided at purchase. */
   tier: number;
-  /** Money this ticket pays when collected. */
+  /** Gross prize, retained for the printed ticket and existing scene. */
   prize: number;
+  gross: number;
+  tax: number;
+  net: number;
+  fakeTell: 'missing-seal' | 'misprinted-serial' | null;
+  scratchStarted: boolean;
+  hitBombs: number[];
   free: boolean;
   revealed: boolean;
   scratch?: string;
@@ -32,15 +38,18 @@ export interface TicketStats {
   bigWins: number;
 }
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 export interface GameState {
   version: typeof SAVE_VERSION;
   money: number;
+  durability: Record<ToolId, number>;
+  rentElapsedMs: number;
+  rentDebt: number;
   ownedTools: ToolId[];
   toolLevels: Record<ToolId, number>;
   equippedTool: ToolId;
-  /** Lifetime prize money collected. */
+  /** Lifetime after-tax prizes, before rent debt withholding. */
   totalEarned: number;
   rngState: number;
   nextSerial: number;
@@ -64,6 +73,9 @@ export function createInitialState(seed: number): GameState {
   return {
     version: SAVE_VERSION,
     money: BALANCE.startingMoney,
+    durability: { coin: 1, key: 1, card: 1, scraper: 1, machine: 1, laser: 1 },
+    rentElapsedMs: 0,
+    rentDebt: 0,
     ownedTools: ['coin'],
     toolLevels: initialToolLevels(),
     equippedTool: 'coin',

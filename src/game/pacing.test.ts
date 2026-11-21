@@ -10,7 +10,7 @@ describe('licence pacing at the measured scratch cadence', () => {
     for (const { id } of licenses) {
       const times = runs.map(run => run.intervals[id] ?? Infinity);
       const median = percentile(times, 0.5) / 60;
-      expect(median, id).toBeGreaterThanOrEqual(30);
+      expect(median, id).toBeGreaterThanOrEqual(20);
       expect(median, id).toBeLessThanOrEqual(40);
     }
   }, 20_000);

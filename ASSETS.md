@@ -6,6 +6,10 @@ needs attribution; the credits below are given anyway. Preview the whole set wit
 
 ## Style rules
 
+### Drains and hazards scene additions
+
+Rent notices, payout receipt paper, return tags, hologram seals, serial checks and tool wear scuffs are original procedural geometry/canvas artwork in `src/render` (no external assets). The repair tags reuse `public/assets/icons/wrench.png` (Kenney Game Icons, CC0 1.0, see Icons below); bombs reuse the CC0 Kenney-derived `stickers/bomb.png`; blast feedback reuses the original `particles/smoke-puff.svg` and existing game audio documented below. No new downloaded assets.
+
 - Models are drawn with the game's toon shader (`src/render/toon.ts`): three flat light bands and an ink outline.
 - Ink is `#2b1b17`; the rest of the palette is in `src/render/palette.ts`. 2D art uses flat fills and thick ink lines.
 - No emoji and no gradients-with-glow. Symbols on tickets are stickers baked from the 3D models, so 2D and 3D match.

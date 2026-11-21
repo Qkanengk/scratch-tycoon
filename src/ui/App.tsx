@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { isMuted, play, setMuted } from '../audio/sfx';
 import { ticketDef, TICKETS, type TicketId } from '../data/tickets';
-import { applyToolIntent, type ToolIntent } from '../game/tools';
+import { applyToolIntent, repairPrice, repairTool, type ToolIntent } from '../game/tools';
 import { shelfOffer } from '../render/toolShelf';
-import { buyTicket, canBuyTicket, claimPromo, collectTicket, isUnlocked, selectTicket } from '../game/economy';
+import { advancePlayTime, buyTicket, canBuyTicket, claimPromo, collectTicket, isUnlocked, returnFake, selectTicket, startScratch, uncoverCell } from '../game/economy';
 import { buyLicense, unlockProgress } from '../game/unlocks';
 import { recordReveal, recordScratch } from '../game/save';
+import { ticketContentKey } from '../game/scratch';
 import { t } from '../i18n';
 import type { Stage, StageCallbacks, View } from '../render/Stage';
 import { LookButton, PromptChip, promptFor, type Command } from './Hud';
@@ -106,6 +107,16 @@ export function App() {
   const keys = useRef<(event: KeyboardEvent) => void>(() => undefined);
   useEffect(() => {
     handlers.current = {
+      onPlayTime: elapsed => apply(current => advancePlayTime(current, elapsed)),
+      onReturn: () => { play('ticket-collect'); apply(returnFake); },
+      onRepair: id => {
+        if (state.money < repairPrice(state, id)) { play('ui-error'); stage.current?.refuseTool(id); return; }
+        stage.current?.repairedTool(id);
+        play('unlock');
+        apply(current => repairTool(current, id));
+      },
+      onStartScratch: ticket => apply(current => current.ticket && ticketContentKey(current.ticket) === ticketContentKey(ticket) ? startScratch(current) : current),
+      onBomb: (ticket, index) => apply(current => current.ticket && ticketContentKey(current.ticket) === ticketContentKey(ticket) ? uncoverCell(current, index) : current),
       onRevealed: (ticket) => apply((current) => recordReveal(current, ticket)),
       onProgress: (done) => setProgress(done),
       onScratch: (ticket, scratch) => apply((current) => recordScratch(current, ticket, scratch)),
@@ -147,7 +158,7 @@ export function App() {
   const selected = ticketDef(state.selected);
   return (
     <div className="app" data-view={view}>
-      <StageView state={state} handlers={handlers} stage={stage} />
+      <StageView state={state} handlers={handlers} stage={stage} paused={paused} />
 
       <dl className="purse">
         <Sticker name="coin-gold" />

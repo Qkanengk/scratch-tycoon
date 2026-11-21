@@ -26,7 +26,7 @@ export function ticketMetrics(id: TicketId): TicketMetrics {
   const layout = layoutTicket(ticketDef(id).rules);
   const w = 1 - 2 * MARGIN;
   const window = { x: MARGIN, y: MARGIN + HEADER, w, h: layout.height * w };
-  return { height: window.y + window.h + FOOTER + MARGIN, window, layout };
+  return { height: window.y + window.h + (id === 'dong' || id === 'bac' ? FOOTER : .25) + MARGIN, window, layout };
 }
 
 /** Every character a ticket face can print, so the font is loaded before the first ticket is painted. */
@@ -52,10 +52,10 @@ function plate(ctx: Ctx, x: number, y: number, w: number, h: number, r: number, 
   ctx.stroke();
 }
 
-function text(ctx: Ctx, value: string, x: number, y: number, size: number, color: string = palette.ink, weight = 800): void {
+function text(ctx: Ctx, value: string, x: number, y: number, size: number, color: string = palette.ink, weight = 800, maxWidth?: number): void {
   ctx.font = `${weight} ${size}px ${FONT}`;
   ctx.fillStyle = color;
-  ctx.fillText(value, x, y);
+  ctx.fillText(value, x, y, maxWidth ?? 10000);
 }
 
 function sticker(ctx: Ctx, name: string, x: number, y: number, size: number): void {
@@ -173,15 +173,48 @@ export function drawFace(canvas: HTMLCanvasElement, id: TicketId, ticket: Ticket
 
   // Footer: the rule in one line, then serial and price.
   const footY = (w.y + w.h) * S;
-  const footH = FOOTER * S;
+  const footH = (id === 'dong' || id === 'bac' ? FOOTER : .25) * S;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const band = footH * 0.86;
   plate(ctx, MARGIN * S, footY + footH * 0.16, S * (1 - 2 * MARGIN), band, band * 0.3, palette.cream, 6);
-  text(ctx, t(`ticket.${id}.short`), S / 2, footY + footH * 0.16 + band * 0.34, band * 0.33);
+  text(ctx, t(`ticket.${id}.short`), S / 2, footY + footH * 0.16 + band * 0.34, band * 0.29, palette.ink, 800, S * .85);
   const serial = ticket ? t('ticket.serial', { serial: String(ticket.serial).padStart(6, '0') }) : t('ticket.blank');
   const price = ticket?.free ? t('ticket.free') : `${formatCompact(def.price)} xu`;
   text(ctx, `${serial}  ·  ${price}`, S / 2, footY + footH * 0.16 + band * 0.72, band * 0.26, '#8a5a2b', 700);
+  if (id === 'vang' || id === 'ngoc' || id === 'rong') {
+    const sealX = S * .86;
+    const sealY = footY + footH * .62;
+    ctx.fillStyle = palette.cream;
+    ctx.fillRect(MARGIN * S + 6, footY + footH * .59, S * .72, footH * .33);
+    const number = String(ticket?.serial ?? 1).padStart(6, '0');
+    const check = ticket?.fakeTell === 'misprinted-serial' ? 'XX' : number.slice(-2);
+    text(ctx, t('drain.serial', { serial: number, check }), S * .40, footY + footH * .76, band * .28, '#5f482c');
+    ctx.save();
+    ctx.translate(sealX, sealY);
+    ctx.strokeStyle = '#366779';
+    ctx.lineWidth = S * .004;
+    if (ticket?.fakeTell === 'missing-seal') ctx.setLineDash([S * .009, S * .007]);
+    ctx.beginPath(); ctx.arc(0, 0, footH * .23, 0, Math.PI * 2);
+    ctx.fillStyle = '#72c9b5';
+    if (ticket?.fakeTell !== 'missing-seal') ctx.fill();
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if (ticket?.fakeTell !== 'missing-seal') {
+      ctx.fillStyle = '#ffe09a';
+      ctx.beginPath(); ctx.moveTo(0, -footH * .17); ctx.lineTo(footH * .11, 0); ctx.lineTo(0, footH * .17); ctx.lineTo(-footH * .11, 0); ctx.fill();
+    }
+    ctx.restore();
+    text(ctx, t('drain.seal'), sealX, sealY + footH * .32, footH * .13, '#366779');
+  }
+  if (lit && ticket?.fakeTell) {
+    ctx.save();
+    ctx.translate(S / 2, canvas.height / 2);
+    ctx.rotate(-.17);
+    plate(ctx, -S * .43, -S * .075, S * .86, S * .15, 8, palette.cream, 7);
+    text(ctx, t('drain.fake'), 0, 0, S * .038, '#bb3026');
+    ctx.restore();
+  }
 }
 
 /** Paints one foil patch per cell on a canvas that covers the scratch window; scratching erases it. */

@@ -3,7 +3,7 @@ import type { ToolId } from '../data/tools';
 import { INK, toonify } from './toon';
 
 /** Models face +z, with the scratching tip at the origin and handles pointing up. */
-export function buildToolModel(id: ToolId, level = 0, silhouette = false): THREE.Group {
+export function buildToolModel(id: ToolId, level = 0, silhouette = false, durability = 1): THREE.Group {
   const group = new THREE.Group();
   group.name = `tool-${id}`;
   const gold = 0xf7b500;
@@ -11,7 +11,8 @@ export function buildToolModel(id: ToolId, level = 0, silhouette = false): THREE
   const red = 0xef4b3f;
   const blue = 0x3d8bfd;
   const add = (geometry: THREE.BufferGeometry, color: number, x: number, y: number, z = 0) => {
-    const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: silhouette ? INK : color }));
+    const tint = new THREE.Color(color).lerp(new THREE.Color(0x756553), (1 - durability) * .72);
+    const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: silhouette ? INK : tint }));
     mesh.position.set(x, y, z);
     group.add(mesh);
     return mesh;
@@ -92,6 +93,13 @@ export function buildToolModel(id: ToolId, level = 0, silhouette = false): THREE
     trim.name = 'upgrade-trim';
   }
   group.scale.setScalar(1 + level * 0.012);
+  if (!silhouette && durability < .85 && id !== 'coin') {
+    for (let i = 0; i < Math.ceil((1 - durability) * 7); i++) {
+      const scuff = box(.13, .018, .025, 0x544334, (i % 3 - 1) * .09, .12 + i * .07, .18);
+      scuff.rotation.z = -.4;
+      scuff.name = 'wear-scuff';
+    }
+  }
   toonify(group, { outline: 0.014 });
   return group;
 }

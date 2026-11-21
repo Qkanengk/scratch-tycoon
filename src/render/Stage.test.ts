@@ -3,6 +3,30 @@ import type { ToolIntent } from '../game/tools';
 import { Stage } from './Stage';
 
 describe('stage shelf interactions', () => {
+  it('stops an ongoing scratch while paused or hidden', () => {
+    const stage = Object.assign(Object.create(Stage.prototype), { mask: {}, busy: false, view: 'desk', settled: true, paused: true });
+    expect(stage.canScratch()).toBe(false);
+    vi.stubGlobal('document', { hidden: true });
+    stage.paused = false;
+    expect(stage.canScratch()).toBe(false);
+    vi.stubGlobal('document', { hidden: false });
+    expect(stage.canScratch()).toBe(true);
+    vi.unstubAllGlobals();
+  });
+  it('dispatches repair and counterfeit return actions without navigating', () => {
+    const stage = Object.create(Stage.prototype) as unknown as {
+      callbacks: { onRepair: ReturnType<typeof vi.fn>; onReturn: ReturnType<typeof vi.fn> };
+      saveScratch: ReturnType<typeof vi.fn>;
+      press(action: { kind: 'repair'; id: 'key' } | { kind: 'return' }): void;
+    };
+    stage.callbacks = { onRepair: vi.fn(), onReturn: vi.fn() };
+    stage.saveScratch = vi.fn();
+    stage.press({ kind: 'repair', id: 'key' });
+    expect(stage.callbacks.onRepair).toHaveBeenCalledExactlyOnceWith('key');
+    stage.press({ kind: 'return' });
+    expect(stage.callbacks.onReturn).toHaveBeenCalledOnce();
+    expect(stage.saveScratch).toHaveBeenCalledOnce();
+  });
   it.each([null, ...(['buy', 'equip', 'upgrade'] as const).map(kind => ({ id: 'coin' as const, kind, level: 0 }))])('never navigates when pressing a shelf tool with intent %j', intent => {
     const stage = Object.create(Stage.prototype) as {
       view: string;

@@ -1,6 +1,7 @@
 import type { PrizeTier, TicketDef, TicketRules } from '../data/tickets';
 import type { Rng } from './rng';
 import type { Cell } from './state';
+import { BALANCE } from '../data/balance';
 
 type MatchRules = Extract<TicketRules, { kind: 'match' }>;
 type LuckyRules = Extract<TicketRules, { kind: 'lucky' }>;
@@ -125,8 +126,14 @@ export function generateCells(def: TicketDef, rng: Rng): { tier: number; cells: 
   switch (rules.kind) {
     case 'match':
       return { tier, cells: matchCells(rules, tier, rng) };
-    case 'lucky':
-      return { tier, cells: luckyCells(def, rules, tier, rng) };
+    case 'lucky': {
+      const cells = luckyCells(def, rules, tier, rng);
+      if (def.id === 'ngoc' && rng.next() < BALANCE.ngocBombChance) {
+        const index = cells.findIndex(cell => cell.type === 'number' && !cell.win);
+        if (index >= 0) cells[index] = { type: 'bomb' };
+      }
+      return { tier, cells };
+    }
     case 'dragon':
       return { tier, cells: dragonCells(def, rules, tier, rng) };
   }
