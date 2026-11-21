@@ -133,8 +133,18 @@ textarea:focus-visible {
   width: 1.4em;
   height: 1.4em;
   background: currentColor;
-  -webkit-mask: var(--icon) center / contain no-repeat;
-  mask: var(--icon) center / contain no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+.hud-glyph {
+  width: 26px;
+  height: 26px;
+  flex: none;
 }
 
 .meter {
@@ -448,6 +458,27 @@ textarea {
   color: var(--muted);
 }
 
+@media (min-width: 900px) and (min-height: 501px) and (min-aspect-ratio: 4/5), (min-width: 701px) and (min-height: 501px) and (min-aspect-ratio: 4/5) and (pointer: fine) and (hover: hover) {
+  .app {
+    --hud-scale: clamp(1, calc(100vw / 1280px), 1.5);
+  }
+
+  .purse, .corner, .look, .prompt {
+    zoom: var(--hud-scale);
+  }
+
+  .look-down {
+    left: 12px;
+    bottom: 22px;
+    transform: none;
+  }
+
+  .app[data-view='board'] .look-left {
+    top: 74px;
+    bottom: auto;
+  }
+}
+
 /* Phone: the prompt stacks and spans the width; key hints go away. */
 
 @media (max-width: 700px) {
@@ -503,7 +534,7 @@ textarea {
   }
 }
 
-@media (pointer: coarse), (hover: none), (max-height: 500px) {
+@media (max-width: 700px), (max-height: 500px), (aspect-ratio < 4/5), (max-width: 899px) and (pointer: coarse), (max-width: 899px) and (hover: none) {
   .app {
     --hud-top: max(12px, env(safe-area-inset-top));
     --hud-left: max(12px, env(safe-area-inset-left));

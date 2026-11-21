@@ -67,9 +67,11 @@ export function buildRoom(): THREE.Group {
 
   const stand = async (file: string, size: number, x: number, y: number, z: number, turn: number, parent: THREE.Group = room) => {
     const model = fitToSize(await loadModel(file), size);
+    model.name = file.split('/').pop()!.replace('.glb', '');
     toonify(model, { outline: 0.011 });
     model.position.set(x, y, z);
     model.rotation.y = turn;
+    if (desktopLayout(window.innerWidth, window.innerHeight)) layoutCounterProp(model, true);
     parent.add(model);
   };
   const shelfY = 1.02;
@@ -88,4 +90,23 @@ export function buildRoom(): THREE.Group {
     stand('quaternius/coins.glb', 0.22, 0.95, 0, 0.4, -0.2),
   ]);
   return room;
+}
+
+export function desktopLayout(width: number, height: number): boolean {
+  return width > 700 && height > 500 && width / height >= 0.8
+    && (width >= 900 || !window.matchMedia('(pointer: coarse), (hover: none)').matches);
+}
+
+export function layoutCounterProp(model: THREE.Object3D, desktop: boolean): void {
+  const poses: Record<string, readonly [number, number, number, number, number, number]> = {
+    'cash-register': [-0.77, -0.16, 0.5, -1.15, -0.3, 1],
+    'gold-bag': [-0.76, 0.42, 0.7, -0.95, 0.35, 1],
+    coins: [0.76, 0.36, 0.7, 0.95, 0.4, 1],
+    'ticket-machine': [-1.45, -1.18, 0.7, -1.8, -1.05, 1],
+  };
+  const pose = poses[model.name];
+  if (!pose) return;
+  model.position.x = pose[desktop ? 0 : 3];
+  model.position.z = pose[desktop ? 1 : 4];
+  model.scale.setScalar(pose[desktop ? 2 : 5]);
 }
