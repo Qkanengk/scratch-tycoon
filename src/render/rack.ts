@@ -70,6 +70,7 @@ export class Rack {
   private readonly slots = new Map<TicketId, Slot>();
   private readonly stands = new THREE.Group();
   private rows: TicketId[][] = [];
+  private tall: boolean | null = null;
 
   constructor() {
     this.group.add(this.stands);
@@ -102,8 +103,16 @@ export class Rack {
 
   /** One row of five in a wide window; three in front and two on a step behind in a tall one. */
   layout(tall: boolean): void {
+    if (this.tall === tall) return;
+    this.tall = tall;
     const ids = TICKETS.map((def) => def.id);
     this.rows = tall ? [ids.slice(0, 3), ids.slice(3)] : [ids];
+    this.stands.traverse((node) => {
+      const mesh = node as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.geometry.dispose();
+      for (const material of [mesh.material].flat()) material.dispose();
+    });
     this.stands.clear();
     this.rows.forEach((row, r) => {
       const y = r * 0.62;
