@@ -205,30 +205,58 @@ describe('desk framing', () => {
     expect(stage.touchBottom).toBe(136);
   });
 
-  it('frames the phone shop and robot station below the notice without shifting the scratch desk', () => {
+  it.each([
+    ['Golden Hour only', 124, null],
+    ['incident only', 133, 133],
+    ['Golden Hour and incident', 193, 193],
+    ['Golden Hour, incident and contract', 230, 193],
+  ])('frames the phone shop and robot station below %s without shifting the scratch desk', (_name, stackBottom, incidentBottom) => {
     const stage = stageAt(390, 844);
-    let notice: { bottom: number } | null = { bottom: 133 };
+    let notice = { bottom: stackBottom, height: stackBottom - 70 };
     stage.ready = true;
     stage.aim = vi.fn();
     stage.host.parentElement = {
       style: { getPropertyValue: () => '', setProperty: vi.fn() },
       querySelector: (selector: string) => selector === '.prompt'
         ? { getBoundingClientRect: () => ({ top: 768, height: 70 }) }
-        : notice && { getBoundingClientRect: () => notice },
+        : selector === '.kiosk-notices' ? notice && { getBoundingClientRect: () => notice }
+        : selector === '.incident-notice[data-incident]' && incidentBottom ? { getBoundingClientRect: () => ({ bottom: incidentBottom }) } : null,
       querySelectorAll: () => [{ matches: () => false, getBoundingClientRect: () => ({ top: 12, bottom: 64 }) }],
     };
     for (const view of ['shop', 'robots']) {
       stage.view = view;
       stage.measureHud();
-      expect(stage.touchTop).toBe(139);
+      expect(stage.touchTop).toBe(stackBottom + 6);
     }
     stage.view = 'desk';
     stage.measureHud();
     expect(stage.touchTop).toBe(70);
     stage.view = 'shop';
-    notice = null;
+    notice = { bottom: 70, height: 0 };
     stage.measureHud();
     expect(stage.touchTop).toBe(70);
+  });
+
+  it('remeasures the notice stack when notices grow, wrap or disappear', () => {
+    const stage = stageAt(390, 844);
+    let stackBottom = 124;
+    stage.ready = true;
+    stage.aim = vi.fn();
+    stage.view = 'robots';
+    stage.host.parentElement = {
+      style: { getPropertyValue: () => '', setProperty: vi.fn() },
+      querySelector: (selector: string) => ({ getBoundingClientRect: () => selector === '.prompt'
+        ? { top: 768, height: 70 } : { bottom: stackBottom, height: Math.max(0, stackBottom - 70) } }),
+      querySelectorAll: () => [{ matches: () => false, getBoundingClientRect: () => ({ top: 12, bottom: 64 }) }],
+    };
+    for (const bottom of [124, 193, 220, 70]) {
+      stackBottom = bottom;
+      stage.measureHud();
+      expect(stage.touchTop).toBe(bottom === 70 ? 70 : bottom + 6);
+    }
+    expect(stage.aim).toHaveBeenCalledTimes(4);
+    stage.measureHud();
+    expect(stage.aim).toHaveBeenCalledTimes(4);
   });
 });
 
@@ -236,7 +264,7 @@ describe('stage shelf interactions', () => {
   it('reserves incident and contract notices above the desktop upgrade station', () => {
     const app = {
       style: { getPropertyValue: () => '', setProperty: vi.fn() },
-      querySelector: (selector: string) => ({ getBoundingClientRect: () => selector === '.kiosk-notices' ? { bottom: 150 } : { top: 720, height: 65 } }),
+      querySelector: (selector: string) => ({ getBoundingClientRect: () => selector === '.kiosk-notices' ? { bottom: 150, height: 138 } : { top: 720, height: 65 } }),
       querySelectorAll: () => [],
     };
     const stage = Object.assign(Object.create(Stage.prototype), {
