@@ -229,13 +229,9 @@ export class Stage {
       if (rect.top < height / 3) top = Math.max(top, rect.bottom);
       else bottom = Math.max(bottom, height - rect.top);
     }
-    if (this.view === 'shop' || this.view === 'robots') {
-      const notice = app.querySelector('.incident-notice[data-incident]')?.getBoundingClientRect();
-      if (notice) top = Math.max(top, notice.bottom);
-    }
-    if (this.view === 'upgrades') {
+    if (this.view === 'shop' || this.view === 'robots' || this.view === 'upgrades') {
       const notices = app.querySelector('.kiosk-notices')?.getBoundingClientRect();
-      if (notices) top = Math.max(top, notices.bottom);
+      if (notices && notices.height > 0) top = Math.max(top, notices.bottom);
     }
     const bounds = `${top}:${bottom}:${this.view}:${height}`;
     if (bounds === this.hudBounds) return;
