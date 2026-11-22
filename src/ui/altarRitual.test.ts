@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { prestigeThreshold } from '../data/prestige';
 import { prestige } from '../game/prestige';
 import { createInitialState } from '../game/state';
-import { offerIncense } from './altarRitual';
+import { blockRepeatedOffering, offerIncense } from './altarRitual';
 
 function eligible() {
   const state = createInitialState(1);
@@ -12,6 +12,30 @@ function eligible() {
 }
 
 describe('incense confirmation', () => {
+  it.each(['Enter', ' '])('cancels native %j repeat activation but permits two distinct presses', key => {
+    const preventDefault = vi.fn();
+    const state = eligible();
+    let armedUntil = 0;
+    let confirmed = false;
+    const press = (repeat: boolean) => {
+      if (blockRepeatedOffering({ key, repeat, preventDefault })) return;
+      const result = offerIncense(state, armedUntil, 1000);
+      armedUntil = result.armedUntil;
+      confirmed = result.confirm;
+    };
+    press(false);
+    for (let i = 0; i < 12; i++) press(true);
+    expect(preventDefault).toHaveBeenCalledTimes(12);
+    expect(confirmed).toBe(false);
+    expect(armedUntil).toBe(7000);
+    press(false);
+    expect(confirmed).toBe(true);
+  });
+  it('leaves non-activation keys alone', () => {
+    const preventDefault = vi.fn();
+    expect(blockRepeatedOffering({ key: 'ArrowRight', repeat: true, preventDefault })).toBe(false);
+    expect(preventDefault).not.toHaveBeenCalled();
+  });
   it('requires two eligible offerings within six seconds', () => {
     const state = eligible();
     const first = offerIncense(state, 0, 1000);

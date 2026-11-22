@@ -17,7 +17,7 @@ import { StageView } from './StageView';
 import { useGame } from './useGame';
 import { advanceAutomation, automationAction, robotContext, type AutomationAction } from '../game/automation';
 import { prestige } from '../game/prestige';
-import { offerIncense } from './altarRitual';
+import { blockRepeatedOffering, offerIncense } from './altarRitual';
 
 export function App() {
   const game = useGame();
@@ -173,7 +173,7 @@ export function App() {
       if (key === 'escape') setPaused((open) => !open);
       if (paused) return;
       if (key === ' ' || key === 'enter') {
-        if (event.repeat && view === 'altar') return;
+        if (view === 'altar' && blockRepeatedOffering(event)) return;
         // A focused button keeps its own Space and Enter.
         if (event.target instanceof Element && event.target.closest('button, a, input, select')) return;
         event.preventDefault();

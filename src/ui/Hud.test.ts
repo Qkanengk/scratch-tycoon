@@ -1,10 +1,32 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { buyTicket, revealTicket } from '../game/economy';
 import { createInitialState, type GameState } from '../game/state';
-import { promptFor } from './Hud';
+import { PromptChip, promptFor } from './Hud';
 import { prestigeScenario } from './debugPrestige';
 
 const fresh = (): GameState => createInitialState(1);
+
+describe('PromptChip keyboard activation', () => {
+  it.each(['Enter', ' '])('prevents native %j repeat clicks on the incense button', key => {
+    for (const armed of [false, true]) {
+      const prompt = promptFor(prestigeScenario('eligible'), 0, 'altar', 0, armed);
+      const button = PromptChip({ prompt, onCommand: vi.fn() }).props.children.at(-1);
+      expect(button.type).toBe('button');
+      const event = { key, repeat: true, preventDefault: vi.fn() };
+      button.props.onKeyDown(event);
+      expect(event.preventDefault).toHaveBeenCalledOnce();
+      event.preventDefault.mockClear();
+      button.props.onKeyDown({ ...event, repeat: false });
+      expect(event.preventDefault).not.toHaveBeenCalled();
+    }
+  });
+  it('preserves keyboard repeat on other HUD actions', () => {
+    const button = PromptChip({ prompt: promptFor(fresh(), 0, 'shop', 0), onCommand: vi.fn() }).props.children.at(-1);
+    const event = { key: 'Enter', repeat: true, preventDefault: vi.fn() };
+    button.props.onKeyDown(event);
+    expect(event.preventDefault).not.toHaveBeenCalled();
+  });
+});
 
 describe('promptFor', () => {
   it('offers two-step incense confirmation, blocks ineligible runs and handles tier V', () => {

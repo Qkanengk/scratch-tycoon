@@ -11,6 +11,7 @@ import { awaySummaryText } from './awaySummary';
 import { canPrestige } from '../game/prestige';
 import { PRESTIGE } from '../data/prestige';
 import { licenseWait } from '../render/board';
+import { blockRepeatedOffering } from './altarRitual';
 
 export type Command = 'buy' | 'collect' | 'promo' | 'license' | 'robot' | 'awayReceipt' | 'incense';
 
@@ -91,7 +92,7 @@ export function PromptChip({ prompt, onCommand }: { prompt: Prompt; onCommand: (
         </div>
       )}
       {button && (
-        <button className="btn btn-primary" data-testid="action" disabled={button.disabled} onClick={() => onCommand(button.command)}>
+        <button className="btn btn-primary" data-testid="action" disabled={button.disabled} onKeyDown={event => { if (button.command === 'incense') blockRepeatedOffering(event); }} onClick={() => onCommand(button.command)}>
           {button.label}
           <kbd>Space</kbd>
         </button>
