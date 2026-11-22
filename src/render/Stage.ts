@@ -907,6 +907,9 @@ export class Stage {
     this.renderer.domElement.dataset.busy = '1';
     const tall = this.camera.aspect < 0.8;
     const desktop = desktopLayout(this.host.clientWidth, this.host.clientHeight);
+    this.robots.layout(this.view === 'robots' ? tall : !desktop);
+    const counterExtension = this.room.getObjectByName('countertop-extension');
+    if (counterExtension) counterExtension.visible = this.view === 'robots';
     this.fovGoal = desktop && this.view === 'shop' ? this.camera.aspect < 1.5 ? 85 : 65 : 50;
     const touch = this.touchLayout();
     if (this.state) this.board.update(this.state, this.view === 'board' && touch && this.camera.aspect > 1);
@@ -966,7 +969,8 @@ export class Stage {
     } else if (this.view === 'robots') {
       points = this.robots.points();
       target = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
-      direction = gaze(tall ? 70 : 35);
+      if (!tall) target.y -= .45;
+      direction = gaze(tall ? 70 : this.camera.aspect > 2 ? 15 : 25);
     } else if (this.view === 'tools') {
       points = this.toolShelf.points();
       target = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
