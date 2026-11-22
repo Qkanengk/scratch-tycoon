@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { play, playScratch, stopScratch } from '../audio/sfx';
 import { BALANCE } from '../data/balance';
-import { ticketDef, type TicketId } from '../data/tickets';
+import { ticketDef, TICKETS, type TicketId } from '../data/tickets';
 import { TOOLS, type ToolId } from '../data/tools';
 import { createMask, encodeMask, restoreMask, scratchProgress, scratchSegment, ticketContentKey, type Point, type ScratchMask } from '../game/scratch';
 import type { GameState, Ticket } from '../game/state';
@@ -23,11 +23,13 @@ import { PlayClock } from './playClock';
 import { formatCompact } from '../game/format';
 import { RobotStation } from './robotStation';
 import type { AutomationAction } from '../game/automation';
+import { Altar } from './altar';
 
 /** Where the player is looking: down at the scratch mat, up at the ticket rack, or at the licence board. */
-export type View = 'desk' | 'shop' | 'board' | 'tools' | 'robots';
+export type View = 'desk' | 'shop' | 'board' | 'tools' | 'robots' | 'altar';
 
 export interface StageCallbacks {
+  onAltar(): void;
   onAutomation(action: AutomationAction | 'context', index: number): void;
   /** The player scratched enough of the ticket on the mat. */
   onRevealed(ticket: Ticket): void;
@@ -49,7 +51,7 @@ export interface StageCallbacks {
   onBomb(ticket: Ticket, index: number): void;
 }
 
-type Action = { kind: 'robots' } | { kind: 'automation'; action: AutomationAction | 'context'; index?: number } | { kind: 'ticket'; id: TicketId } | { kind: 'board' } | { kind: 'collect' } | { kind: 'tools' } | { kind: 'tool'; intent: ToolIntent | null } | { kind: 'return' } | { kind: 'repair'; id: ToolId };
+type Action = { kind: 'altar'; offer?: boolean } | { kind: 'robots' } | { kind: 'automation'; action: AutomationAction | 'context'; index?: number } | { kind: 'ticket'; id: TicketId } | { kind: 'board' } | { kind: 'collect' } | { kind: 'tools' } | { kind: 'tool'; intent: ToolIntent | null } | { kind: 'return' } | { kind: 'repair'; id: ToolId };
 
 const FACE_PX = 1024;
 const FOIL_PX = 768;
@@ -127,6 +129,9 @@ export class Stage {
   private room!: THREE.Group;
   private rack!: Rack;
   private board!: LicenseBoard;
+  private altar!: Altar;
+  private altarArmed = false;
+  private incenseTime = 0;
   private toolShelf!: ToolShelf;
   private handKey = '';
   private feltMaterial!: THREE.Material;
@@ -278,6 +283,8 @@ export class Stage {
     this.rack = new Rack();
     this.rack.group.position.set(0, 0, RACK_Z);
     this.board = new LicenseBoard();
+    this.altar = new Altar();
+    this.scene.add(this.altar.group);
     this.toolShelf = new ToolShelf();
     this.toolShelf.group.position.set(-2.8, 0, -1.5);
     this.toolShelf.group.rotation.y = 0.18;
@@ -323,8 +330,24 @@ export class Stage {
 
   /** Draws the given game state: the ticket on the mat, the rack's price tags and the licence board. */
   update(state: GameState): void {
-    if (this.state?.ticket && !state.ticket) this.collectionDebt = this.state.rentDebt;
-    if (this.state && state.rentElapsedMs < this.state.rentElapsedMs) {
+    const changedLife = this.state && state.prestige.tier > this.state.prestige.tier;
+    const availabilityChanged = this.state && (state.prestige.tier > 0) !== (this.state.prestige.tier > 0);
+    if (changedLife && this.ready) {
+      this.altarArmed = false;
+      this.particles.emit(this.altar.smokePoint(), { name: 'smoke-puff', count: 14, speed: [.15, .4], spread: .6, size: [.1, .22], life: [1.6, 2.8], gravity: -.05 });
+      this.particles.emit(this.altar.anchor(), { name: 'coin', count: 24, speed: [.4, .9], spread: .8, size: [.06, .1], life: [1.5, 2.8], gravity: .5 });
+      play('unlock');
+      this.receipt.group.visible = false;
+      this.collectionDebt = 0;
+      this.ticket.visible = false;
+      this.shown = null;
+      this.mask = null;
+      this.pendingScratch.clear();
+      this.tweens.length = 0;
+      this.tweens.push({ elapsed: 0, duration: 2.4, step: () => undefined, done: () => { if (this.view === 'altar') this.look('shop'); } });
+    }
+    if (!changedLife && this.state?.ticket && !state.ticket) this.collectionDebt = this.state.rentDebt;
+    if (!changedLife && this.state && state.rentElapsedMs < this.state.rentElapsedMs) {
       this.rentStamp = 2.8;
       if (this.ready) {
         this.particles.emit(this.rent.group.position.clone(), { name: 'coin', count: 5, speed: [.2, .45], spread: .8, size: [.07, .1], life: [.5, .8] });
@@ -333,9 +356,15 @@ export class Stage {
     }
     this.state = state;
     if (this.ready) this.sync();
+    if ((changedLife || availabilityChanged) && this.ready) this.resize();
   }
 
   setPaused(paused: boolean): void { this.paused = paused; this.clock(performance.now()); }
+
+  setAltarArmed(armed: boolean): void {
+    this.altarArmed = armed;
+    if (this.ready && this.state) this.altar.update(this.state, armed);
+  }
 
   repairedTool(id: ToolId): void { this.toolShelf.repairedTool(id); }
 
@@ -350,6 +379,7 @@ export class Stage {
     if (this.view === view) return;
     this.saveScratch();
     this.view = view;
+    if (view !== 'altar') this.setAltarArmed(false);
     this.stroke = null;
     if (!this.ready) return;
     this.aim();
@@ -375,6 +405,7 @@ export class Stage {
       disposeToolObject(this.tool);
       this.rent.dispose(); this.receipt.dispose(); this.returnTag.dispose();
       this.robots.dispose();
+      this.altar.dispose();
     }
     this.faceTexture.dispose();
     this.foilTexture.dispose();
@@ -389,6 +420,7 @@ export class Stage {
     if (!state) return;
     this.toolShelf.update(state);
     this.robots.update(state);
+    this.altar.update(state, this.altarArmed);
     const key = JSON.stringify(rentLines(state, this.rentStamp > 0));
     if (key !== this.rentKey) { this.rentKey = key; this.rent.draw(rentLines(state, this.rentStamp > 0)); }
     const ticketForReturn = state.ticket;
@@ -660,7 +692,7 @@ export class Stage {
   /** The thing under the pointer that can be pressed, if any. */
   private pick(event: PointerEvent): Action | null {
     this.raycaster.setFromCamera(this.ndc(event), this.camera);
-    for (const hit of this.raycaster.intersectObjects([this.rack.group, this.board.group, this.toolShelf.group, this.robots.group, this.ticket, this.returnTag.group, this.receipt.group], true)) {
+    for (const hit of this.raycaster.intersectObjects([this.altar.group, this.rack.group, this.board.group, this.toolShelf.group, this.robots.group, this.ticket, this.returnTag.group, this.receipt.group], true)) {
       let visible = true;
       for (let node: THREE.Object3D | null = hit.object; node; node = node.parent) visible &&= node.visible;
       if (!visible) continue;
@@ -740,7 +772,7 @@ export class Stage {
       const action = this.pick(event);
       if (action) this.press(action);
     } else if ((this.mask === null || this.view !== 'desk') && Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
-      this.look(dx > 0 ? this.view === 'robots' ? 'board' : this.view === 'board' ? 'shop' : 'tools' : this.view === 'tools' ? 'shop' : this.view === 'shop' ? 'board' : 'robots');
+      this.look(this.sideView(dx > 0 ? 'left' : 'right'));
     } else if ((this.mask === null || this.view !== 'desk') && Math.abs(dy) > 50 && Math.abs(dy) > Math.abs(dx)) {
       // With foil still on the mat a drag is an attempt to scratch, not a look.
       // Dragging the scene down looks up, like turning your head.
@@ -776,11 +808,21 @@ export class Stage {
   /** Looks one step up (desk to rack) or down (board or rack back to the desk). */
   nod(direction: 'up' | 'down'): void {
     if (direction === 'up') this.look('shop');
-    else this.look(this.view === 'board' || this.view === 'tools' || this.view === 'robots' ? 'shop' : 'desk');
+    else this.look(this.view === 'board' || this.view === 'tools' || this.view === 'robots' || this.view === 'altar' ? 'shop' : 'desk');
+  }
+
+  sideView(direction: 'left' | 'right'): View {
+    const views: View[] = ['tools', 'altar', 'shop', 'board', 'robots'];
+    const index = Math.max(0, views.indexOf(this.view));
+    return views[(index + (direction === 'right' ? 1 : views.length - 1)) % views.length]!;
   }
 
   private press(action: Action): void {
-    if (action.kind === 'robots') this.look('robots');
+    if (action.kind === 'altar') {
+      if (this.view === 'altar' && action.offer) this.callbacks.onAltar();
+      else this.look('altar');
+    }
+    else if (action.kind === 'robots') this.look('robots');
     else if (action.kind === 'automation') this.callbacks.onAutomation(action.action, action.index ?? 0);
     else if (action.kind === 'return') { this.saveScratch(); this.callbacks.onReturn(); }
     else if (action.kind === 'repair') this.callbacks.onRepair(action.id);
@@ -947,6 +989,7 @@ export class Stage {
       }
     } else if (this.view === 'shop') {
       points = this.rack.points();
+      points.push(...this.altar.points());
       this.rent.group.updateWorldMatrix(true, false);
       points.push(...[-1, 1].flatMap(x => [-1, 1].map(y => this.rent.group.localToWorld(new THREE.Vector3(x * .69, y * .25, .03)))));
       const sign = touch && tall ? this.room.getObjectByName('shop-sign') : null;
@@ -975,6 +1018,10 @@ export class Stage {
       points = this.toolShelf.points();
       target = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
       direction = gaze(6, this.toolShelf.group.rotation.y);
+    } else if (this.view === 'altar') {
+      points = this.altar.points();
+      target = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
+      direction = gaze(desktop ? 4 : 2);
     } else {
       points = this.board.points();
       target = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
@@ -995,11 +1042,13 @@ export class Stage {
     if (!this.ready) return;
     const tall = this.camera.aspect < 0.8;
     const desktop = desktopLayout(width, height);
+    this.altar.group.position.set(tall ? 0 : -1.1, tall ? 2.65 : 1.98, WALL_Z + .15);
+    this.altar.group.scale.setScalar(.8);
     this.robots.layout(!desktop);
     this.rack.layout(tall);
     const shelf = this.room.getObjectByName('shelf');
     if (shelf) {
-      shelf.position.y = desktop ? 0.2 : tall ? 3 : 0;
+      shelf.position.y = desktop ? 0.2 : tall ? 4.5 : 0;
       shelf.position.z = desktop ? WALL_Z * 0.38 : 0;
       shelf.scale.setScalar(desktop ? 0.62 : 1);
     }
@@ -1012,7 +1061,8 @@ export class Stage {
     this.rent.group.scale.setScalar(desktop ? .85 : tall ? 1.05 : .85);
     this.room.children.forEach((prop) => layoutCounterProp(prop, desktop));
     this.board.group.scale.setScalar(desktop ? 0.86 : 1);
-    this.board.group.position.set(desktop ? 1.8 : tall ? 1.22 : 1.75, 0, RACK_Z - 0.05);
+    const boardX = desktop ? 1.8 : tall ? 1.22 : 1.75;
+    this.board.group.position.set(boardX + (this.state?.prestige.tier && !tall ? .35 : 0), 0, RACK_Z - 0.05);
     this.board.group.rotation.y = tall ? -0.3 : -0.38;
     this.aim();
     this.queueHudMeasurement();
@@ -1030,9 +1080,11 @@ export class Stage {
     const onTicket = (lx: number, ly: number) => screen(new THREE.Vector3(m.window.x + lx * m.window.w - 0.5, FACE_Y, m.window.y + ly * m.window.w - m.height / 2));
     canvas.dataset.cells = JSON.stringify(m.layout.cells.map((cell) => [...onTicket(cell.x, cell.y), ...onTicket(cell.x + cell.w, cell.y + cell.h)]));
     const rack: Record<string, readonly [number, number]> = {};
-    for (const id of ['dong', 'bac', 'vang', 'ngoc', 'rong'] as const) rack[id] = screen(this.rack.anchor(id));
+    for (const def of TICKETS.filter(def => (def.minimumPrestige ?? 0) <= (this.state?.prestige.tier ?? 0))) rack[def.id] = screen(this.rack.anchor(def.id));
     canvas.dataset.rack = JSON.stringify(rack);
     canvas.dataset.board = JSON.stringify(screen(new THREE.Box3().setFromPoints(this.board.points()).getCenter(new THREE.Vector3())));
+    canvas.dataset.altar = JSON.stringify(screen(this.altar.anchor()));
+    canvas.dataset.altarArmed = this.altarArmed ? '1' : '0';
     canvas.dataset.tools = JSON.stringify(Object.fromEntries(TOOLS.map(tool => [tool.id, screen(this.toolShelf.anchor(tool.id))])));
     canvas.dataset.equippedTool = this.state?.equippedTool ?? 'coin';
     canvas.dataset.repairs = JSON.stringify(Object.fromEntries(TOOLS.map(tool => [tool.id, screen(this.toolShelf.repairAnchor(tool.id))])));
@@ -1056,6 +1108,13 @@ export class Stage {
     if (this.ready) this.clock(time);
     if (this.paused || document.hidden) return;
     this.robots?.tick(dt, time);
+    if (this.altar?.eligible) {
+      this.incenseTime -= dt;
+      if (this.incenseTime <= 0) {
+        this.incenseTime = .65;
+        this.particles.emit(this.altar.smokePoint(), { name: 'smoke-puff', count: 1, speed: [.08, .14], spread: .2, size: [.055, .095], life: [1.4, 2.1], gravity: -.02 });
+      }
+    }
     if (this.rentStamp > 0) { this.rentStamp = Math.max(0, this.rentStamp - dt); if (!this.rentStamp && this.state) this.sync(); }
     if (this.receiptTime > 0) { this.receiptTime -= dt; if (this.receiptTime <= 0) this.receipt.group.visible = false; }
 

@@ -1,11 +1,48 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { buyTicket, revealTicket } from '../game/economy';
 import { createInitialState, type GameState } from '../game/state';
-import { promptFor } from './Hud';
+import { PromptChip, promptFor } from './Hud';
+import { prestigeScenario } from './debugPrestige';
 
 const fresh = (): GameState => createInitialState(1);
 
+describe('PromptChip keyboard activation', () => {
+  it.each(['Enter', ' '])('prevents native %j repeat clicks on the incense button', key => {
+    for (const armed of [false, true]) {
+      const prompt = promptFor(prestigeScenario('eligible'), 0, 'altar', 0, armed);
+      const button = PromptChip({ prompt, onCommand: vi.fn() }).props.children.at(-1);
+      expect(button.type).toBe('button');
+      const event = { key, repeat: true, preventDefault: vi.fn() };
+      button.props.onKeyDown(event);
+      expect(event.preventDefault).toHaveBeenCalledOnce();
+      event.preventDefault.mockClear();
+      button.props.onKeyDown({ ...event, repeat: false });
+      expect(event.preventDefault).not.toHaveBeenCalled();
+    }
+  });
+  it('preserves keyboard repeat on other HUD actions', () => {
+    const button = PromptChip({ prompt: promptFor(fresh(), 0, 'shop', 0), onCommand: vi.fn() }).props.children.at(-1);
+    const event = { key: 'Enter', repeat: true, preventDefault: vi.fn() };
+    button.props.onKeyDown(event);
+    expect(event.preventDefault).not.toHaveBeenCalled();
+  });
+});
+
 describe('promptFor', () => {
+  it('offers two-step incense confirmation, blocks ineligible runs and handles tier V', () => {
+    expect(promptFor(fresh(), 0, 'altar', 0).button).toMatchObject({ command: 'incense', disabled: true });
+    const state = prestigeScenario('eligible');
+    expect(promptFor(state, 0, 'altar', 0).button).toMatchObject({ command: 'incense', disabled: false });
+    expect(promptFor(state, 0, 'altar', 0, true).message).toContain('6 giây');
+    expect(promptFor(prestigeScenario('complete'), 0, 'altar', 0).button).toBeUndefined();
+  });
+  it('offers Vũ Trụ after prestige and shows the remaining active-play countdown', () => {
+    const state = prestigeScenario('board');
+    const prompt = promptFor(state, 0, 'board', 0);
+    expect(prompt.message).toContain('0:40');
+    expect(prompt.button?.disabled).toBe(true);
+    expect(promptFor({ ...state, licenseElapsedMs: 20 * 60_000 }, 0, 'board', 0).button?.disabled).toBe(false);
+  });
   it('offers the net payout rather than the gross prize', () => {
     const state = revealTicket(buyTicket(fresh(), 'dong'));
     state.ticket = { ...state.ticket!, prize: 24000, gross: 24000, tax: 1680, net: 22320 };

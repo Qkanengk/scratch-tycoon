@@ -39,9 +39,13 @@ export interface TicketStats {
   bigWins: number;
 }
 
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 
 export interface GameState {
+  /** Active-play prizes in this run, after tax and the permanent bonus, before rent withholding. */
+  prestige: { tier: number; runEarned: number };
+  /** Active play since the last purchased licence. */
+  licenseElapsedMs: number;
   automation: Automation;
   version: typeof SAVE_VERSION;
   money: number;
@@ -74,6 +78,8 @@ export function emptyStats(): Record<TicketId, TicketStats> {
 export function createInitialState(seed: number): GameState {
   return {
     version: SAVE_VERSION,
+    prestige: { tier: 0, runEarned: 0 },
+    licenseElapsedMs: 0,
     automation: initialAutomation(),
     money: BALANCE.startingMoney,
     durability: { coin: 1, key: 1, card: 1, scraper: 1, machine: 1, laser: 1 },

@@ -131,6 +131,7 @@ export function drawFace(canvas: HTMLCanvasElement, id: TicketId, ticket: Ticket
   const m = ticketMetrics(id);
   const S = canvas.width;
   const ctx = canvas.getContext('2d')!;
+  const cosmic = id === 'vutru';
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = pattern(ctx, `paper-${id}`, S * 0.26);
   ctx.fillRect(0, 0, S, canvas.height);
@@ -143,8 +144,8 @@ export function drawFace(canvas: HTMLCanvasElement, id: TicketId, ticket: Ticket
   ctx.textAlign = 'center';
   ctx.font = `800 ${plateH * 0.62}px ${FONT}`;
   const nameW = ctx.measureText(name).width + plateH * 0.7;
-  plate(ctx, MARGIN * S, top, nameW, plateH, plateH * 0.3, palette.cream, 7);
-  text(ctx, name, MARGIN * S + nameW / 2, top + plateH * 0.55, plateH * 0.62);
+  plate(ctx, MARGIN * S, top, nameW, plateH, plateH * 0.3, cosmic ? '#554080' : palette.cream, 7);
+  text(ctx, name, MARGIN * S + nameW / 2, top + plateH * 0.55, plateH * 0.62, cosmic ? '#fff0bd' : palette.ink);
 
   const jackpot = (def.prizes[def.prizes.length - 1]?.multiplier ?? 0) * def.price;
   const prizeW = S * (1 - 2 * MARGIN) - nameW - S * 0.03;
@@ -155,14 +156,14 @@ export function drawFace(canvas: HTMLCanvasElement, id: TicketId, ticket: Ticket
 
   // Scratch window.
   const w = m.window;
-  plate(ctx, w.x * S, w.y * S, w.w * S, w.h * S, S * 0.035, palette.paper, 7);
+  plate(ctx, w.x * S, w.y * S, w.w * S, w.h * S, S * 0.035, cosmic ? '#373164' : palette.paper, 7);
   const unit = w.w * S;
   const place = (r: Rect): Rect => ({ x: w.x * S + r.x * unit, y: w.y * S + r.y * unit, w: r.w * unit, h: r.h * unit });
   for (const label of m.layout.labels) {
     const r = place({ x: 0, y: label.y, w: 1, h: label.h });
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    text(ctx, t(`ticket.label.${label.key}`).toUpperCase(), r.x + r.w / 2, r.y + r.h * 0.55, r.h * 0.62, '#8a5a2b');
+    text(ctx, t(`ticket.label.${label.key}`).toUpperCase(), r.x + r.w / 2, r.y + r.h * 0.55, r.h * 0.62, cosmic ? '#e9dbff' : '#8a5a2b');
   }
   m.layout.cells.forEach((rect, i) => {
     const cell = ticket?.cells[i];
@@ -182,7 +183,7 @@ export function drawFace(canvas: HTMLCanvasElement, id: TicketId, ticket: Ticket
   const serial = ticket ? t('ticket.serial', { serial: String(ticket.serial).padStart(6, '0') }) : t('ticket.blank');
   const price = ticket?.free ? t('ticket.free') : `${formatCompact(def.price)} xu`;
   text(ctx, `${serial}  ·  ${price}`, S / 2, footY + footH * 0.16 + band * 0.72, band * 0.26, '#8a5a2b', 700);
-  if (id === 'vang' || id === 'ngoc' || id === 'rong') {
+  if (def.price >= ticketDef('vang').price) {
     const sealX = S * .86;
     const sealY = footY + footH * .78;
     ctx.fillStyle = palette.cream;

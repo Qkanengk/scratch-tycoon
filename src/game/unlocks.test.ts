@@ -22,7 +22,7 @@ function readyForBac(): GameState {
 
 describe('unlock data', () => {
   it('only the first ticket is free to play', () => {
-    expect(TICKETS.map((def) => def.unlock === null)).toEqual([true, false, false, false, false]);
+    expect(TICKETS.map((def) => def.unlock === null)).toEqual([true, false, false, false, false, false]);
   });
 
   it('each ticket is unlocked through the one before it', () => {
@@ -87,7 +87,7 @@ describe('licenses', () => {
   });
 
   it('missions count big wins of the right ticket', () => {
-    const state = { ...readyForBac(), money: 1e6, totalEarned: 1e6 };
+    const state = { ...readyForBac(), money: 1e6, totalEarned: 1e6, licenseElapsedMs: 20 * 60_000 };
     const mission = ticketDef('vang').unlock!.mission;
     expect(mission.ticket).toBe('bac');
     expect(unlockProgress(state, 'vang').bigWinsDone).toBe(false);

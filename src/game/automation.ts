@@ -1,4 +1,5 @@
 import { AUTOMATION as A } from '../data/automation';
+import { PRESTIGE } from '../data/prestige';
 import { buyTicket, collectTicket, revealTicket } from './economy';
 import type { GameState, Ticket } from './state';
 import { ticketDef } from '../data/tickets';
@@ -38,7 +39,7 @@ export function initialAutomation(): Automation {
 export const batteryCapacity = (s: GameState) => A.baseCapacity * A.capacityGrowth ** s.automation.capacity;
 export const robotInterval = (s: GameState) => A.ticketMs * A.speedFactor ** s.automation.speed;
 export const awayCapMs = (s: GameState) => (A.capHours + s.automation.capLevel * 2) * 3_600_000;
-export const ticketCharge = (t: Ticket) => 1 + t.cells.filter(c => c.type === 'bomb').length * A.bombDrain;
+export const ticketCharge = (t: Ticket, tier = 0) => (1 + t.cells.filter(c => c.type === 'bomb').length * A.bombDrain) * (tier >= 5 ? PRESTIGE.batteryMultiplier : 1);
 
 export function robotContext(s: GameState, index = 0): 'robot' | 'recharge' | 'load' {
   const r = s.automation.robots[index];
@@ -110,7 +111,7 @@ export function advanceAutomation(state: GameState, elapsedMs: number, away = fa
     const duration = (robot: Robot) => {
       if (robot.charging) return away ? Infinity : (capacity - robot.charge) / capacity * A.freeChargeMs;
       if (!robot.tray || robot.charge <= 1e-9) return Infinity;
-      return Math.min(interval - robot.progressMs, robot.charge * interval / ticketCharge(robot.tray));
+      return Math.min(interval - robot.progressMs, robot.charge * interval / ticketCharge(robot.tray, s.prestige.tier));
     };
     const next = Math.min(...s.automation.robots.map(duration));
     if (!Number.isFinite(next)) break;
@@ -123,7 +124,7 @@ export function advanceAutomation(state: GameState, elapsedMs: number, away = fa
         }
       } else if (robot.tray && robot.charge > 1e-9) {
         robot.progressMs += step;
-        robot.charge = Math.max(0, robot.charge - step * ticketCharge(robot.tray) / interval);
+        robot.charge = Math.max(0, robot.charge - step * ticketCharge(robot.tray, s.prestige.tier) / interval);
         if (robot.charge <= 1e-9) robot.charge = 0;
       }
     }
@@ -136,6 +137,7 @@ export function advanceAutomation(state: GameState, elapsedMs: number, away = fa
         const net = result.money - s.money;
         s = { ...result, ticket: state.ticket, equippedTool: state.equippedTool,
           stats: away ? state.stats : result.stats, totalEarned: away ? state.totalEarned : result.totalEarned,
+          prestige: away ? state.prestige : result.prestige,
           automation: { ...s.automation, report: { tickets: s.automation.report.tickets + 1, net: s.automation.report.net + net } } } as typeof s;
         robot.tray = null;
         robot.progressMs = 0;

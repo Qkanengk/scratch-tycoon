@@ -1,5 +1,6 @@
 import { toolDef, type ToolId } from '../data/tools';
 import { BALANCE } from '../data/balance';
+import { PRESTIGE } from '../data/prestige';
 import type { GameState } from './state';
 
 export type ToolIntent = { id: ToolId; kind: 'buy' | 'equip' | 'upgrade'; level: number };
@@ -25,7 +26,7 @@ export function toolRadius(state: GameState): number {
 export function wearTool(state: GameState, wear: number): GameState {
   const id = state.equippedTool;
   if (id === 'coin' || !Number.isFinite(wear) || wear <= 0) return state;
-  return { ...state, durability: { ...state.durability, [id]: Math.max(0, state.durability[id] - wear) } };
+  return { ...state, durability: { ...state.durability, [id]: Math.max(0, state.durability[id] - wear * (state.prestige.tier >= 4 ? PRESTIGE.wearMultiplier : 1)) } };
 }
 
 export function repairPrice(state: GameState, id: ToolId): number {

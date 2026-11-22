@@ -2,20 +2,30 @@ import { BALANCE } from '../src/data/balance';
 import { TICKETS, type TicketId } from '../src/data/tickets';
 import { TOOLS, type ToolId } from '../src/data/tools';
 import { buyTool, repairPrice, repairTool, toolRadius, toolUpgradePrice, upgradeTool } from '../src/game/tools';
-import { advancePlayTime, buyTicket, claimPromo, collectTicket, isBroke, returnFake, revealTicket, updatePromo } from '../src/game/economy';
+import { advancePlayTime, buyTicket, claimPromo, collectTicket, isBroke, isTicketAvailable, returnFake, revealTicket, updatePromo } from '../src/game/economy';
 import { createInitialState } from '../src/game/state';
 import { buyLicense, unlockProgress } from '../src/game/unlocks';
 import { advanceAutomation, automationAction, automationPrice, loadRobot, type AutomationAction } from '../src/game/automation';
+import { canPrestige, prestige as performPrestige } from '../src/game/prestige';
 
 export const CYCLE_SECONDS = 4;
-const PRESTIGE_EARNINGS = 10_000_000_000;
+export interface PacingRun {
+  intervals: Partial<Record<TicketId, number>>;
+  firstRobot: number;
+  autoBuy: number;
+  away: number;
+}
+
+const emptyRun = (): PacingRun => ({ intervals: {}, firstRobot: Infinity, autoBuy: Infinity, away: Infinity });
 
 export function simulatePacing(seed: number, horizonSeconds: number, cycleSeconds = CYCLE_SECONDS, robots = false) {
   let state = createInitialState(seed);
   let elapsed = 0;
   let previousUnlock = 0;
   let next = 1;
-  const intervals: Partial<Record<TicketId, number>> = {};
+  const runs: PacingRun[] = [emptyRun()];
+  const prestigeTimes: number[] = [];
+  let runStart = 0;
   let prestige = Infinity;
   let firstUpgrade = Infinity;
   let firstRobot = Infinity;
@@ -25,17 +35,38 @@ export function simulatePacing(seed: number, horizonSeconds: number, cycleSecond
 
   while (elapsed <= horizonSeconds) {
     const cycleStart = elapsed;
-    const candidate = TICKETS[next];
+    if (canPrestige(state)) {
+      prestigeTimes.push(elapsed);
+      prestige = Math.min(prestige, elapsed);
+      state = performPrestige(state);
+      runStart = elapsed;
+      previousUnlock = elapsed;
+      next = 1;
+      runs.push(emptyRun());
+    }
+    const run = runs[state.prestige.tier]!;
+    const tickets = TICKETS.filter(def => isTicketAvailable(state, def.id));
+    const candidate = tickets[next];
+    if (candidate?.unlock) {
+      const progress = unlockProgress(state, candidate.id);
+      if (!progress.timeDone && progress.revenueDone && progress.scratchedDone && progress.bigWinsDone && progress.affordable) {
+        const waitMs = candidate.unlock.minimumPlayMs! - state.licenseElapsedMs;
+        const countedMs = Math.min(waitMs, cycleSeconds * 1000, (horizonSeconds - elapsed) * 1000);
+        if (countedMs <= 0) break;
+        state = advancePlayTime(state, countedMs);
+        if (robots) state = advanceAutomation(state, countedMs);
+        elapsed += countedMs / 1000;
+        continue;
+      }
+    }
     if (candidate && unlockProgress(state, candidate.id).canBuyLicense) {
-      intervals[candidate.id] = elapsed - previousUnlock;
+      run.intervals[candidate.id] = elapsed - previousUnlock;
       previousUnlock = elapsed;
       state = buyLicense(state, candidate.id);
       next++;
     }
-    if (state.totalEarned >= PRESTIGE_EARNINGS) prestige = Math.min(prestige, elapsed);
-    if (!candidate && Number.isFinite(prestige)) break;
     // Keep ticket money in reserve and spend at most 15% of the purse per improvement.
-    const reserve = TICKETS[next - 1]!.price;
+    const reserve = tickets[next - 1]!.price;
     if (robots) {
       const actions: AutomationAction[] = state.automation.robots.length ? ['autoBuy', 'away', 'speed', 'capacity', 'robot', 'cap'] : ['robot'];
       const action = actions.filter(action => automationPrice(state, action) <= state.money * .15 && state.money - automationPrice(state, action) >= reserve)
@@ -44,6 +75,9 @@ export function simulatePacing(seed: number, horizonSeconds: number, cycleSecond
       if (state.automation.robots.length) firstRobot = Math.min(firstRobot, elapsed);
       if (state.automation.autoBuy) autoBuy = Math.min(autoBuy, elapsed);
       if (state.automation.away) away = Math.min(away, elapsed);
+      if (state.automation.robots.length) run.firstRobot = Math.min(run.firstRobot, elapsed - runStart);
+      if (state.automation.autoBuy) run.autoBuy = Math.min(run.autoBuy, elapsed - runStart);
+      if (state.automation.away) run.away = Math.min(run.away, elapsed - runStart);
       for (let i = 0; i < state.automation.robots.length; i++) {
         const robot = state.automation.robots[i]!;
         if ((robot.charging || robot.charge <= 0) && state.money >= reserve + automationPrice(state, 'recharge', i)) state = automationAction(state, 'recharge', i);
@@ -67,7 +101,7 @@ export function simulatePacing(seed: number, horizonSeconds: number, cycleSecond
         firstUpgrade = Math.min(firstUpgrade, elapsed);
       } else {
         state = buyTool(state, improvement.id);
-        toolPurchases[improvement.id] = elapsed;
+        toolPurchases[improvement.id] ??= elapsed;
       }
     }
     if (isBroke(state)) {
@@ -75,7 +109,7 @@ export function simulatePacing(seed: number, horizonSeconds: number, cycleSecond
       elapsed += BALANCE.promoIntervalMs / 1000;
     } else {
       for (let i = next - 1; i >= 0; i--) {
-        const def = TICKETS[i];
+        const def = tickets[i];
         if (def && state.money >= def.price) {
           state = buyTicket(state, def.id);
           break;
@@ -91,7 +125,8 @@ export function simulatePacing(seed: number, horizonSeconds: number, cycleSecond
     state = advancePlayTime(state, (elapsed - cycleStart) * 1000);
     if (robots) state = advanceAutomation(state, (elapsed - cycleStart) * 1000);
   }
-  return { intervals, prestige, firstUpgrade, toolPurchases, firstRobot, autoBuy, away };
+  return { intervals: runs[0]!.intervals, runs, prestige, prestigeTimes, firstUpgrade, toolPurchases, firstRobot, autoBuy, away,
+    runEarned: state.prestige.runEarned, totalEarned: state.totalEarned };
 }
 
 export function percentile(samples: readonly number[], p: number): number {

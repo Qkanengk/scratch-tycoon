@@ -1,5 +1,6 @@
 import { BALANCE } from '../data/balance';
 import { AUTOMATION } from '../data/automation';
+import { PRESTIGE } from '../data/prestige';
 import { batteryCapacity, initialAutomation, robotInterval, type Automation, type Robot } from './automation';
 import { initialToolLevels, TOOLS, type ToolId } from '../data/tools';
 import { BIG_WIN_MULTIPLIER, TICKET_IDS, ticketDef, type TicketId, type TicketRules } from '../data/tickets';
@@ -19,6 +20,7 @@ type RawSave = Record<string, unknown>;
  * Add an entry (and a test) whenever the shape of GameState changes.
  */
 const MIGRATIONS: Record<number, (save: RawSave) => RawSave> = {
+  5: save => ({ ...save, version: 6, prestige: { tier: 0, runEarned: amount(save.totalEarned, 0) }, licenseElapsedMs: 0 }),
   4: save => ({ ...save, version: 5, automation: initialAutomation() }),
   3: (save) => ({ ...save, version: 4, durability: createInitialState(0).durability, rentElapsedMs: 0, rentDebt: 0,
     ticket: isRecord(save.ticket) ? { ...save.ticket, gross: save.ticket.prize, tax: 0 } : save.ticket }),
@@ -77,9 +79,10 @@ function isCell(cell: unknown, rules: TicketRules): boolean {
   }
 }
 
-function readTicket(value: unknown): Ticket | null {
+function readTicket(value: unknown, prestigeTier = 0): Ticket | null {
   if (!isRecord(value) || !isTicketId(value.type) || !Array.isArray(value.cells)) return null;
   const def = ticketDef(value.type);
+  if (prestigeTier < (def.minimumPrestige ?? 0)) return null;
   const tier = amount(value.tier, -1);
   if (value.cells.length !== cellCount(def.rules) || !def.prizes[tier]) return null;
   if (!value.cells.every((cell) => isCell(cell, def.rules))) return null;
@@ -89,14 +92,15 @@ function readTicket(value: unknown): Ticket | null {
     && scratchProgress(mask) < 1 ? encodeMask(mask) : undefined;
   const fakeTell = value.free !== true && (value.fakeTell === 'missing-seal' || value.fakeTell === 'misprinted-serial') ? value.fakeTell : null;
   const gross = fakeTell ? 0 : amount(value.gross, amount(value.prize, (def.prizes[tier]?.multiplier ?? 0) * def.price));
-  const tax = Math.min(gross, amount(value.tax, Math.floor(Math.max(0, gross - def.price) * BALANCE.taxRates[def.id])));
+  const tax = Math.min(gross, amount(value.tax, Math.floor(Math.max(0, gross - def.price)
+    * (BALANCE.taxRates[def.id] + (prestigeTier >= 1 ? PRESTIGE.taxSurcharge : 0)))));
   return {
     serial: amount(value.serial, 0),
     type: value.type,
     cells: value.cells as Ticket['cells'],
     tier,
     prize: gross,
-    gross, tax, net: gross - tax,
+    gross, tax, net: Math.floor((gross - tax) * (1 + prestigeTier * PRESTIGE.bonusPerTier)),
     fakeTell,
     scratchStarted: value.scratchStarted === true || value.revealed === true || (scratch !== undefined && scratchProgress(mask) > 0),
     hitBombs: Array.isArray(value.hitBombs) ? [...new Set(value.hitBombs.filter((i): i is number => Number.isInteger(i) && value.cells instanceof Array && (value.cells[i] as { type?: string })?.type === 'bomb'))] : [],
@@ -106,7 +110,7 @@ function readTicket(value: unknown): Ticket | null {
   };
 }
 
-function readAutomation(value: unknown): Automation {
+function readAutomation(value: unknown, prestigeTier: number): Automation {
   const base = initialAutomation();
   if (!isRecord(value)) return base;
   const level = (v: unknown, max: number) => Number.isInteger(v) && typeof v === 'number' && v >= 0 && v <= max ? v : 0;
@@ -116,7 +120,7 @@ function readAutomation(value: unknown): Automation {
     lastSeenAt: amount(value.lastSeenAt, 0) };
   const shell = { automation: a } as GameState;
   a.robots = Array.isArray(value.robots) ? value.robots.slice(0, 3).filter(isRecord).map((r): Robot => {
-    const tray = readTicket(r.tray);
+    const tray = readTicket(r.tray, prestigeTier);
     return { charge: Math.min(batteryCapacity(shell), amount(r.charge, 0)), charging: r.charging === true,
       tray: tray && !tray.revealed && !tray.free ? tray : null,
       progressMs: tray && !tray.revealed ? Math.min(robotInterval(shell) - 1e-6, amount(r.progressMs, 0)) : 0 };
@@ -144,6 +148,11 @@ export function migrate(raw: unknown, now = Date.now()): GameState | null {
   if (version !== SAVE_VERSION) return null;
 
   const base = createInitialState(0);
+  const rawPrestige = isRecord(save.prestige) ? save.prestige : {};
+  const tier = Math.min(PRESTIGE.maxTier, Math.floor(amount(rawPrestige.tier, 0)));
+  const totalEarned = amount(save.totalEarned, 0);
+  const prestige = { tier, runEarned: Math.min(totalEarned, amount(rawPrestige.runEarned, 0)) };
+  const available = (id: TicketId) => tier >= (ticketDef(id).minimumPrestige ?? 0);
   const ownedTools: ToolId[] = TOOLS.filter(tool => tool.id === 'coin'
     || (Array.isArray(save.ownedTools) && save.ownedTools.includes(tool.id))).map(tool => tool.id);
   const toolLevels = initialToolLevels();
@@ -169,18 +178,20 @@ export function migrate(raw: unknown, now = Date.now()): GameState | null {
       };
     }
   }
-  const ticket = readTicket(save.ticket);
+  const ticket = readTicket(save.ticket, tier);
   const damaged = save.ticket;
   // Only explicitly paid, unrevealed tickets qualify; never pay an unverified prize.
   const refund = ticket === null && isRecord(damaged) && isTicketId(damaged.type)
-    && damaged.free === false && damaged.revealed === false ? ticketDef(damaged.type).price : 0;
+    && available(damaged.type) && damaged.free === false && damaged.revealed === false ? ticketDef(damaged.type).price : 0;
   const latestPromo = now + BALANCE.promoIntervalMs;
   const promoReadyAt = typeof save.promoReadyAt === 'number'
     ? Number.isFinite(save.promoReadyAt) ? Math.min(save.promoReadyAt, latestPromo) : latestPromo
     : null;
   return {
     version: SAVE_VERSION,
-    automation: readAutomation(save.automation),
+    prestige,
+    licenseElapsedMs: amount(save.licenseElapsedMs, 0),
+    automation: readAutomation(save.automation, tier),
     money: amount(save.money, base.money) + refund,
     durability,
     rentElapsedMs: amount(save.rentElapsedMs, 0) % BALANCE.rentIntervalMs,
@@ -188,13 +199,13 @@ export function migrate(raw: unknown, now = Date.now()): GameState | null {
     ownedTools,
     toolLevels,
     equippedTool,
-    totalEarned: amount(save.totalEarned, 0),
+    totalEarned,
     rngState: amount(save.rngState, 0) >>> 0,
     nextSerial: amount(save.nextSerial, 1),
     ticket,
-    licenses: Array.isArray(save.licenses) ? TICKET_IDS.filter((id) => (save.licenses as unknown[]).includes(id)) : [],
+    licenses: Array.isArray(save.licenses) ? TICKET_IDS.filter((id) => available(id) && (save.licenses as unknown[]).includes(id)) : [],
     stats,
-    selected: isTicketId(save.selected) ? save.selected : base.selected,
+    selected: isTicketId(save.selected) && available(save.selected) ? save.selected : base.selected,
     promoReadyAt,
   };
 }

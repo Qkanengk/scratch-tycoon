@@ -1,4 +1,4 @@
-export type TicketId = 'dong' | 'bac' | 'vang' | 'ngoc' | 'rong';
+export type TicketId = 'dong' | 'bac' | 'vang' | 'ngoc' | 'rong' | 'vutru';
 
 /** `weight` is in basis points; a ticket's weights add up to 10,000. */
 export interface PrizeTier {
@@ -27,6 +27,10 @@ export type TicketRules =
   | { kind: 'dragon'; size: number; dragons: number };
 
 export interface TicketUnlock {
+  /** Active play since the previous licence, in addition to the mission requirements. */
+  minimumPlayMs?: number;
+  /** Cash retained after paying the licence; defaults to one ticket's price. */
+  ticketReserve?: number;
   /** Lifetime prize money needed. */
   totalEarned: number;
   licenseCost: number;
@@ -34,6 +38,7 @@ export interface TicketUnlock {
 }
 
 export interface TicketDef {
+  minimumPrestige?: number;
   id: TicketId;
   price: number;
   /** Expected prize per unit of price; the prize table must add up to this. */
@@ -99,7 +104,7 @@ export const TICKETS: readonly TicketDef[] = [
       { multiplier: 100, weight: 20 },
     ],
     rules: { kind: 'lucky', winning: 3, numbers: 9, maxNumber: 40, multipliers: null },
-    unlock: unlock('bac', 22_000, 100, 215, 8),
+    unlock: { ...unlock('bac', 22_000, 100, 215, 8), minimumPlayMs: 20 * 60_000 },
   },
   {
     id: 'ngoc',
@@ -114,7 +119,7 @@ export const TICKETS: readonly TicketDef[] = [
       { multiplier: 250, weight: 10 },
     ],
     rules: { kind: 'lucky', winning: 3, numbers: 8, maxNumber: 40, multipliers: [1, 2, 3, 5] },
-    unlock: unlock('vang', 90_000, 100, 80, 3),
+    unlock: { ...unlock('vang', 90_000, 100, 80, 3), minimumPlayMs: 20 * 60_000 },
   },
   {
     id: 'rong',
@@ -129,7 +134,23 @@ export const TICKETS: readonly TicketDef[] = [
       { multiplier: 500, weight: 5 },
     ],
     rules: { kind: 'dragon', size: 4, dragons: 3 },
-    unlock: unlock('ngoc', 200_000, 2_500, 25, 1),
+    unlock: { ...unlock('ngoc', 200_000, 2_500, 25, 1), minimumPlayMs: 20 * 60_000 },
+  },
+  {
+    id: 'vutru',
+    minimumPrestige: 1,
+    price: 2_000_000,
+    baseReturn: 0.88,
+    prizes: [
+      { multiplier: 0, weight: 7679 },
+      { multiplier: 1, weight: 1500 },
+      { multiplier: 2, weight: 650 },
+      { multiplier: 10, weight: 150 },
+      { multiplier: 100, weight: 20 },
+      { multiplier: 2500, weight: 1 },
+    ],
+    rules: { kind: 'lucky', winning: 3, numbers: 9, maxNumber: 50, multipliers: [1, 2, 5, 10] },
+    unlock: { ...unlock('rong', 500_000, 10_000, 25, 1), minimumPlayMs: 20 * 60_000, ticketReserve: 0 },
   },
 ];
 

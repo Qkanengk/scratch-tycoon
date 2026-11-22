@@ -144,7 +144,7 @@ describe('save', () => {
   });
 
   it.each(TICKET_IDS)('keeps a %s ticket through a save', (id) => {
-    const rich = { ...createInitialState(9), money: 1e9, licenses: TICKET_IDS.slice(1) };
+    const rich = { ...createInitialState(9), money: 1e9, licenses: TICKET_IDS.slice(1), prestige: { tier: id === 'vutru' ? 1 : 0, runEarned: 0 } };
     const bought = buyTicket(rich, id);
     expect(bought.ticket).not.toBeNull();
     expect(deserialize(serialize(bought))?.ticket).toEqual(bought.ticket);
@@ -173,7 +173,7 @@ describe('save', () => {
   });
 
   it.each(TICKET_IDS)('refunds a damaged paid, unrevealed %s ticket exactly once', (id) => {
-    const rich = { ...createInitialState(9), money: 1e9, licenses: TICKET_IDS.slice(1) };
+    const rich = { ...createInitialState(9), money: 1e9, licenses: TICKET_IDS.slice(1).filter(owned => owned !== 'vutru' || id === 'vutru'), prestige: { tier: id === 'vutru' ? 1 : 0, runEarned: 0 } };
     const bought = buyTicket(rich, id);
     const repaired = migrate({ ...bought, ticket: { ...bought.ticket, cells: [{}] } });
     expect(repaired?.ticket).toBeNull();
@@ -389,7 +389,7 @@ describe('saved scratching', () => {
   });
 
   it.each(TICKET_IDS)('round-trips optional scratch progress for %s without a version change', (id) => {
-    const state = buyTicket({ ...createInitialState(4), money: 1e9, licenses: TICKET_IDS.slice(1) }, id);
+    const state = buyTicket({ ...createInitialState(4), money: 1e9, licenses: TICKET_IDS.slice(1).filter(owned => owned !== 'vutru' || id === 'vutru'), prestige: { tier: id === 'vutru' ? 1 : 0, runEarned: 0 } }, id);
     const mask = maskFor(id);
     scratchSegment(mask, { x: 0.1, y: 0.1 }, { x: 0.25, y: 0.1 }, 0.04);
     const saved = recordScratch(state, state.ticket!, encodeMask(mask));

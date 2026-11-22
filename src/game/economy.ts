@@ -1,4 +1,5 @@
 import { BALANCE } from '../data/balance';
+import { PRESTIGE } from '../data/prestige';
 import { BIG_WIN_MULTIPLIER, TICKETS, ticketDef, type TicketDef, type TicketId } from '../data/tickets';
 import { Rng } from './rng';
 import type { GameState, Ticket } from './state';
@@ -6,7 +7,11 @@ import { generateCells, jackpotTier } from './tickets';
 import { wearTool } from './tools';
 
 export function isUnlocked(state: GameState, id: TicketId): boolean {
-  return ticketDef(id).unlock === null || state.licenses.includes(id);
+  return isTicketAvailable(state, id) && (ticketDef(id).unlock === null || state.licenses.includes(id));
+}
+
+export function isTicketAvailable(state: GameState, id: TicketId): boolean {
+  return state.prestige.tier >= (ticketDef(id).minimumPrestige ?? 0);
 }
 
 export function canBuyTicket(state: GameState, id: TicketId): boolean {
@@ -16,16 +21,18 @@ export function canBuyTicket(state: GameState, id: TicketId): boolean {
 function placeTicket(state: GameState, def: TicketDef, free: boolean): GameState {
   const rng = new Rng(state.rngState);
   const { tier, cells } = generateCells(def, rng);
-  const fake = !free && BALANCE.fakeChances[def.id] > 0 && rng.next() < BALANCE.fakeChances[def.id];
+  const fakeChance = BALANCE.fakeChances[def.id] + (state.prestige.tier >= 3 ? PRESTIGE.fakeSurcharge : 0);
+  const fake = !free && fakeChance > 0 && rng.next() < fakeChance;
   const gross = fake ? 0 : (def.prizes[tier]?.multiplier ?? 0) * def.price;
-  const tax = Math.floor(Math.max(0, gross - def.price) * BALANCE.taxRates[def.id]);
+  const tax = Math.floor(Math.max(0, gross - def.price) * (BALANCE.taxRates[def.id] + (state.prestige.tier >= 1 ? PRESTIGE.taxSurcharge : 0)));
+  const net = Math.floor((gross - tax) * (1 + state.prestige.tier * PRESTIGE.bonusPerTier));
   const ticket: Ticket = {
     serial: state.nextSerial,
     type: def.id,
     cells,
     tier,
     prize: gross,
-    gross, tax, net: gross - tax,
+    gross, tax, net,
     fakeTell: fake ? rng.pick(['missing-seal', 'misprinted-serial'] as const) : null,
     scratchStarted: false,
     hitBombs: [],
@@ -81,6 +88,7 @@ export function collectTicket(state: GameState): GameState {
     money: state.money + ticket.net - withheld,
     rentDebt: state.rentDebt - withheld,
     totalEarned: state.totalEarned + ticket.net,
+    prestige: { ...state.prestige, runEarned: state.prestige.runEarned + ticket.net },
     ticket: null,
   };
 }
@@ -105,7 +113,8 @@ export function returnFake(state: GameState): GameState {
 }
 
 export function rentAmount(state: GameState): number {
-  return TICKETS.reduce((amount, def) => isUnlocked(state, def.id) ? BALANCE.rentAmounts[def.id] : amount, BALANCE.rentAmounts.dong as number);
+  const base = TICKETS.reduce((amount, def) => isUnlocked(state, def.id) ? BALANCE.rentAmounts[def.id] : amount, BALANCE.rentAmounts.dong as number);
+  return Math.ceil(base * (state.prestige.tier >= 2 ? PRESTIGE.rentMultiplier : 1));
 }
 
 export function timeToNextRent(state: GameState): number {
@@ -118,7 +127,7 @@ export function advancePlayTime(state: GameState, elapsedMs: number): GameState 
   const elapsed = state.rentElapsedMs + elapsedMs;
   const due = Math.floor(elapsed / BALANCE.rentIntervalMs) * rentAmount(state);
   const paid = Math.min(state.money, due);
-  return { ...state, rentElapsedMs: elapsed % BALANCE.rentIntervalMs, money: state.money - paid, rentDebt: state.rentDebt + due - paid };
+  return { ...state, licenseElapsedMs: state.licenseElapsedMs + elapsedMs, rentElapsedMs: elapsed % BALANCE.rentIntervalMs, money: state.money - paid, rentDebt: state.rentDebt + due - paid };
 }
 
 function cheapestPrice(): number {

@@ -4,10 +4,10 @@ import { TICKET_IDS } from '../data/tickets';
 import { advanceAutomation, automationAction, automationPrice, awayCapMs, batteryCapacity, loadRobot, robotInterval, settleAway, ticketCharge } from './automation';
 import { buyTicket } from './economy';
 import { deserialize, migrate, serialize } from './save';
-import { createInitialState } from './state';
+import { createInitialState, SAVE_VERSION } from './state';
 import { unlockProgress } from './unlocks';
 
-const rich = (seed = 1) => ({ ...createInitialState(seed), money: 1e8, licenses: [...TICKET_IDS] });
+const rich = (seed = 1) => ({ ...createInitialState(seed), money: 1e8, licenses: TICKET_IDS.filter(id => id !== 'vutru') });
 const hired = (seed = 1) => automationAction(rich(seed), 'robot');
 
 describe('robot work', () => {
@@ -300,12 +300,12 @@ describe('away work and saves', () => {
     expect(settleAway(s, NaN)).toBe(s);
   });
 
-  it('round-trips robots, partial trays, battery, unlocks and timestamp in v5', () => {
+  it('round-trips robots, partial trays, battery, unlocks and timestamp after migration', () => {
     const s = advanceAutomation(loadRobot(awayState(), 0), 500);
     expect(deserialize(serialize(s))).toEqual(s);
     const old = { ...rich(), version: 4, automation: undefined };
     expect(migrate(old)?.automation).toEqual(createInitialState(1).automation);
-    expect(migrate(old)?.version).toBe(5);
+    expect(migrate(old)?.version).toBe(SAVE_VERSION);
   });
 
   it('sanitizes malformed levels, battery, trays, unlocks and timestamps', () => {

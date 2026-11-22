@@ -9,7 +9,7 @@ import { layoutTicket } from '../render/layout';
 import { createMask, encodeMask, scratchSegment } from './scratch';
 
 function rich(seed = 1): GameState {
-  return { ...createInitialState(seed), money: 1e9, licenses: TICKETS.map(t => t.id) };
+  return { ...createInitialState(seed), money: 1e9, licenses: TICKETS.filter(t => !t.minimumPrestige).map(t => t.id) };
 }
 
 describe('drains', () => {
@@ -20,7 +20,7 @@ describe('drains', () => {
     expect(repairPrice(buyTool(rich(), 'scraper'), 'scraper')).toBe(0);
   });
   it('taxes only profit and preserves gross/tax/net through a save', () => {
-    for (const id of TICKETS.map(t => t.id)) {
+    for (const id of TICKETS.filter(t => !t.minimumPrestige).map(t => t.id)) {
       for (let seed = 1; seed < 100; seed++) {
         const state = buyTicket(rich(seed), id);
         const ticket = state.ticket!;

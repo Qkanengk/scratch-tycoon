@@ -6,14 +6,14 @@ import { drawFace, restoreFoil, ticketMetrics } from './ticketFace';
 vi.mock('./assets', () => ({ image: () => ({}), rasterize: () => ({}) }));
 
 describe('ticketMetrics', () => {
-  it.each(['ngoc', 'rong'] as const)('keeps the %s seal below the entire printed rule line', id => {
+  it.each(['ngoc', 'rong', 'vutru'] as const)('keeps the %s seal below the entire printed rule line', id => {
     const fillText = vi.fn();
     const arc = vi.fn();
     const translate = vi.fn();
     const ctx = new Proxy({ fillText, arc, translate, measureText: () => ({ width: 100 }), font: '' }, { get: (target, key) => Reflect.get(target, key) ?? vi.fn() });
     const canvas = { width: 1024, height: 1024, getContext: () => ctx } as unknown as HTMLCanvasElement;
     drawFace(canvas, id, null, false);
-    const rule = fillText.mock.calls.find(([text]) => text.startsWith(id === 'ngoc' ? 'Trùng số' : 'Đủ 3'))!;
+    const rule = fillText.mock.calls.find(([text]) => text.startsWith(id === 'rong' ? 'Đủ 3' : 'Trùng số'))!;
     const sealCenter = translate.mock.calls.at(-1)!;
     const radius = arc.mock.calls.at(-1)![2];
     const ruleFontHeight = .25 * 1024 * .86 * .29;
