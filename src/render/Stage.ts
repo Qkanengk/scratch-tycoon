@@ -31,6 +31,7 @@ import { Altar } from './altar';
 export type View = 'desk' | 'shop' | 'board' | 'tools' | 'robots' | 'altar';
 
 export interface StageCallbacks {
+  onContract(): void;
   onAltar(): void;
   onAutomation(action: AutomationAction | 'context', index: number): void;
   /** The player scratched enough of the ticket on the mat. */
@@ -53,7 +54,7 @@ export interface StageCallbacks {
   onBomb(ticket: Ticket, index: number): void;
 }
 
-type Action = { kind: 'altar'; offer?: boolean } | { kind: 'robots' } | { kind: 'automation'; action: AutomationAction | 'context'; index?: number } | { kind: 'ticket'; id: TicketId } | { kind: 'board' } | { kind: 'collect' } | { kind: 'tools' } | { kind: 'tool'; intent: ToolIntent | null } | { kind: 'return' } | { kind: 'repair'; id: ToolId };
+type Action = { kind: 'contract' } | { kind: 'altar'; offer?: boolean } | { kind: 'robots' } | { kind: 'automation'; action: AutomationAction | 'context'; index?: number } | { kind: 'ticket'; id: TicketId } | { kind: 'board' } | { kind: 'collect' } | { kind: 'tools' } | { kind: 'tool'; intent: ToolIntent | null } | { kind: 'return' } | { kind: 'repair'; id: ToolId };
 
 const FACE_PX = 1024;
 const FOIL_PX = 768;
@@ -702,6 +703,7 @@ export class Stage {
       if (!visible) continue;
       const action = hit.object.userData.action as Action | undefined;
       if (!action) continue;
+      if (action.kind === 'board' && this.board.contractHit(hit.uv)) return { kind: 'contract' };
       if (action.kind === 'tool' && this.view !== 'tools') return { kind: 'tools' };
       if (action.kind === 'automation' && this.view !== 'robots') return { kind: 'robots' };
       if (action.kind === 'collect' && !(this.shown?.revealed && !this.busy)) continue;
@@ -822,7 +824,8 @@ export class Stage {
   }
 
   private press(action: Action): void {
-    if (action.kind === 'altar') {
+    if (action.kind === 'contract') { this.look('board'); this.callbacks.onContract(); }
+    else if (action.kind === 'altar') {
       if (this.view === 'altar' && action.offer) this.callbacks.onAltar();
       else this.look('altar');
     }
@@ -1086,7 +1089,9 @@ export class Stage {
     const rack: Record<string, readonly [number, number]> = {};
     for (const def of TICKETS.filter(def => (def.minimumPrestige ?? 0) <= (this.state?.prestige.tier ?? 0))) rack[def.id] = screen(this.rack.anchor(def.id));
     canvas.dataset.rack = JSON.stringify(rack);
+    canvas.dataset.stock = JSON.stringify(this.state?.stock ?? {});
     canvas.dataset.board = JSON.stringify(screen(new THREE.Box3().setFromPoints(this.board.points()).getCenter(new THREE.Vector3())));
+    canvas.dataset.contract = JSON.stringify({ ...this.state?.contracts, position: screen(this.board.contractAnchor()) });
     canvas.dataset.altar = JSON.stringify(screen(this.altar.anchor()));
     canvas.dataset.altarArmed = this.altarArmed ? '1' : '0';
     canvas.dataset.tools = JSON.stringify(Object.fromEntries(TOOLS.map(tool => [tool.id, screen(this.toolShelf.anchor(tool.id))])));

@@ -1,5 +1,26 @@
 import type { TicketId } from './tickets';
 
+export const CONTRACTS = {
+  cooldownMs: [180_000, 300_000],
+  depositTickets: 1,
+  rewardTickets: 3,
+  winMultiplier: 10,
+  goals: {
+    wins: { target: 3, durationMs: 600_000 },
+    scratch: { target: 80, durationMs: 480_000 },
+    earn: { target: 40, durationMs: 420_000 },
+  },
+} as const;
+
+export const STOCK = {
+  dong: { capacity: 200, restockMs: 60_000, rushFee: 300 },
+  bac: { capacity: 200, restockMs: 120_000, rushFee: 3_000 },
+  vang: { capacity: 200, restockMs: 240_000, rushFee: 30_000 },
+  ngoc: { capacity: 200, restockMs: 360_000, rushFee: 360_000 },
+  rong: { capacity: 200, restockMs: 480_000, rushFee: 2_700_000 },
+  vutru: { capacity: 200, restockMs: 600_000, rushFee: 60_000_000 },
+} as const;
+
 export const BALANCE = {
   startingMoney: 100,
   taxRates: { dong: 0, bac: 0.04, vang: 0.09, ngoc: 0.14, rong: 0.20, vutru: 0.25 },

@@ -8,6 +8,8 @@ import { canvasTexture, image, patternPath } from './assets';
 import { palette } from './palette';
 import { inkCard } from './shapes';
 import { kioskProp } from './kioskModels';
+import type { Contract } from '../game/contracts';
+import { contractGoal } from '../ui/contractText';
 
 const W = 0.72;
 const H = 0.9;
@@ -51,12 +53,16 @@ export class LicenseBoard {
   private readonly canvas = document.createElement('canvas');
   private readonly texture = canvasTexture(this.canvas);
   private drawn = '';
+  private note: Contract | null = null;
+  private readonly notePoint = new THREE.Object3D();
 
   constructor() {
     this.canvas.width = WIDE_PX;
     this.canvas.height = Math.round((PX * H) / W);
     const card = inkCard(W, H, this.texture, 0.02);
     card.position.y = H / 2 + 0.05;
+    this.notePoint.position.set(0, (260 / this.canvas.height - 0.5) * H, 0.03);
+    card.add(this.notePoint);
     (card.getObjectByName('front') as THREE.Mesh).userData.action = { kind: 'board' };
     const lean = new THREE.Group();
     lean.add(card);
@@ -67,6 +73,7 @@ export class LicenseBoard {
   }
 
   update(state: GameState, landscape = false): void {
+    this.note = state.contracts.offered;
     const width = landscape ? WIDE_PX : PX;
     this.group.scale.x = this.group.scale.y * width / PX;
     const def = TICKETS.find((ticket) => { const progress = unlockProgress(state, ticket.id); return progress.available && !progress.unlocked; });
@@ -109,7 +116,7 @@ export class LicenseBoard {
   }
 
   private draw(key: string, title: string, rows: Row[], footer: string, ready: boolean, id: TicketId | null, landscape: boolean): void {
-    key = `${landscape}:${key}`;
+    key = `${landscape}:${key}:${JSON.stringify(this.note)}`;
     if (key === this.drawn) return;
     this.drawn = key;
     const ctx = this.canvas.getContext('2d')!;
@@ -146,7 +153,7 @@ export class LicenseBoard {
     ctx.fillText(title, w / 2, 90);
 
     const top = landscape ? 180 : 220;
-    const step = (h - top - (landscape ? 120 : 190)) / Math.max(rows.length, 1);
+    const step = (h - top - (this.note ? 370 : landscape ? 120 : 190)) / Math.max(rows.length, 1);
     rows.forEach((row, i) => {
       const y = top + i * step;
       plate(44, y + 6, 64, 64, row.done ? palette.green : '#ffffff', 16);
@@ -163,10 +170,10 @@ export class LicenseBoard {
       }
       ctx.textAlign = 'left';
       ctx.fillStyle = palette.ink;
-      ctx.font = `700 ${landscape ? 64 : 37}px ${FONT}`;
+      ctx.font = `700 ${this.note ? 30 : landscape ? 64 : 37}px ${FONT}`;
       const lines = landscape ? wrapBoardLabel(row.label, (text) => ctx.measureText(text).width, w - 170) : [row.label];
-      lines.forEach((line, index) => ctx.fillText(line, 128, y + (landscape ? 50 + index * 64 : 26), w - 170));
-      const barY = y + (landscape ? 146 : 54);
+      lines.forEach((line, index) => ctx.fillText(line, 128, y + (this.note ? 22 + index * 32 : landscape ? 50 + index * 64 : 26), w - 170));
+      const barY = y + (this.note ? step - 22 : landscape ? 146 : 54);
       const barH = landscape ? 12 : 24;
       plate(128, barY, w - 172, barH, '#ffffff', barH / 2);
       const share = Math.max(0, Math.min(1, row.share));
@@ -184,7 +191,26 @@ export class LicenseBoard {
     ctx.fillStyle = ready || rows.length === 0 ? palette.ink : '#8a7560';
     ctx.font = `800 ${landscape ? 78 : 44}px ${FONT}`;
     ctx.fillText(footer, w / 2, h - (landscape ? 60 : 95), w - 120);
+    if (this.note) {
+      plate(44, h - 350, w - 88, 180, palette.cream);
+      ctx.fillStyle = palette.ink;
+      ctx.font = `800 32px ${FONT}`;
+      ctx.fillText(t('contract.title'), w / 2, h - 320, w - 120);
+      ctx.font = `700 30px ${FONT}`;
+      const lines = wrapBoardLabel(contractGoal(this.note), text => ctx.measureText(text).width, w - 130);
+      lines.forEach((line, index) => ctx.fillText(line, w / 2, h - 280 + index * 34, w - 120));
+      ctx.fillText(t('contract.note', { reward: money(this.note.reward) }), w / 2, h - 195, w - 120);
+    }
     this.texture.needsUpdate = true;
+  }
+
+  contractHit(uv: THREE.Vector2 | undefined): boolean {
+    return !!this.note && !!uv && uv.x >= 44 / PX && uv.x <= 1 - 44 / PX
+      && uv.y >= 170 / this.canvas.height && uv.y <= 350 / this.canvas.height;
+  }
+
+  contractAnchor(): THREE.Vector3 {
+    return this.notePoint.getWorldPosition(new THREE.Vector3());
   }
 
   points(): THREE.Vector3[] {

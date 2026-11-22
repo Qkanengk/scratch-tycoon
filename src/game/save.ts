@@ -1,4 +1,6 @@
-import { BALANCE, INCIDENTS } from '../data/balance';
+import { BALANCE, CONTRACTS, INCIDENTS, STOCK } from '../data/balance';
+import { CONTRACT_KINDS, contractOffer, initialContracts, type Contract, type ContractState } from './contracts';
+import { initialStock, type Stock } from './stock';
 import { AUTOMATION } from '../data/automation';
 import { PRESTIGE } from '../data/prestige';
 import { batteryCapacity, initialAutomation, robotInterval, type Automation, type Robot } from './automation';
@@ -21,6 +23,8 @@ type RawSave = Record<string, unknown>;
  * Add an entry (and a test) whenever the shape of GameState changes.
  */
 const MIGRATIONS: Record<number, (save: RawSave) => RawSave> = {
+  8: save => ({ ...save, version: 9, contracts: initialContracts(amount(save.rngState, 0)) }),
+  7: save => ({ ...save, version: 8, stock: initialStock() }),
   6: save => ({ ...save, version: 7, incidents: initialIncidents(amount(save.rngState, 0)) }),
   5: save => ({ ...save, version: 6, prestige: { tier: 0, runEarned: amount(save.totalEarned, 0) }, licenseElapsedMs: 0 }),
   4: save => ({ ...save, version: 5, automation: initialAutomation() }),
@@ -50,6 +54,41 @@ function isRecord(value: unknown): value is RawSave {
 
 function amount(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+function readStock(value: unknown): Stock {
+  const stock = initialStock();
+  if (!isRecord(value)) return stock;
+  for (const id of TICKET_IDS) {
+    const entry = value[id];
+    if (!isRecord(entry)) continue;
+    const remaining = Math.min(STOCK[id].capacity, Math.floor(amount(entry.remaining, STOCK[id].capacity)));
+    stock[id] = { remaining, remainingMs: remaining > 0 ? 0 : Math.max(1, Math.min(STOCK[id].restockMs, amount(entry.remainingMs, STOCK[id].restockMs))) };
+  }
+  return stock;
+}
+
+function readContracts(value: unknown, seed: number, tier: number, licenses: unknown): ContractState {
+  const base = initialContracts(seed);
+  if (!isRecord(value)) return base;
+  const read = (raw: unknown): Contract | null => {
+    if (!isRecord(raw) || !isTicketId(raw.ticket)) return null;
+    const kind = CONTRACT_KINDS.find(kind => kind === raw.kind);
+    const def = ticketDef(raw.ticket);
+    if (!kind || tier < (def.minimumPrestige ?? 0) || (def.unlock && (!Array.isArray(licenses) || !licenses.includes(def.id)))) return null;
+    return contractOffer(kind, def.id);
+  };
+  const contract = read(value.active);
+  const raw = isRecord(value.active) ? value.active : null;
+  const active = contract && raw ? { ...contract,
+    progress: Math.min(contract.target - 1, Math.floor(amount(raw.progress, 0))),
+    remainingMs: Math.max(1, Math.min(contract.durationMs, amount(raw.remainingMs, contract.durationMs))) } : null;
+  const result = isRecord(value.result) && typeof value.result.success === 'boolean'
+    ? { success: value.result.success, amount: Math.min(ticketDef('vutru').price * CONTRACTS.rewardTickets, Math.floor(amount(value.result.amount, 0))) } : null;
+  return { rngState: amount(value.rngState, base.rngState) >>> 0,
+    nextInMs: Math.max(1, Math.min(CONTRACTS.cooldownMs[1], amount(value.nextInMs, base.nextInMs))),
+    offered: active ? null : read(value.offered), active,
+    resolved: Math.floor(amount(value.resolved, 0)), result };
 }
 
 function readIncidents(value: unknown, fallback: IncidentState): IncidentState {
@@ -208,6 +247,8 @@ export function migrate(raw: unknown, now = Date.now()): GameState | null {
     : null;
   return {
     version: SAVE_VERSION,
+    contracts: readContracts(save.contracts, amount(save.rngState, 0), tier, save.licenses),
+    stock: readStock(save.stock),
     prestige,
     licenseElapsedMs: amount(save.licenseElapsedMs, 0),
     automation: readAutomation(save.automation, tier),

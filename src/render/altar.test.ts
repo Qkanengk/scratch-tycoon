@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { prestigeThreshold } from '../data/prestige';
 import { createInitialState } from '../game/state';
 import { altarLines } from './altar';
+import { formatMoney } from '../game/format';
 
 describe('painted altar tablet', () => {
   it('shows fresh progress, the new bonus/curse and missing licence', () => {
     const lines = altarLines(createInitialState(1), false).join('\n');
     expect(lines).toContain('Đổi đời I');
-    expect(lines).toContain('0 / 50 Tr');
+    expect(lines).toContain(`0 / ${formatMoney(prestigeThreshold(1))}`);
     expect(lines).toContain('+20%');
     expect(lines).toContain('thuế');
     expect(lines).toContain('Rồng');

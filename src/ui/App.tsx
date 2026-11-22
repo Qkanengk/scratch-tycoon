@@ -4,13 +4,15 @@ import { ticketDef, TICKETS, type TicketId } from '../data/tickets';
 import { applyToolIntent, repairPrice, repairTool, type ToolIntent } from '../game/tools';
 import { shelfOffer } from '../render/toolShelf';
 import { buyTicket, canBuyTicket, claimPromo, collectTicket, isUnlocked, returnTicket, selectTicket, startScratch, uncoverCell } from '../game/economy';
+import { rushRestock } from '../game/stock';
 import { advanceKioskTime } from '../game/kioskTime';
 import { buyLicense, unlockProgress } from '../game/unlocks';
 import { recordReveal, recordScratch } from '../game/save';
 import { ticketContentKey } from '../game/scratch';
 import { t } from '../i18n';
 import type { Stage, StageCallbacks, View } from '../render/Stage';
-import { IncidentNotice, LookButton, PromptChip, promptFor, type Command } from './Hud';
+import { ContractNotice, IncidentNotice, LookButton, PromptChip, promptFor, type Command } from './Hud';
+import { acceptContract, declineContract } from '../game/contracts';
 import { Icon, Sticker } from './Icon';
 import { money } from './money';
 import { SavePanel } from './SavePanel';
@@ -26,6 +28,15 @@ export function App() {
   const stage = useRef<Stage | null>(null);
   const [progress, setProgress] = useState(0);
   const [view, setView] = useState<View>('shop');
+  const [contractSelected, setContractSelected] = useState(false);
+  const previousContract = useRef(state.contracts.resolved);
+  useEffect(() => {
+    if (state.contracts.resolved !== previousContract.current && state.contracts.result) {
+      const result = state.contracts.result;
+      setToast(t(result.success ? 'contract.success' : 'contract.failure', { amount: money(result.amount) }));
+    }
+    previousContract.current = state.contracts.resolved;
+  }, [state.contracts.resolved, state.contracts.result]);
   const [armedUntil, setArmedUntil] = useState(0);
   const incenseDeadline = useRef(0);
   const [muted, setMutedState] = useState(isMuted);
@@ -86,6 +97,9 @@ export function App() {
     } else if (!isUnlocked(state, id)) {
       refuse(t('hud.lockedTicket', { name }));
       stage.current?.look('board');
+    } else if (state.stock[id].remaining === 0) {
+      apply(s => selectTicket(collectTicket(s), id));
+      stage.current?.look('desk');
     } else if (!canBuyTicket(collectTicket(state), id)) {
       refuse(t('table.notEnough', { name }));
     } else {
@@ -110,6 +124,11 @@ export function App() {
 
   const run = (command: Command) => {
     if (command === 'incense') incense();
+    else if (command === 'acceptContract' || command === 'declineContract') {
+      apply(command === 'acceptContract' ? acceptContract : declineContract);
+      setContractSelected(false);
+    }
+    else if (command === 'restock') apply(s => rushRestock(s, s.selected));
     else if (command === 'awayReceipt') stage.current?.look('robots');
     else if (command === 'robot') automate('context', 0);
     else if (command === 'buy') buy(state.selected);
@@ -141,7 +160,7 @@ export function App() {
   };
 
   const handlers = useRef<StageCallbacks>(null as unknown as StageCallbacks);
-  const prompt = promptFor(state, now, view, progress, armedUntil > now);
+  const prompt = promptFor(state, now, view, progress, armedUntil > now, contractSelected);
   const keys = useRef<(event: KeyboardEvent) => void>(() => undefined);
   useEffect(() => {
     handlers.current = {
@@ -165,9 +184,10 @@ export function App() {
       onScratch: (ticket, scratch) => apply((current) => recordScratch(current, ticket, scratch)),
       onTicket: buy,
       onCollect: collect,
-      onBoard: license,
+      onBoard: () => { setContractSelected(false); license(); },
+      onContract: () => setContractSelected(true),
       onTool: tool,
-      onView: (next) => { if (next !== 'altar') disarmAltar(); setView(next); },
+      onView: (next) => { if (next !== 'altar') disarmAltar(); if (next !== 'board') setContractSelected(false); setView(next); },
     };
     keys.current = (event) => {
       if (event.target instanceof HTMLTextAreaElement) return;
@@ -223,7 +243,10 @@ export function App() {
         </button>
       </div>
 
-      <IncidentNotice incident={state.incidents.current} />
+      <div className="kiosk-notices">
+        <IncidentNotice incident={state.incidents.current} />
+        <ContractNotice state={state} />
+      </div>
 
       {toast && (
         <p className="toast" role="status" data-testid="toast">

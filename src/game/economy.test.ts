@@ -12,6 +12,8 @@ import {
   updatePromo,
 } from './economy';
 import { createInitialState, type GameState } from './state';
+import { advanceStock } from './stock';
+import { STOCK } from '../data/balance';
 
 function play(state: GameState): GameState {
   return collectTicket(revealTicket(buyTicket(state, 'dong')));
@@ -50,6 +52,7 @@ describe('buying and collecting', () => {
   it('pays the prize decided at purchase, whatever the scratching looked like', () => {
     let state = createInitialState(5);
     for (let i = 0; i < 300; i++) {
+      state = advanceStock(state, STOCK.dong.restockMs);
       const bought = buyTicket(state, 'dong');
       const prize = bought.ticket?.prize ?? 0;
       const collected = collectTicket(revealTicket(bought));

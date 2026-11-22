@@ -1,4 +1,5 @@
-import { BALANCE } from '../src/data/balance';
+import { BALANCE, STOCK } from '../src/data/balance';
+import { rushRestock } from '../src/game/stock';
 import { TICKETS, type TicketId } from '../src/data/tickets';
 import { TOOLS, type ToolId } from '../src/data/tools';
 import { buyTool, repairPrice, repairTool, toolRadius, toolUpgradePrice, upgradeTool } from '../src/game/tools';
@@ -8,6 +9,7 @@ import { createInitialState } from '../src/game/state';
 import { buyLicense, unlockProgress } from '../src/game/unlocks';
 import { automationAction, automationPrice, loadRobot, type AutomationAction } from '../src/game/automation';
 import { canPrestige, prestige as performPrestige } from '../src/game/prestige';
+import { acceptContract, canAcceptContract, declineContract } from '../src/game/contracts';
 
 export const CYCLE_SECONDS = 4;
 export const PACING_SEEDS = 384;
@@ -47,6 +49,10 @@ export function simulatePacing(seed: number, horizonSeconds: number, cycleSecond
       runs.push(emptyRun());
     }
     const run = runs[state.prestige.tier]!;
+    if (state.contracts.offered) {
+      state = canAcceptContract(state) && state.contracts.offered.deposit <= state.money * .1
+        ? acceptContract(state) : declineContract(state);
+    }
     const tickets = TICKETS.filter(def => isTicketAvailable(state, def.id));
     const candidate = tickets[next];
     if (candidate?.unlock) {
@@ -111,7 +117,8 @@ export function simulatePacing(seed: number, horizonSeconds: number, cycleSecond
     } else {
       for (let i = next - 1; i >= 0; i--) {
         const def = tickets[i];
-        if (def && state.money >= def.price) {
+        if (def && state.stock[def.id].remaining === 0 && STOCK[def.id].rushFee <= state.money * .01) state = rushRestock(state, def.id);
+        if (def && state.stock[def.id].remaining > 0 && state.money >= def.price) {
           state = buyTicket(state, def.id);
           break;
         }
