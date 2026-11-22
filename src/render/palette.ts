@@ -19,5 +19,6 @@ export const palette = {
     vang: '#f7c948',
     ngoc: '#46ad86',
     rong: '#d83a2e',
+    vutru: '#211f50',
   },
 } as const;

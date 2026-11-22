@@ -27,6 +27,17 @@ npm start          # serve the production build
 
 `npm install` with npm 10 can fail on this dependency tree with `Cannot read properties of null (reading 'edgesOut')`. When changing dependencies, regenerate the lockfile with `npx npm@11 install`; `npm ci` works with either version.
 
+### Prestige presentation fixtures
+
+In the dev server only, open `/?debug=prestige` for a deterministic, prestige-eligible kiosk.
+Add `&scene=start`, `&scene=board`, `&scene=ticket` or `&scene=complete` for a fresh run,
+the Vũ Trụ licence (with 40 active seconds left), a Vũ Trụ ticket, or Đổi đời V.
+Tap the altar or its “Thần Tài” navigation button. The first incense offering arms a six-second
+confirmation; a second offering resets the run. Leaving the altar cancels confirmation.
+These fixtures use isolated in-memory saves, never the player's localStorage; reload to reset.
+The query hook is disabled in production builds. Canvas `data-altar`, `data-board`, `data-rack`
+and `data-cells` expose screen coordinates for automated pointer tests.
+
 ## Layout
 
 ```

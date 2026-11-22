@@ -4,6 +4,7 @@ import { loadStoredSave, SAVE_KEY, updateStoredSave } from '../game/save';
 import { createInitialState, type GameState } from '../game/state';
 import { settleAway } from '../game/automation';
 import { AUTOMATION } from '../data/automation';
+import { debugPrestigeStorage } from './debugPrestige';
 
 function newGame(): GameState {
   return createInitialState((Math.random() * 2 ** 32) >>> 0);
@@ -11,7 +12,7 @@ function newGame(): GameState {
 
 function loadGame() {
   try {
-    return loadStoredSave(localStorage, newGame);
+    return loadStoredSave(debugPrestigeStorage ?? localStorage, newGame);
   } catch {
     return { state: newGame(), text: null, recovered: false, writable: false, saveFailed: true };
   }
@@ -40,7 +41,7 @@ export function useGame(): Game {
     const commit = () => {
       const time = Date.now();
       try {
-        current.current = updateStoredSave(localStorage, current.current, newGame,
+        current.current = updateStoredSave(debugPrestigeStorage ?? localStorage, current.current, newGame,
           (value) => updatePromo(transition(value, time), time), time);
       } catch {
         current.current = { ...current.current, state: updatePromo(transition(current.current.state, time), time), writable: false, saveFailed: true };
@@ -56,6 +57,7 @@ export function useGame(): Game {
 
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
+      if (debugPrestigeStorage) return;
       if (event.storageArea !== localStorage || event.key !== SAVE_KEY) return;
       // A queued event may be superseded; adoption reads the latest value and never writes it back.
       const next = loadGame();

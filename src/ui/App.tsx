@@ -16,6 +16,8 @@ import { SavePanel } from './SavePanel';
 import { StageView } from './StageView';
 import { useGame } from './useGame';
 import { advanceAutomation, automationAction, robotContext, type AutomationAction } from '../game/automation';
+import { prestige } from '../game/prestige';
+import { offerIncense } from './altarRitual';
 
 export function App() {
   const game = useGame();
@@ -23,6 +25,8 @@ export function App() {
   const stage = useRef<Stage | null>(null);
   const [progress, setProgress] = useState(0);
   const [view, setView] = useState<View>('shop');
+  const [armedUntil, setArmedUntil] = useState(0);
+  const incenseDeadline = useRef(0);
   const [muted, setMutedState] = useState(isMuted);
   const [paused, setPaused] = useState(false);
   const [toast, setToast] = useState<string | null>(() => game.saveFailed ? t('save.failed') : game.recovered ? t('save.recovered') : null);
@@ -43,6 +47,29 @@ export function App() {
   const refuse = (message: string) => {
     play('ui-error');
     setToast(message);
+  };
+
+  const disarmAltar = () => {
+    incenseDeadline.current = 0;
+    setArmedUntil(0);
+    stage.current?.setAltarArmed(false);
+  };
+
+  useEffect(() => {
+    if (!armedUntil) return;
+    const timer = setTimeout(disarmAltar, Math.max(0, armedUntil - Date.now()));
+    return () => clearTimeout(timer);
+  }, [armedUntil]);
+
+  const incense = () => {
+    const result = offerIncense(state, incenseDeadline.current, Date.now());
+    incenseDeadline.current = result.armedUntil;
+    setArmedUntil(result.armedUntil);
+    stage.current?.setAltarArmed(result.armedUntil > 0);
+    if (result.confirm) {
+      apply(current => prestige(current));
+      setToast(t('altar.toast'));
+    } else play(result.armedUntil ? 'ui-select' : 'ui-error');
   };
 
   const collect = () => {
@@ -68,7 +95,7 @@ export function App() {
   };
 
   const license = () => {
-    const next = TICKETS.filter(def => !def.minimumPrestige).find((def) => !unlockProgress(state, def.id).unlocked);
+    const next = TICKETS.find((def) => { const progress = unlockProgress(state, def.id); return progress.available && !progress.unlocked; });
     if (!next) return;
     if (!unlockProgress(state, next.id).canBuyLicense) {
       play('ui-error');
@@ -81,7 +108,8 @@ export function App() {
   };
 
   const run = (command: Command) => {
-    if (command === 'awayReceipt') stage.current?.look('robots');
+    if (command === 'incense') incense();
+    else if (command === 'awayReceipt') stage.current?.look('robots');
     else if (command === 'robot') automate('context', 0);
     else if (command === 'buy') buy(state.selected);
     else if (command === 'collect') collect();
@@ -111,10 +139,11 @@ export function App() {
   };
 
   const handlers = useRef<StageCallbacks>(null as unknown as StageCallbacks);
-  const prompt = promptFor(state, now, view, progress);
+  const prompt = promptFor(state, now, view, progress, armedUntil > now);
   const keys = useRef<(event: KeyboardEvent) => void>(() => undefined);
   useEffect(() => {
     handlers.current = {
+      onAltar: incense,
       onAutomation: automate,
       onPlayTime: elapsed => apply((current, time) => {
         const next = advanceAutomation(advancePlayTime(current, elapsed), elapsed);
@@ -136,7 +165,7 @@ export function App() {
       onCollect: collect,
       onBoard: license,
       onTool: tool,
-      onView: (next) => setView(next),
+      onView: (next) => { if (next !== 'altar') disarmAltar(); setView(next); },
     };
     keys.current = (event) => {
       if (event.target instanceof HTMLTextAreaElement) return;
@@ -144,14 +173,15 @@ export function App() {
       if (key === 'escape') setPaused((open) => !open);
       if (paused) return;
       if (key === ' ' || key === 'enter') {
+        if (event.repeat && view === 'altar') return;
         // A focused button keeps its own Space and Enter.
         if (event.target instanceof Element && event.target.closest('button, a, input, select')) return;
         event.preventDefault();
         if (prompt.button && !prompt.button.disabled) run(prompt.button.command);
       } else if (key === 'arrowup' || key === 'w') stage.current?.nod('up');
       else if (key === 'arrowdown' || key === 's') stage.current?.nod('down');
-      else if (key === 'arrowright' || key === 'd') stage.current?.look(view === 'tools' ? 'shop' : view === 'board' ? 'robots' : view === 'robots' ? 'shop' : 'board');
-      else if (key === 'arrowleft' || key === 'a') stage.current?.look(view === 'robots' ? 'board' : view === 'board' ? 'shop' : 'tools');
+      else if (key === 'arrowright' || key === 'd') { const next = stage.current?.sideView('right'); if (next) stage.current?.look(next); }
+      else if (key === 'arrowleft' || key === 'a') { const next = stage.current?.sideView('left'); if (next) stage.current?.look(next); }
     };
   });
 
@@ -200,7 +230,9 @@ export function App() {
       {view === 'desk' && <LookButton direction="up" testid="look-shop" label={t('look.shop')} onClick={() => stage.current?.look('shop')} />}
       {view === 'desk' && <LookButton direction="right" testid="look-robots" label={t('robot.title')} onClick={() => stage.current?.look('robots')} />}
       {view === 'shop' && <LookButton direction="right" testid="look-board" label={t('look.board')} onClick={() => stage.current?.look('board')} />}
-      {view === 'shop' && <LookButton direction="left" testid="look-tools" label={t('look.tools')} onClick={() => stage.current?.look('tools')} />}
+      {view === 'shop' && <LookButton direction="left" testid="look-altar" label={t('altar.nav')} onClick={() => stage.current?.look('altar')} />}
+      {view === 'altar' && <LookButton direction="left" testid="look-tools" label={t('look.tools')} onClick={() => stage.current?.look('tools')} />}
+      {view === 'altar' && <LookButton direction="right" testid="look-shop" label={t('look.shop')} onClick={() => stage.current?.look('shop')} />}
       {view === 'tools' && <LookButton direction="right" testid="look-shop" label={t('look.shop')} onClick={() => stage.current?.look('shop')} />}
       {view === 'board' && <LookButton direction="left" testid="look-shop" label={t('look.shop')} onClick={() => stage.current?.look('shop')} />}
       {view === 'board' && <LookButton direction="right" testid="look-robots" label={t('robot.title')} onClick={() => stage.current?.look('robots')} />}

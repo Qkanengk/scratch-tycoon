@@ -15,6 +15,13 @@ const WIDE_PX = 1200;
 const FONT = '"Baloo 2", system-ui, sans-serif';
 const money = (value: number) => `${formatMoney(value)} xu`;
 
+export function licenseWait(state: GameState, id: TicketId): string | null {
+  const progress = unlockProgress(state, id);
+  if (!progress.available || progress.timeDone || !progress.revenueDone || !progress.scratchedDone || !progress.bigWinsDone || !progress.affordable) return null;
+  const seconds = Math.ceil(Math.max(0, (TICKETS.find(def => def.id === id)?.unlock?.minimumPlayMs ?? 0) - state.licenseElapsedMs) / 1000);
+  return t('board.wait', { time: `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}` });
+}
+
 interface Row {
   label: string;
   done: boolean;
@@ -61,7 +68,7 @@ export class LicenseBoard {
   update(state: GameState, landscape = false): void {
     const width = landscape ? WIDE_PX : PX;
     this.group.scale.x = this.group.scale.y * width / PX;
-    const def = TICKETS.filter(def => !def.minimumPrestige).find((ticket) => !unlockProgress(state, ticket.id).unlocked);
+    const def = TICKETS.find((ticket) => { const progress = unlockProgress(state, ticket.id); return progress.available && !progress.unlocked; });
     this.next = def?.id ?? null;
     const unlock = def?.unlock;
     if (!def || !unlock) {
@@ -90,13 +97,14 @@ export class LicenseBoard {
         share: bigWins / unlock.mission.bigWins,
       },
       {
-        label: t('shop.req.license', { required: money(progress.requiredMoney), cost: money(unlock.licenseCost) }),
+        label: t(unlock.ticketReserve === 0 ? 'shop.req.licenseOnly' : 'shop.req.license', { required: money(progress.requiredMoney), cost: money(unlock.licenseCost) }),
         done: progress.affordable,
         share: state.money / progress.requiredMoney,
       },
     ];
-    const key = JSON.stringify([def.id, rows, progress.canBuyLicense]);
-    this.draw(key, t('board.for', { name: t(`ticket.${def.id}.name`) }), rows, t('shop.buyLicense', { cost: money(unlock.licenseCost) }), progress.canBuyLicense, def.id, landscape);
+    const wait = licenseWait(state, def.id);
+    const key = JSON.stringify([def.id, rows, progress.canBuyLicense, wait]);
+    this.draw(key, t('board.for', { name: t(`ticket.${def.id}.name`) }), rows, wait ?? t('shop.buyLicense', { cost: money(unlock.licenseCost) }), progress.canBuyLicense, def.id, landscape);
   }
 
   private draw(key: string, title: string, rows: Row[], footer: string, ready: boolean, id: TicketId | null, landscape: boolean): void {

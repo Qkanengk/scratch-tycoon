@@ -6,6 +6,15 @@ needs attribution; the credits below are given anyway. Preview the whole set wit
 
 ## Style rules
 
+### Đổi đời / Thần Tài
+
+The lacquer wall altar, seated Thần Tài figure, incense pot and sticks, oranges, lamp and gold ingots
+are original hand-built geometry in `src/render/altar.ts`, using the existing toon ramp and ink outlines.
+Its painted wooden tablet is original canvas lettering. Vũ Trụ's navy/violet stars and ringed planet
+are original SVG/canvas artwork (`public/assets/patterns/paper-vutru.svg`, `src/render/ticketFace.ts`).
+The ritual reuses the original `smoke-puff` and `coin` particles and existing `unlock` sound below.
+No downloaded assets or additional licences.
+
 ### Drains and hazards scene additions
 
 Rent notices, payout receipt paper, return tags, hologram seals, serial checks and tool wear scuffs are original procedural geometry/canvas artwork in `src/render` (no external assets). The repair tags reuse `public/assets/icons/wrench.png` (Kenney Game Icons, CC0 1.0, see Icons below); bombs reuse the CC0 Kenney-derived `stickers/bomb.png`; blast feedback reuses the original `particles/smoke-puff.svg` and existing game audio documented below. No new downloaded assets.

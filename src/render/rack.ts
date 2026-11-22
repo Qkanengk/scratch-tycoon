@@ -71,11 +71,12 @@ export class Rack {
   private readonly stands = new THREE.Group();
   private rows: TicketId[][] = [];
   private tall: boolean | null = null;
+  private prestige = false;
 
   constructor() {
     this.group.add(this.stands);
     const lockTexture = canvasTexture(rasterize('stickers/lock.png', 256));
-    for (const def of TICKETS.filter(def => !def.minimumPrestige)) {
+    for (const def of TICKETS) {
       const height = ticketMetrics(def.id).height * CARD_W;
       const card = inkCard(CARD_W, height, canvasTexture(sample(def.id)));
       card.position.y = height / 2;
@@ -105,7 +106,8 @@ export class Rack {
   layout(tall: boolean): void {
     if (this.tall === tall) return;
     this.tall = tall;
-    const ids = TICKETS.filter(def => !def.minimumPrestige).map((def) => def.id);
+    const ids = TICKETS.filter(def => !def.minimumPrestige || this.prestige).map((def) => def.id);
+    for (const slot of this.slots.values()) slot.group.visible = ids.includes(slot.def.id);
     this.rows = tall ? [ids.slice(0, 3), ids.slice(3)] : [ids];
     this.stands.traverse((node) => {
       const mesh = node as THREE.Mesh;
@@ -127,6 +129,12 @@ export class Rack {
   }
 
   update(state: GameState): void {
+    if (this.prestige !== (state.prestige.tier >= 1)) {
+      this.prestige = state.prestige.tier >= 1;
+      const tall = this.tall ?? false;
+      this.tall = null;
+      this.layout(tall);
+    }
     for (const slot of this.slots.values()) {
       const unlocked = unlockProgress(state, slot.def.id).unlocked;
       const affordable = state.money >= slot.def.price;
@@ -157,6 +165,7 @@ export class Rack {
     this.group.updateWorldMatrix(true, true);
     const points: THREE.Vector3[] = [];
     for (const slot of this.slots.values()) {
+      if (!slot.group.visible) continue;
       for (const [x, y] of [[-SPACING / 2, 0], [SPACING / 2, 0], [-SPACING / 2, STAND_H + slot.height], [SPACING / 2, STAND_H + slot.height]] as const) {
         points.push(slot.group.localToWorld(new THREE.Vector3(x, y, 0.17)));
       }

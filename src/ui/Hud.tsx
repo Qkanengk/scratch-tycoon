@@ -8,8 +8,11 @@ import type { View } from '../render/Stage';
 import { money } from './money';
 import { automationPrice, robotContext } from '../game/automation';
 import { awaySummaryText } from './awaySummary';
+import { canPrestige } from '../game/prestige';
+import { PRESTIGE } from '../data/prestige';
+import { licenseWait } from '../render/board';
 
-export type Command = 'buy' | 'collect' | 'promo' | 'license' | 'robot' | 'awayReceipt';
+export type Command = 'buy' | 'collect' | 'promo' | 'license' | 'robot' | 'awayReceipt' | 'incense';
 
 interface Prompt {
   tone: 'idle' | 'win' | 'jackpot' | 'lose';
@@ -20,8 +23,15 @@ interface Prompt {
 }
 
 /** What the game asks of the player right now, given what is on the desk and where they are looking. */
-export function promptFor(state: GameState, now: number, view: View, progress: number): Prompt {
+export function promptFor(state: GameState, now: number, view: View, progress: number, armed = false): Prompt {
   const ticket = state.ticket;
+  if (view === 'altar') {
+    if (state.prestige.tier >= PRESTIGE.maxTier) return { tone: 'win', message: t('prestige.max') };
+    const eligible = canPrestige(state);
+    return { tone: eligible ? 'win' : 'idle', wrap: true,
+      message: t(eligible ? armed ? 'altar.confirmPrompt' : 'altar.light' : 'altar.hint'),
+      button: { label: t(armed && eligible ? 'altar.confirmButton' : 'altar.offer'), command: 'incense', disabled: !eligible } };
+  }
   if (state.automation.awaySummary) return { tone: 'win', wrap: true, message: awaySummaryText(state.automation.awaySummary).prompt,
     button: view === 'robots' ? undefined : { label: t('robot.awayView'), command: 'awayReceipt' } };
   if (view === 'robots') {
@@ -32,11 +42,11 @@ export function promptFor(state: GameState, now: number, view: View, progress: n
   }
   if (view === 'tools') return { tone: 'idle', message: t('tools.hint') };
   if (view === 'board') {
-    const next = TICKETS.filter(def => !def.minimumPrestige).find((def) => !unlockProgress(state, def.id).unlocked);
+    const next = TICKETS.find((def) => { const progress = unlockProgress(state, def.id); return progress.available && !progress.unlocked; });
     if (!next?.unlock) return { tone: 'idle', message: t('board.allDone') };
     return {
       tone: 'idle',
-      message: t('board.for', { name: t(`ticket.${next.id}.name`) }),
+      message: licenseWait(state, next.id) ?? t('board.for', { name: t(`ticket.${next.id}.name`) }),
       button: { label: t('shop.buyLicense', { cost: money(next.unlock.licenseCost) }), command: 'license', disabled: !unlockProgress(state, next.id).canBuyLicense },
     };
   }

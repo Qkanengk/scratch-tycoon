@@ -2,10 +2,25 @@ import { describe, expect, it } from 'vitest';
 import { buyTicket, revealTicket } from '../game/economy';
 import { createInitialState, type GameState } from '../game/state';
 import { promptFor } from './Hud';
+import { prestigeScenario } from './debugPrestige';
 
 const fresh = (): GameState => createInitialState(1);
 
 describe('promptFor', () => {
+  it('offers two-step incense confirmation, blocks ineligible runs and handles tier V', () => {
+    expect(promptFor(fresh(), 0, 'altar', 0).button).toMatchObject({ command: 'incense', disabled: true });
+    const state = prestigeScenario('eligible');
+    expect(promptFor(state, 0, 'altar', 0).button).toMatchObject({ command: 'incense', disabled: false });
+    expect(promptFor(state, 0, 'altar', 0, true).message).toContain('6 giây');
+    expect(promptFor(prestigeScenario('complete'), 0, 'altar', 0).button).toBeUndefined();
+  });
+  it('offers Vũ Trụ after prestige and shows the remaining active-play countdown', () => {
+    const state = prestigeScenario('board');
+    const prompt = promptFor(state, 0, 'board', 0);
+    expect(prompt.message).toContain('0:40');
+    expect(prompt.button?.disabled).toBe(true);
+    expect(promptFor({ ...state, licenseElapsedMs: 20 * 60_000 }, 0, 'board', 0).button?.disabled).toBe(false);
+  });
   it('offers the net payout rather than the gross prize', () => {
     const state = revealTicket(buyTicket(fresh(), 'dong'));
     state.ticket = { ...state.ticket!, prize: 24000, gross: 24000, tax: 1680, net: 22320 };

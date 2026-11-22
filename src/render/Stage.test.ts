@@ -4,6 +4,25 @@ import { Stage } from './Stage';
 import { PlayClock } from './playClock';
 
 describe('stage shelf interactions', () => {
+  it('looks at the altar on the first tap and offers incense only from its view', () => {
+    const callbacks = { onAltar: vi.fn() };
+    const stage = Object.assign(Object.create(Stage.prototype), { view: 'shop', callbacks, look: vi.fn() });
+    stage.press({ kind: 'altar' });
+    expect(stage.look).toHaveBeenCalledExactlyOnceWith('altar');
+    expect(callbacks.onAltar).not.toHaveBeenCalled();
+    stage.view = 'altar';
+    stage.press({ kind: 'altar', offer: true });
+    expect(callbacks.onAltar).toHaveBeenCalledOnce();
+  });
+  it('includes the altar in both sideways routes and returns to shop on a nod down', () => {
+    const stage = Object.assign(Object.create(Stage.prototype), { view: 'shop', look: vi.fn() });
+    expect(stage.sideView('left')).toBe('altar');
+    stage.view = 'altar';
+    expect(stage.sideView('left')).toBe('tools');
+    expect(stage.sideView('right')).toBe('shop');
+    stage.nod('down');
+    expect(stage.look).toHaveBeenCalledExactlyOnceWith('shop');
+  });
   it('never scratches a return-tag press and returns only when released on the tag', () => {
     const press = vi.fn();
     const pick = vi.fn().mockReturnValue({ kind: 'return' });
