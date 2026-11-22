@@ -30,6 +30,7 @@ import { UpgradeStation, UPGRADE_IDS } from './upgradeStation';
 import { DeskRound } from './deskRound';
 import { currentRound } from '../game/upgrades';
 import type { UpgradeId } from '../data/upgrades';
+import { roundLayout, roundTileAt, type RoundLayout } from './roundLayout';
 
 /** Where the player is looking: down at the scratch mat, up at the ticket rack, or at the licence board. */
 export type View = 'desk' | 'shop' | 'board' | 'tools' | 'robots' | 'altar' | 'upgrades';
@@ -198,6 +199,7 @@ export class Stage {
   private hovering = false;
   private down: Point | null = null;
   private stroke: Point | null = null;
+  private scratchTile = 0;
   private activePointer: number | null = null;
   private readonly pointerNdc = new THREE.Vector2();
   private readonly pointer = new THREE.Vector3();
@@ -457,10 +459,10 @@ export class Stage {
     if (!state) return;
     this.toolShelf.update(state);
     this.upgrades.update(state);
-    this.roundDisplay.update(state);
+    this.roundDisplay.update(state, this.foilMaterial);
     this.roundDisplay.followers.visible = this.view === 'desk' && !this.receiptWaiting;
     const spread = Math.max(0, currentRound(state).length - 1);
-    this.mat.scale.set(1 + spread * .10, 1, 1 + spread * .08);
+    this.arrangeRound();
     if (this.roundSize !== spread + Number(state.ticket !== null)) {
       this.roundSize = spread + Number(state.ticket !== null);
       this.aim();
@@ -472,7 +474,7 @@ export class Stage {
     const ticketForReturn = state.ticket;
     const refund = ticketRefund(ticketForReturn);
     this.returnTag.group.visible = refund > 0;
-    this.returnTag.group.position.set(0, .052, this.metrics.height / 2 + .105);
+    this.positionReturnTag(this.deskLayout());
     if (this.returnTag.group.visible && this.returnKey !== String(ticketForReturn!.serial)) {
       this.returnKey = String(ticketForReturn!.serial);
       this.returnTag.draw([{ text: t('drain.return', { cost: formatCompact(refund) }), size: 55 }]);
@@ -500,7 +502,7 @@ export class Stage {
       this.first = false;
       if (ticket) {
         this.show(ticket);
-        this.applyPose(REST);
+        this.applyPose(this.restPose());
       }
       this.view = ticket ? 'desk' : 'shop';
       this.callbacks.onView(this.view);
@@ -539,7 +541,7 @@ export class Stage {
       this.show(ticket);
       play('ticket-deal');
       this.look('desk');
-      this.move(this.rackPose(ticket.type), REST, 0.5, easeInOut, () => this.setState(ticket));
+      this.move(this.rackPose(ticket.type), this.restPose(), 0.5, easeInOut, () => this.setState(ticket));
     };
     this.shown = null;
     this.mask = null;
@@ -561,6 +563,34 @@ export class Stage {
 
   private setState(ticket: Ticket | null): void {
     this.renderer.domElement.dataset.state = !ticket ? 'empty' : ticket.revealed ? 'revealed' : 'live';
+  }
+
+  private deskLayout(): RoundLayout {
+    const desktop = desktopLayout(this.host.clientWidth, this.host.clientHeight);
+    const availableHeight = Math.max(1, this.host.clientHeight - (desktop ? 70 + 120 : this.touchTop + this.touchBottom));
+    const count = this.state ? currentRound(this.state).length : 1;
+    const height = this.state?.ticket ? ticketMetrics(this.state.ticket.type).height : this.metrics.height;
+    return roundLayout(count, height, this.host.clientWidth * .96 / availableHeight, desktop, ticketRefund(this.state?.ticket ?? null) > 0);
+  }
+
+  private restPose(): Pose {
+    const tile = this.deskLayout().tiles[0];
+    return tile ? { ...REST, x: tile.x, y: FACE_Y * (1 - tile.scale), z: tile.z, scale: tile.scale } : REST;
+  }
+
+  private arrangeRound(): void {
+    if (!this.roundDisplay || !this.state) return;
+    const layout = this.deskLayout();
+    this.roundDisplay.layout(layout);
+    this.positionReturnTag(layout);
+    const margin = 2 * MAT_MARGIN * layout.scale;
+    this.mat.scale.set((layout.width + margin) / (1 + 2 * MAT_MARGIN), 1, (layout.height + margin) / (this.metrics.height + 2 * MAT_MARGIN));
+    if (!this.busy && this.shown?.serial === this.state.ticket?.serial) this.applyPose(this.restPose());
+  }
+
+  private positionReturnTag(layout: RoundLayout): void {
+    this.returnTag.group.position.set(0, .052, layout.returnZ ?? this.metrics.height / 2 + .105);
+    this.returnTag.group.scale.setScalar(layout.tiles.length > 1 ? layout.scale : 1);
   }
 
   private advanceReceipt(dt: number): void {
@@ -599,7 +629,7 @@ export class Stage {
     this.lastScratchSent = ticket.scratch;
     this.lastScratchSave = performance.now();
     this.ticket.visible = true;
-    this.returnTag.group.position.z = this.metrics.height / 2 + .105;
+    this.positionReturnTag(this.deskLayout());
     this.stroke = null;
     this.callbacks.onProgress(this.mask ? scratchProgress(this.mask) : 0);
   }
@@ -683,7 +713,8 @@ export class Stage {
       duration: 0.4,
       step: (k) => {
         if (this.shown === shown && !this.busy) {
-          this.applyPose({ ...REST, y: Math.sin(k * Math.PI) * 0.12, turn: Math.sin(k * Math.PI * 2) * 0.04 });
+          const rest = this.restPose();
+          this.applyPose({ ...rest, y: rest.y + Math.sin(k * Math.PI) * .12 * rest.scale, turn: Math.sin(k * Math.PI * 2) * .04 });
         }
       },
     });
@@ -740,7 +771,12 @@ export class Stage {
   private locate(): boolean {
     if (!this.hovering) return false;
     this.raycaster.setFromCamera(this.pointerNdc, this.camera);
-    return this.raycaster.ray.intersectPlane(this.plane, this.pointer) !== null;
+    if (this.raycaster.ray.intersectPlane(this.plane, this.pointer) === null) return false;
+    const layout = this.deskLayout();
+    const index = layout.tiles.length <= 1 ? 0 : roundTileAt(layout, this.metrics.height, this.pointer.x, this.pointer.z);
+    if (index !== this.scratchTile) this.stroke = null;
+    this.scratchTile = index;
+    return index >= 0;
   }
 
   private trackPointer(event: PointerEvent): void {
@@ -750,16 +786,22 @@ export class Stage {
 
   private foilPoint(): Point {
     const { height, window } = this.metrics;
+    const tile = this.deskLayout().tiles[this.scratchTile] ?? { x: 0, z: 0, scale: 1 };
     return {
-      x: (this.pointer.x + 0.5 - window.x) / window.w,
-      y: (this.pointer.z + height / 2 - window.y) / window.w,
+      x: ((this.pointer.x - tile.x) / tile.scale + .5 - window.x) / window.w,
+      y: ((this.pointer.z - tile.z) / tile.scale + height / 2 - window.y) / window.w,
     };
+  }
+
+  private scratchOrigin(x: number, z: number, y: number): THREE.Vector3 {
+    const tile = this.deskLayout().tiles[this.scratchTile] ?? { x: 0, z: 0, scale: 1 };
+    return new THREE.Vector3(tile.x + x * tile.scale, y, tile.z + z * tile.scale);
   }
 
   /** The thing under the pointer that can be pressed, if any. */
   private pick(event: PointerEvent): Action | null {
     this.raycaster.setFromCamera(this.ndc(event), this.camera);
-    for (const hit of this.raycaster.intersectObjects([this.altar.group, this.rack.group, this.board.group, this.toolShelf.group, this.upgrades.group, this.robots.group, this.ticket, this.returnTag.group, this.receipt.group], true)) {
+    for (const hit of this.raycaster.intersectObjects([this.altar.group, this.rack.group, this.board.group, this.toolShelf.group, this.upgrades.group, this.robots.group, this.ticket, this.roundDisplay.followers, this.returnTag.group, this.receipt.group], true)) {
       let visible = true;
       for (let node: THREE.Object3D | null = hit.object; node; node = node.parent) visible &&= node.visible;
       if (!visible) continue;
@@ -933,7 +975,7 @@ export class Stage {
       if (this.shown?.cells[index]?.type !== 'bomb' || this.bombHits.has(index)) continue;
       this.bombHits.add(index);
       const cell = m.layout.cells[index]!;
-      const origin = new THREE.Vector3(m.window.x + (cell.x + cell.w / 2) * m.window.w - .5, FACE_Y + .04, m.window.y + (cell.y + cell.h / 2) * m.window.w - m.height / 2);
+      const origin = this.scratchOrigin(m.window.x + (cell.x + cell.w / 2) * m.window.w - .5, m.window.y + (cell.y + cell.h / 2) * m.window.w - m.height / 2, FACE_Y + .04);
       this.particles.emit(origin, { name: 'smoke-puff', count: 9, speed: [.35, .8], spread: .9, size: [.09, .18], life: [.65, 1.1] });
       this.particles.emit(origin, { name: 'sparkle', count: 5, speed: [.5, 1], spread: 1, size: [.05, .1], life: [.25, .5] });
       play('ui-error', .8);
@@ -942,7 +984,7 @@ export class Stage {
     this.foilDirty = true;
     if (cleared.length || now - this.lastFlakes >= 45) {
       this.lastFlakes = now;
-      this.particles.emit(new THREE.Vector3(m.window.x + contact.x * m.window.w - 0.5, FACE_Y + 0.02, m.window.y + contact.y * m.window.w - m.height / 2), {
+      this.particles.emit(this.scratchOrigin(m.window.x + contact.x * m.window.w - .5, m.window.y + contact.y * m.window.w - m.height / 2, FACE_Y + .02), {
         name: FLAKES[Math.floor(Math.random() * FLAKES.length)] as ParticleName,
         count: cleared.length ? 5 : 2,
         speed: [0.45, 1],
@@ -975,6 +1017,7 @@ export class Stage {
     this.toolLean = THREE.MathUtils.damp(this.toolLean, 0, 14, dt);
     this.toolLift = THREE.MathUtils.damp(this.toolLift, this.scratching ? 0.012 : 0.045, 38, dt);
     if (this.tool.visible) {
+      this.tool.scale.setScalar(this.deskLayout().tiles[this.scratchTile]?.scale ?? 1);
       animateToolModel(this.tool, dt, this.scratching && this.canScratch());
       this.tool.position.set(this.pointer.x, FACE_Y + this.toolLift, this.pointer.z);
       this.tool.rotation.set(0, this.toolLean, 0);
@@ -1026,6 +1069,13 @@ export class Stage {
     this.renderer.domElement.dataset.busy = '1';
     const tall = this.camera.aspect < 0.8;
     const desktop = desktopLayout(this.host.clientWidth, this.host.clientHeight);
+    this.arrangeRound();
+    const multi = this.view === 'desk' && !!this.state && currentRound(this.state).length > 1;
+    for (const group of [this.rack?.group, this.board?.group, this.toolShelf?.group, this.altar?.group]) if (group) group.visible = !multi;
+    for (const name of ['cash-register', 'gold-bag', 'coins', 'ticket-machine']) {
+      const prop = this.room.getObjectByName(name);
+      if (prop) prop.visible = !multi;
+    }
     this.robots.group.visible = this.view !== 'desk';
     if (this.upgrades) this.upgrades.group.visible = this.view !== 'desk';
     if (this.roundDisplay) {
@@ -1051,13 +1101,14 @@ export class Stage {
     // Looking at the rack, the eye rests a little above it so the shop behind shows.
     let lift = 0;
     if (this.view === 'desk') {
-      const margin = .19 + (this.state ? Math.max(0, currentRound(this.state).length - 1) * .065 : 0);
-      const halfW = 0.5 + margin;
-      const halfH = this.metrics.height / 2 + margin;
+      const layout = multi ? this.deskLayout() : null;
+      const margin = layout ? .17 * layout.scale : .19;
+      const halfW = (layout ? layout.width / 2 : .5) + margin;
+      const halfH = (layout ? layout.height / 2 : this.metrics.height / 2) + margin;
       target = new THREE.Vector3(0, 0, 0);
-      direction = gaze(desktop ? 72 : touch && !tall ? 85 : tall ? 60 : 50);
+      direction = gaze(multi ? 88 : desktop ? 72 : touch && !tall ? 85 : tall ? 60 : 50);
       points = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => new THREE.Vector3(sx * halfW, FACE_Y, sz * halfH)));
-      if (desktop) {
+      if (desktop && !multi) {
         for (const name of ['cash-register', 'gold-bag', 'coins']) {
           const prop = this.room.getObjectByName(name);
           if (!prop) continue;
@@ -1165,8 +1216,17 @@ export class Stage {
       return [Math.round(rect.left + ((p.x + 1) / 2) * rect.width), Math.round(rect.top + ((1 - p.y) / 2) * rect.height)] as const;
     };
     const m = this.metrics;
-    const onTicket = (lx: number, ly: number) => screen(new THREE.Vector3(m.window.x + lx * m.window.w - 0.5, FACE_Y, m.window.y + ly * m.window.w - m.height / 2));
+    const layout = this.deskLayout();
+    const onTicket = (lx: number, ly: number, index = 0) => {
+      const tile = layout.tiles[index] ?? { x: 0, z: 0, scale: 1 };
+      return screen(new THREE.Vector3(tile.x + (m.window.x + lx * m.window.w - .5) * tile.scale, FACE_Y, tile.z + (m.window.y + ly * m.window.w - m.height / 2) * tile.scale));
+    };
     canvas.dataset.cells = JSON.stringify(m.layout.cells.map((cell) => [...onTicket(cell.x, cell.y), ...onTicket(cell.x + cell.w, cell.y + cell.h)]));
+    canvas.dataset.roundTiles = JSON.stringify(layout.tiles.map((tile, index) => ({
+      serial: this.state ? currentRound(this.state)[index]?.serial : undefined,
+      bounds: [-1, 1].flatMap(x => [-1, 1].map(z => screen(new THREE.Vector3(tile.x + x * tile.scale / 2, FACE_Y, tile.z + z * m.height * tile.scale / 2)))),
+      cells: m.layout.cells.map(cell => [...onTicket(cell.x, cell.y, index), ...onTicket(cell.x + cell.w, cell.y + cell.h, index)]),
+    })));
     const rack: Record<string, readonly [number, number]> = {};
     for (const def of TICKETS.filter(def => (def.minimumPrestige ?? 0) <= (this.state?.prestige.tier ?? 0))) rack[def.id] = screen(this.rack.anchor(def.id));
     canvas.dataset.rack = JSON.stringify(rack);
@@ -1190,7 +1250,7 @@ export class Stage {
     canvas.dataset.receipt = this.receipt.group.visible ? '1' : '0';
     canvas.dataset.radius = String(this.state ? toolRadius(this.state) : 0);
     canvas.dataset.toolLevel = String(this.state?.toolLevels[this.state.equippedTool] ?? 0);
-    canvas.dataset.ticket = JSON.stringify(screen(new THREE.Vector3(0, FACE_Y, 0)));
+    canvas.dataset.ticket = JSON.stringify(screen(new THREE.Vector3(layout.tiles[0]?.x ?? 0, FACE_Y, layout.tiles[0]?.z ?? 0)));
     canvas.dataset.view = this.view;
     canvas.dataset.robots = JSON.stringify(screen(this.robots.group.localToWorld(new THREE.Vector3(0, 1.9, .4))));
     canvas.dataset.robotOffers = JSON.stringify(Object.fromEntries(Object.entries(this.robots.offerAnchors()).map(([action, point]) => [action, screen(point)])));
@@ -1251,6 +1311,12 @@ export class Stage {
     }
 
     this.updateTool(dt);
+    if (this.view === 'desk' && this.roundSize > 1) {
+      for (const name of ['cash-register', 'gold-bag', 'coins', 'ticket-machine']) {
+        const prop = this.room.getObjectByName(name);
+        if (prop) prop.visible = false;
+      }
+    }
     if (this.state) this.toolShelf.tick(dt, this.state);
 
     this.particles.update(dt);

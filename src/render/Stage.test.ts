@@ -5,6 +5,9 @@ import { Stage } from './Stage';
 import { PlayClock } from './playClock';
 import { buyTicket, collectTicket, revealTicket } from '../game/economy';
 import { createInitialState } from '../game/state';
+import { ticketMetrics } from './ticketFace';
+import { createMask, scratchProgress } from '../game/scratch';
+import { BALANCE } from '../data/balance';
 
 describe('collection receipt before queued dealing', () => {
   const collectedStage = (queued: boolean) => {
@@ -16,13 +19,14 @@ describe('collection receipt before queued dealing', () => {
       state, shown: before.ticket, first: false, view: 'desk', receiptWaiting: false,
       receiptTime: 0, collectionDebt: 0, rentStamp: 0, roundSize: 0,
       toolShelf: updated(), upgrades: updated(), robots: updated(), altar: updated(),
-      roundDisplay: { ...updated(), followers: new THREE.Group() },
+      roundDisplay: { ...updated(), layout: vi.fn(), followers: new THREE.Group() },
       mat: new THREE.Group(), ticket: new THREE.Group(),
       rent: { draw: vi.fn() }, receipt: { draw: vi.fn(), group: new THREE.Group() },
       returnTag: { group: new THREE.Group() }, metrics: { height: 1 },
       handKey: `${state.equippedTool}:${state.toolLevels[state.equippedTool]}:${state.durability[state.equippedTool]}`,
       rack: updated(), board: updated(), camera: { aspect: 1 },
       touchLayout: () => false, aim: vi.fn(), pendingScratch: new Set(),
+      host: { clientWidth: 1280, clientHeight: 800 },
       callbacks: { onProgress: vi.fn() }, renderer: { domElement: { dataset: {} } },
       move: vi.fn(), look: vi.fn(), rackPose: vi.fn(),
     });
@@ -71,6 +75,44 @@ describe('collection receipt before queued dealing', () => {
   });
 });
 
+describe('direct scratching of tiled rounds', () => {
+  it.each([[1280, 800], [390, 844]])('maps every tile to the shared round foil at %i×%i without strokes crossing gaps', (width, height) => {
+    const held = buyTicket({ ...createInitialState(4), money: 1000, upgrades: { luck: 0, desk: 7, bulk: 2 }, bulkLot: 10 }, 'dong');
+    const state = { ...held, deskQueue: held.deskQueue.slice(0, 7) };
+    const metrics = ticketMetrics('dong');
+    const mask = createMask(metrics.layout.cells, metrics.layout.height, BALANCE.scratchThreshold);
+    const pointer = new THREE.Vector3();
+    const stage = Object.assign(Object.create(Stage.prototype), {
+      host: { clientWidth: width, clientHeight: height }, state, metrics, pointer, touchTop: 122, touchBottom: 82,
+      hovering: true, scratchTile: 0, raycaster: { setFromCamera: vi.fn(), ray: { intersectPlane: () => pointer } },
+      mask, shown: { ...state.ticket!, scratchStarted: true }, bombHits: new Set(),
+      foilCanvas: { width: 768, height: 768, getContext: () => new Proxy({}, { get: () => vi.fn() }) },
+      callbacks: { onProgress: vi.fn(), onRevealed: vi.fn(), onBomb: vi.fn() },
+      particles: { emit: vi.fn() }, lastFlakes: 0, lastScratchSave: 1e9,
+    });
+    const layout = stage.deskLayout();
+    for (const [index, tile] of layout.tiles.entries()) {
+      const x = .1 + index * .1;
+      const y = .18;
+      pointer.set(tile.x + (metrics.window.x + x * metrics.window.w - .5) * tile.scale, .031,
+        tile.z + (metrics.window.y + y * metrics.window.w - metrics.height / 2) * tile.scale);
+      stage.stroke = { x: 99, y: 99 };
+      stage.scratchTile = -1;
+      expect(stage.locate()).toBe(true);
+      expect(stage.scratchTile).toBe(index);
+      expect(stage.stroke).toBeNull();
+      expect(stage.foilPoint().x).toBeCloseTo(x);
+      expect(stage.foilPoint().y).toBeCloseTo(y);
+      stage.scratchTo(1);
+      expect(mask.removed.some(value => value > 0)).toBe(true);
+    }
+    expect(stage.callbacks.onProgress).toHaveBeenCalledTimes(8);
+    expect(scratchProgress(mask)).toBeGreaterThan(0);
+    pointer.set(99, .031, 99);
+    expect(stage.locate()).toBe(false);
+  });
+});
+
 describe('desk framing', () => {
   const stageAt = (width: number, height: number) => Object.assign(Object.create(Stage.prototype), {
     host: { clientWidth: width, clientHeight: height },
@@ -115,6 +157,31 @@ describe('desk framing', () => {
     expect(stage.robots.layout).toHaveBeenLastCalledWith(false, true);
     expect(stage.frameUp.mock.calls[1][2]).toEqual(stage.robots.points.mock.results[0].value);
     expect(stage.focusGoal).toEqual(new THREE.Vector3(3, .55, 1.5));
+  });
+
+  it.each([[1280, 800], [390, 844]])('frames every tile inside the desk safe area at %i×%i', (width, height) => {
+    for (let size = 2; size <= 8; size++) {
+      const stage = stageAt(width, height);
+      const held = buyTicket({ ...createInitialState(4), money: 1000, upgrades: { luck: 0, desk: size - 1, bulk: 2 }, bulkLot: 10 }, 'dong');
+      stage.state = { ...held, deskQueue: held.deskQueue.slice(0, size - 1) };
+      stage.metrics = ticketMetrics('dong');
+      stage.mat = new THREE.Group();
+      stage.returnTag = { group: new THREE.Group() };
+      stage.roundDisplay = { layout: vi.fn(), followers: new THREE.Group(), pile: new THREE.Group() };
+      stage.board = { update: vi.fn(), group: new THREE.Group() };
+      stage.frameUp = Object.getPrototypeOf(stage).frameUp;
+      stage.aim();
+      stage.camera.position.copy(stage.eyeGoal);
+      stage.camera.lookAt(stage.focusGoal);
+      stage.camera.updateMatrixWorld();
+      const layout = stage.deskLayout();
+      for (const tile of layout.tiles) for (const x of [-1, 1]) for (const z of [-1, 1]) {
+        const point = new THREE.Vector3(tile.x + x * tile.scale / 2, .031, tile.z + z * stage.metrics.height * tile.scale / 2).project(stage.camera);
+        expect(Math.abs(point.x)).toBeLessThan(.96);
+        expect(point.y).toBeLessThan(1 - 2 * 70 / height);
+        expect(point.y).toBeGreaterThan(-1 + 2 * 120 / height);
+      }
+    }
   });
 
   it('keeps the phone desk safe area independent of the robot glance button', () => {
