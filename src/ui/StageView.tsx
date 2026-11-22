@@ -27,6 +27,7 @@ export function StageView({ state, handlers, stage, paused }: Props) {
       onCollect: () => handlers.current.onCollect(),
       onBoard: () => handlers.current.onBoard(),
       onContract: () => handlers.current.onContract(),
+      onJournal: () => handlers.current.onJournal(),
       onTool: (id) => handlers.current.onTool(id),
       onView: (view) => handlers.current.onView(view),
       onPlayTime: elapsed => handlers.current.onPlayTime(elapsed),

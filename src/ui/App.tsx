@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { isMuted, play, setMuted } from '../audio/sfx';
-import { ticketDef, TICKETS, type TicketId } from '../data/tickets';
+import { ticketDef, TICKET_IDS, TICKETS, type TicketId } from '../data/tickets';
+import { ACHIEVEMENT_BONUS_PERCENT, ALL_STAMPS, COLLECTION_BONUS_PERCENT } from '../data/journal';
 import { applyToolIntent, repairPrice, repairTool, type ToolIntent } from '../game/tools';
 import { shelfOffer } from '../render/toolShelf';
 import { buyTicket, canBuyTicket, claimPromo, collectTicket, isUnlocked, returnTicket, selectTicket, startScratch, uncoverCell } from '../game/economy';
@@ -11,7 +12,7 @@ import { recordReveal, recordScratch } from '../game/save';
 import { ticketContentKey } from '../game/scratch';
 import { t } from '../i18n';
 import type { Stage, StageCallbacks, View } from '../render/Stage';
-import { ContractNotice, IncidentNotice, LookButton, PromptChip, promptFor, type Command } from './Hud';
+import { ContractNotice, GoldenNotice, IncidentNotice, LookButton, PromptChip, promptFor, type Command } from './Hud';
 import { acceptContract, declineContract } from '../game/contracts';
 import { Icon, Sticker } from './Icon';
 import { money } from './money';
@@ -21,6 +22,8 @@ import { useGame } from './useGame';
 import { automationAction, robotContext, type AutomationAction } from '../game/automation';
 import { prestige } from '../game/prestige';
 import { blockRepeatedOffering, offerIncense } from './altarRitual';
+import { achievementCount } from '../game/journal';
+import { Journal } from './Journal';
 
 export function App() {
   const game = useGame();
@@ -29,14 +32,27 @@ export function App() {
   const [progress, setProgress] = useState(0);
   const [view, setView] = useState<View>('shop');
   const [contractSelected, setContractSelected] = useState(false);
-  const previousContract = useRef(state.contracts.resolved);
+  const [journalOpen, setJournalOpen] = useState(false);
+  const earned = achievementCount(state.journal, state.prestige.tier);
+  const previousAwards = useRef({ earned, stamps: state.journal.stamps, contracts: state.contracts.resolved, tier: state.prestige.tier });
   useEffect(() => {
-    if (state.contracts.resolved !== previousContract.current && state.contracts.result) {
+    const before = previousAwards.current;
+    const messages: string[] = [];
+    if (state.prestige.tier > before.tier) messages.push(t('altar.toast'));
+    if (state.contracts.resolved !== before.contracts && state.contracts.result) {
       const result = state.contracts.result;
-      setToast(t(result.success ? 'contract.success' : 'contract.failure', { amount: money(result.amount) }));
+      messages.push(t(result.success ? 'contract.success' : 'contract.failure', { amount: money(result.amount) }));
     }
-    previousContract.current = state.contracts.resolved;
-  }, [state.contracts.resolved, state.contracts.result]);
+    if (earned > before.earned) messages.push(t('journal.newAchievement', { bonus: (earned - before.earned) * ACHIEVEMENT_BONUS_PERCENT }));
+    for (const id of TICKET_IDS) {
+      const mask = state.journal.stamps[id];
+      if ((mask & ~before.stamps[id]) === 0) continue;
+      const name = t(`ticket.${id}.name`);
+      messages.push(mask === ALL_STAMPS ? t('journal.newSet', { name, bonus: COLLECTION_BONUS_PERCENT }) : t('journal.newStamp', { name }));
+    }
+    if (messages.length > 0) setToast(messages.join(' · '));
+    previousAwards.current = { earned, stamps: state.journal.stamps, contracts: state.contracts.resolved, tier: state.prestige.tier };
+  }, [earned, state.journal.stamps, state.contracts.resolved, state.contracts.result, state.prestige.tier]);
   const [armedUntil, setArmedUntil] = useState(0);
   const incenseDeadline = useRef(0);
   const [muted, setMutedState] = useState(isMuted);
@@ -80,7 +96,6 @@ export function App() {
     stage.current?.setAltarArmed(result.armedUntil > 0);
     if (result.confirm) {
       apply(current => prestige(current));
-      setToast(t('altar.toast'));
     } else play(result.armedUntil ? 'ui-select' : 'ui-error');
   };
 
@@ -124,6 +139,7 @@ export function App() {
 
   const run = (command: Command) => {
     if (command === 'incense') incense();
+    else if (command === 'journal') setJournalOpen(true);
     else if (command === 'acceptContract' || command === 'declineContract') {
       apply(command === 'acceptContract' ? acceptContract : declineContract);
       setContractSelected(false);
@@ -186,10 +202,12 @@ export function App() {
       onCollect: collect,
       onBoard: () => { setContractSelected(false); license(); },
       onContract: () => setContractSelected(true),
+      onJournal: () => setJournalOpen(true),
       onTool: tool,
       onView: (next) => { if (next !== 'altar') disarmAltar(); if (next !== 'board') setContractSelected(false); setView(next); },
     };
     keys.current = (event) => {
+      if (journalOpen) return;
       if (event.target instanceof HTMLTextAreaElement) return;
       const key = event.key.toLowerCase();
       if (key === 'escape') setPaused((open) => !open);
@@ -222,7 +240,7 @@ export function App() {
   const selected = ticketDef(state.selected);
   return (
     <div className="app" data-view={view}>
-      <StageView state={state} handlers={handlers} stage={stage} paused={paused} />
+      <StageView state={state} handlers={handlers} stage={stage} paused={paused || journalOpen} />
 
       <dl className="purse">
         <Sticker name="coin-gold" />
@@ -244,6 +262,7 @@ export function App() {
       </div>
 
       <div className="kiosk-notices">
+        <GoldenNotice event={state.goldenHour} />
         <IncidentNotice incident={state.incidents.current} />
         <ContractNotice state={state} />
       </div>
@@ -272,6 +291,7 @@ export function App() {
       </span>
 
       {paused && <SavePanel game={game} onClose={() => setPaused(false)} />}
+      {journalOpen && <Journal state={state} onClose={() => setJournalOpen(false)} />}
     </div>
   );
 }

@@ -14,7 +14,7 @@ const FONT = '"Baloo 2", system-ui, sans-serif';
 
 export function altarLines(state: GameState, armed: boolean): string[] {
   const tier = state.prestige.tier;
-  if (armed && canPrestige(state)) return [t('altar.confirmTitle'), t('altar.confirmMoney'), t('altar.confirmTools'), t('altar.confirmLicenses'), t('altar.confirmAgain')];
+  if (armed && canPrestige(state)) return [t('altar.confirmTitle'), t('altar.confirmMoney'), t('altar.confirmTools'), t('altar.confirmLicenses'), t('altar.confirmJournal'), t('altar.confirmAgain')];
   const active = t('altar.active', { percent: tier * 20, count: tier });
   if (tier >= PRESTIGE.maxTier) return [t('prestige.max'), t('altar.complete'), active, t('altar.keepPlaying')];
   return [t(`prestige.tier.${tier + 1}` as MessageKey),

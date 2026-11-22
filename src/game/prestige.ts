@@ -14,5 +14,6 @@ export function prestige(state: GameState): GameState {
     totalEarned: state.totalEarned,
     rngState: state.rngState,
     nextSerial: state.nextSerial,
+    journal: { ...state.journal, currentStreak: 0 },
   };
 }

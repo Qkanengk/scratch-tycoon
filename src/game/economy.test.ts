@@ -49,15 +49,18 @@ describe('buying and collecting', () => {
     expect(collectTicket(bought)).toBe(bought);
   });
 
-  it('pays the prize decided at purchase, whatever the scratching looked like', () => {
+  it('reveals the gross prize decided at purchase and pays the final net prize', () => {
     let state = createInitialState(5);
     for (let i = 0; i < 300; i++) {
       state = advanceStock(state, STOCK.dong.restockMs);
       const bought = buyTicket(state, 'dong');
       const prize = bought.ticket?.prize ?? 0;
-      const collected = collectTicket(revealTicket(bought));
-      expect(collected.money).toBe(bought.money + prize);
-      expect(collected.totalEarned).toBe(state.totalEarned + prize);
+      const revealed = revealTicket(bought);
+      expect(revealed.ticket?.prize ?? 0).toBe(prize);
+      const net = revealed.ticket?.net ?? 0;
+      const collected = collectTicket(revealed);
+      expect(collected.money).toBe(bought.money + net);
+      expect(collected.totalEarned).toBe(state.totalEarned + net);
       expect(collected.ticket).toBeNull();
       state = { ...collected, money: 100 };
     }

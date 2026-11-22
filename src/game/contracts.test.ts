@@ -8,7 +8,7 @@ import { buyTicket, collectTicket, revealTicket } from './economy';
 import { advanceKioskTime } from './kioskTime';
 import { prestige } from './prestige';
 import { deserialize, migrate, serialize } from './save';
-import { createInitialState, type GameState } from './state';
+import { createInitialState, SAVE_VERSION, type GameState } from './state';
 
 function offered(kind: ContractKind = 'scratch'): GameState {
   const state = createInitialState(4);
@@ -161,7 +161,7 @@ describe('contract saves', () => {
     const state = createInitialState(9);
     const loaded = migrate({ ...state, version: 8, contracts: undefined })!;
     expect(loaded).toEqual(state);
-    expect(loaded.version).toBe(9);
+    expect(loaded.version).toBe(SAVE_VERSION);
   });
   it('sanitizes invalid contracts and never trusts saved payouts or targets', () => {
     const state = active();

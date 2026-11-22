@@ -7,11 +7,14 @@ import { batteryCapacity, initialAutomation, robotInterval, type Automation, typ
 import { initialToolLevels, TOOLS, type ToolId } from '../data/tools';
 import { BIG_WIN_MULTIPLIER, TICKET_IDS, ticketDef, type TicketId, type TicketRules } from '../data/tickets';
 import { layoutTicket } from '../render/layout';
-import { revealTicket, startScratch, uncoverCell } from './economy';
+import { applyPayoutPercent, revealTicket, startScratch, uncoverCell } from './economy';
 import { createMask, encodeMask, restoreMask, scratchProgress, ticketContentKey } from './scratch';
 import { createInitialState, emptyStats, SAVE_VERSION, type GameState, type Ticket } from './state';
 import { cellCount, jackpotTier } from './tickets';
 import { INCIDENT_KINDS, initialIncidents, type IncidentState } from './incidents';
+import { ACHIEVEMENT_BONUS_PERCENT, ALL_STAMPS, COLLECTION_BONUS_PERCENT, GOLDEN_HOUR } from '../data/journal';
+import { ACHIEVEMENT_TOTAL, initialJournal, type Journal } from './journal';
+import { initialGoldenHour, type GoldenHour } from './goldenHour';
 
 export const SAVE_KEY = 'scratch-tycoon-save';
 export const SAVE_BACKUP_KEY = `${SAVE_KEY}-backup`;
@@ -23,6 +26,7 @@ type RawSave = Record<string, unknown>;
  * Add an entry (and a test) whenever the shape of GameState changes.
  */
 const MIGRATIONS: Record<number, (save: RawSave) => RawSave> = {
+  9: save => ({ ...save, version: 10, journal: null, goldenHour: initialGoldenHour(amount(save.rngState, 0)) }),
   8: save => ({ ...save, version: 9, contracts: initialContracts(amount(save.rngState, 0)) }),
   7: save => ({ ...save, version: 8, stock: initialStock() }),
   6: save => ({ ...save, version: 7, incidents: initialIncidents(amount(save.rngState, 0)) }),
@@ -54,6 +58,53 @@ function isRecord(value: unknown): value is RawSave {
 
 function amount(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+function readJournal(value: unknown, stats: GameState['stats']): Journal {
+  const journal = initialJournal();
+  if (!isRecord(value)) {
+    for (const entry of Object.values(stats)) {
+      journal.scratched += entry.scratched;
+      journal.wins += entry.wins;
+      journal.bigWins += entry.bigWins;
+      journal.jackpots += entry.jackpots;
+    }
+    return journal;
+  }
+  const count = (field: keyof Journal) => Math.floor(amount(value[field], 0));
+  journal.scratched = count('scratched');
+  journal.wins = Math.min(journal.scratched, count('wins'));
+  journal.bigWins = Math.min(journal.wins, count('bigWins'));
+  journal.jackpots = Math.min(journal.bigWins, count('jackpots'));
+  journal.streak = Math.min(journal.wins, count('streak'));
+  journal.currentStreak = Math.min(journal.streak, count('currentStreak'));
+  if (isRecord(value.stamps)) {
+    for (const id of TICKET_IDS) {
+      const mask = value.stamps[id];
+      if (typeof mask === 'number' && Number.isInteger(mask) && mask >= 0 && mask <= ALL_STAMPS) journal.stamps[id] = mask;
+    }
+  }
+  return journal;
+}
+
+function readGoldenHour(value: unknown, seed: number): GoldenHour {
+  const base = initialGoldenHour(seed);
+  if (!isRecord(value)) return base;
+  const active = value.active === true;
+  const max = active ? GOLDEN_HOUR.durationMs : GOLDEN_HOUR.repeatDelayMs[1];
+  return {
+    rngState: amount(value.rngState, base.rngState) >>> 0,
+    active,
+    remainingMs: Math.max(1, Math.min(max, amount(value.remainingMs, active ? max : base.remainingMs))),
+  };
+}
+
+function readPayoutPercent(value: unknown): number | undefined {
+  const max = 100 + ACHIEVEMENT_TOTAL * ACHIEVEMENT_BONUS_PERCENT + COLLECTION_BONUS_PERCENT;
+  if (typeof value !== 'number' || !Number.isInteger(value)) return undefined;
+  if (value > 100 && value <= max) return value;
+  const undoubled = value / GOLDEN_HOUR.multiplier;
+  if (Number.isInteger(undoubled) && undoubled >= 100 && undoubled <= max) return value;
 }
 
 function readStock(value: unknown): Stock {
@@ -151,13 +202,16 @@ function readTicket(value: unknown, prestigeTier = 0): Ticket | null {
   const gross = fakeTell ? 0 : amount(value.gross, amount(value.prize, (def.prizes[tier]?.multiplier ?? 0) * def.price));
   const tax = Math.min(gross, amount(value.tax, Math.floor(Math.max(0, gross - def.price)
     * (BALANCE.taxRates[def.id] + (prestigeTier >= 1 ? PRESTIGE.taxSurcharge : 0)))));
+  const payoutPercent = value.revealed === true && gross > 0 ? readPayoutPercent(value.payoutPercent) : undefined;
+  const net = Math.floor((gross - tax) * (1 + prestigeTier * PRESTIGE.bonusPerTier));
   return {
     serial: amount(value.serial, 0),
     type: value.type,
     cells: value.cells as Ticket['cells'],
     tier,
     prize: gross,
-    gross, tax, net: Math.floor((gross - tax) * (1 + prestigeTier * PRESTIGE.bonusPerTier)),
+    gross, tax, net: applyPayoutPercent(net, payoutPercent ?? 100),
+    ...(payoutPercent === undefined ? {} : { payoutPercent }),
     fakeTell,
     ...(value.defective === true && value.free !== true ? { defective: true } : {}),
     scratchStarted: value.scratchStarted === true || value.revealed === true || (scratch !== undefined && scratchProgress(mask) > 0),
@@ -253,6 +307,8 @@ export function migrate(raw: unknown, now = Date.now()): GameState | null {
     licenseElapsedMs: amount(save.licenseElapsedMs, 0),
     automation: readAutomation(save.automation, tier),
     incidents: readIncidents(save.incidents, initialIncidents(amount(save.rngState, 0))),
+    journal: readJournal(save.journal, stats),
+    goldenHour: readGoldenHour(save.goldenHour, amount(save.rngState, 0)),
     money: amount(save.money, base.money) + refund,
     durability,
     rentElapsedMs: amount(save.rentElapsedMs, 0) % BALANCE.rentIntervalMs,

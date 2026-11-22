@@ -8,6 +8,8 @@ import { generateCells, jackpotTier } from './tickets';
 import { wearTool } from './tools';
 import { consumeStock } from './stock';
 import { progressContract } from './contracts';
+import { GOLDEN_HOUR } from '../data/journal';
+import { journalBonusPercent, recordTicketInJournal } from './journal';
 
 export function isUnlocked(state: GameState, id: TicketId): boolean {
   return isTicketAvailable(state, id) && (ticketDef(id).unlock === null || state.licenses.includes(id));
@@ -64,7 +66,7 @@ export function buyTicket(state: GameState, id: TicketId, source: PurchaseSource
 }
 
 /** Marks the ticket on the table as fully scratched and counts it toward missions. */
-export function revealTicket(state: GameState): GameState {
+export function revealTicket(state: GameState, away = false): GameState {
   if (!state.ticket || state.ticket.revealed) return state;
   state = startScratch(state);
   for (let i = 0; i < state.ticket!.cells.length; i++) state = uncoverCell(state, i);
@@ -72,9 +74,14 @@ export function revealTicket(state: GameState): GameState {
   if (ticket === null || ticket.revealed) return state;
   const previous = state.stats[ticket.type];
   const def = ticketDef(ticket.type);
+  const payoutPercent = ticket.net > 0
+    ? (100 + journalBonusPercent(state.journal, state.prestige.tier, ticket.type))
+      * (!away && state.goldenHour.active ? GOLDEN_HOUR.multiplier : 1)
+    : 100;
   return {
     ...state,
-    ticket: { ...ticket, revealed: true },
+    ticket: { ...ticket, revealed: true, ...(payoutPercent > 100 ? { payoutPercent } : {}), net: applyPayoutPercent(ticket.net, payoutPercent) },
+    journal: away ? state.journal : recordTicketInJournal(state.journal, ticket),
     stats: {
       ...state.stats,
       [ticket.type]: {
@@ -85,6 +92,10 @@ export function revealTicket(state: GameState): GameState {
       },
     },
   };
+}
+
+export function applyPayoutPercent(net: number, percent: number): number {
+  return Math.floor(net * percent / 100);
 }
 
 /** Pays out a scratched ticket and clears the table. */
