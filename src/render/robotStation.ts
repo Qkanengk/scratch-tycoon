@@ -203,12 +203,12 @@ export class RobotStation {
   layout(phone: boolean): void {
     this.group.position.x = phone ? 2.05 : 1.12;
     this.group.position.z = phone ? -1.70 : .35;
-    this.slots.forEach((s, i) => s.group.position.set(phone ? 0 : i * .84, 0, phone ? i * 1.30 : 0));
+    this.slots.forEach((s, i) => s.group.position.set(phone ? 0 : i * .84, 0, phone ? i * 1.50 : 0));
     this.board.position.set(phone ? .95 : 2.80, phone ? .35 : 0, phone ? -.10 : -.48);
     this.charger.position.set(phone ? .95 : 2.66, 0, phone ? 2.70 : 1.04);
     this.motor.position.set(phone ? .95 : 1.40, 0, phone ? 1.50 : 1.25);
     this.hiring.position.set(phone ? .95 : .10, 0, phone ? .30 : 1.25);
-    this.receipt.group.position.set(phone ? .45 : 2.64, .015, phone ? 3.90 : 1.91);
+    this.receipt.group.position.set(phone ? 1.25 : 2.64, .015, phone ? 3.65 : 1.91);
     this.awayReceipt.group.position.set(phone ? .45 : 1.25, .32, phone ? 3.25 : 1.45);
   }
 
