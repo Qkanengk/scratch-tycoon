@@ -7,6 +7,7 @@ import type { GameState, Ticket } from './state';
 import { generateCells, jackpotTier } from './tickets';
 import { wearTool } from './tools';
 import { consumeStock } from './stock';
+import { progressContract } from './contracts';
 
 export function isUnlocked(state: GameState, id: TicketId): boolean {
   return isTicketAvailable(state, id) && (ticketDef(id).unlock === null || state.licenses.includes(id));
@@ -92,7 +93,7 @@ export function collectTicket(state: GameState, away = false): GameState {
   if (ticket === null || !ticket.revealed) return state;
   const withheld = Math.min(state.rentDebt, ticket.net);
   const recentBigWin = !away && ticket.gross >= ticketDef(ticket.type).price * BIG_WIN_MULTIPLIER;
-  return {
+  return progressContract({
     ...state,
     money: state.money + ticket.net - withheld,
     rentDebt: state.rentDebt - withheld,
@@ -100,7 +101,7 @@ export function collectTicket(state: GameState, away = false): GameState {
     prestige: { ...state.prestige, runEarned: state.prestige.runEarned + ticket.net },
     incidents: recentBigWin ? { ...state.incidents, recentBigWin: true } : state.incidents,
     ticket: null,
-  };
+  }, ticket, away);
 }
 
 export function startScratch(state: GameState): GameState {

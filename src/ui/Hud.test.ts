@@ -2,11 +2,40 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { buyTicket, revealTicket } from '../game/economy';
 import { createInitialState, type GameState } from '../game/state';
-import { IncidentNotice, PromptChip, promptFor } from './Hud';
+import { ContractNotice, IncidentNotice, PromptChip, promptFor } from './Hud';
 import { prestigeScenario } from './debugPrestige';
 import { STOCK } from '../data/balance';
+import { acceptContract, contractOffer } from '../game/contracts';
 
 const fresh = (): GameState => createInitialState(1);
+
+describe('contract HUD', () => {
+  it('shows goal, duration, deposit, reward and decline only for the selected board note', () => {
+    const base = fresh();
+    const state = { ...base, contracts: { ...base.contracts, offered: contractOffer('wins', 'dong') } };
+    const prompt = promptFor(state, 0, 'board', 0, false, true);
+    expect(prompt.message).toContain('×10');
+    expect(prompt.message).toContain('10:00');
+    expect(prompt.message).toContain('Cọc 10 xu');
+    expect(prompt.message).toContain('Thưởng 30 xu');
+    expect(prompt.button).toMatchObject({ command: 'acceptContract', disabled: false });
+    expect(prompt.secondary?.command).toBe('declineContract');
+    expect(promptFor({ ...state, money: 19 }, 0, 'board', 0, false, true).button?.disabled).toBe(true);
+    expect(promptFor(state, 0, 'desk', 0, false, true).button?.command).not.toBe('acceptContract');
+    expect(promptFor(state, 0, 'board', 0).button?.command).toBe('license');
+  });
+  it('renders only a compact progress strip while active', () => {
+    const base = fresh();
+    expect(ContractNotice({ state: base })).toBeNull();
+    const state = acceptContract({ ...base, contracts: { ...base.contracts, offered: contractOffer('wins', 'dong') } });
+    state.contracts.active!.progress = 2;
+    const markup = renderToStaticMarkup(ContractNotice({ state }));
+    expect(markup).toContain('2/3');
+    expect(markup).toContain('10:00');
+    expect(markup).toContain('role="timer"');
+    expect(markup).not.toContain('<button');
+  });
+});
 
 describe('stock prompt', () => {
   it('offers rush restock with a countdown and checks its fee', () => {

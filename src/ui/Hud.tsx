@@ -17,20 +17,30 @@ import { blockRepeatedOffering } from './altarRitual';
 import { Icon } from './Icon';
 import { STOCK } from '../data/balance';
 import { restockCountdown } from '../game/stock';
+import { canAcceptContract } from '../game/contracts';
+import { contractGoal } from './contractText';
 
-export type Command = 'restock' | 'buy' | 'collect' | 'return' | 'promo' | 'license' | 'robot' | 'awayReceipt' | 'incense';
+export type Command = 'acceptContract' | 'declineContract' | 'restock' | 'buy' | 'collect' | 'return' | 'promo' | 'license' | 'robot' | 'awayReceipt' | 'incense';
 
 interface Prompt {
   tone: 'idle' | 'win' | 'jackpot' | 'lose';
   message: string;
   button?: { label: string; command: Command; disabled?: boolean };
+  secondary?: { label: string; command: Command };
   progress?: number;
   wrap?: boolean;
 }
 
 /** What the game asks of the player right now, given what is on the desk and where they are looking. */
-export function promptFor(state: GameState, now: number, view: View, progress: number, armed = false): Prompt {
+export function promptFor(state: GameState, now: number, view: View, progress: number, armed = false, contractSelected = false): Prompt {
   const ticket = state.ticket;
+  const offer = state.contracts.offered;
+  if (view === 'board' && contractSelected && offer) return {
+    tone: 'idle', wrap: true,
+    message: t('contract.offer', { goal: contractGoal(offer), time: restockCountdown(offer.durationMs), deposit: money(offer.deposit), reward: money(offer.reward) }),
+    button: { label: t('contract.accept', { deposit: money(offer.deposit) }), command: 'acceptContract', disabled: !canAcceptContract(state) },
+    secondary: { label: t('contract.decline'), command: 'declineContract' },
+  };
   if (view === 'altar') {
     if (state.prestige.tier >= PRESTIGE.maxTier) return { tone: 'win', message: t('prestige.max') };
     const eligible = canPrestige(state);
@@ -104,6 +114,7 @@ export function PromptChip({ prompt, onCommand }: { prompt: Prompt; onCommand: (
           <span style={{ width: `${Math.round(prompt.progress * 100)}%` }} />
         </div>
       )}
+      {prompt.secondary && <button className="btn" onClick={() => onCommand(prompt.secondary!.command)}>{prompt.secondary.label}</button>}
       {button && (
         <button className="btn btn-primary" data-testid="action" disabled={button.disabled} onKeyDown={event => { if (button.command === 'incense') blockRepeatedOffering(event); }} onClick={() => onCommand(button.command)}>
           {button.label}
@@ -112,6 +123,15 @@ export function PromptChip({ prompt, onCommand }: { prompt: Prompt; onCommand: (
       )}
     </div>
   );
+}
+
+export function ContractNotice({ state }: { state: GameState }) {
+  const active = state.contracts.active;
+  if (!active) return null;
+  return <div className="contract-notice" role="status" data-testid="contract-progress">
+    <span>{contractGoal(active)} <b>{formatMoney(active.progress)}/{formatMoney(active.target)}</b></span>
+    <span className="incident-time" role="timer">{restockCountdown(active.remainingMs)}</span>
+  </div>;
 }
 
 export function IncidentNotice({ incident }: { incident: Incident | null }) {

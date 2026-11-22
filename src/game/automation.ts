@@ -4,6 +4,7 @@ import { buyTicket, collectTicket, revealTicket } from './economy';
 import type { GameState, Ticket } from './state';
 import { ticketDef } from '../data/tickets';
 import { advanceStock } from './stock';
+import { advanceContracts, contractBoundary } from './contracts';
 
 export interface Robot {
   charge: number;
@@ -93,9 +94,10 @@ export function automationAction(s: GameState, action: AutomationAction, index =
   return { ...s, money: s.money - price, automation: a };
 }
 
-export function advanceAutomation(state: GameState, elapsedMs: number, away = false): GameState {
+export function advanceAutomation(state: GameState, elapsedMs: number, away = false, kioskTime = false): GameState {
+  const advance = (s: GameState, ms: number) => kioskTime && !away ? advanceContracts(advanceStock(s, ms), ms) : advanceStock(s, ms);
   if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return state;
-  if (state.rentDebt > 0 || !state.automation.robots.length) return advanceStock(state, elapsedMs);
+  if (state.rentDebt > 0 || !state.automation.robots.length) return advance(state, elapsedMs);
   let s = { ...state, automation: { ...state.automation, robots: state.automation.robots.map(r => ({ ...r })) } };
   let left = elapsedMs;
   while (left > 0 && s.rentDebt <= 0) {
@@ -116,8 +118,8 @@ export function advanceAutomation(state: GameState, elapsedMs: number, away = fa
       return Math.min(interval - robot.progressMs, robot.charge * interval / ticketCharge(robot.tray, s.prestige.tier));
     };
     const restock = Math.min(...Object.values(s.stock).filter(entry => entry.remaining === 0).map(entry => entry.remainingMs));
-    const next = Math.min(restock, ...s.automation.robots.map(duration));
-    if (!Number.isFinite(next)) { s = advanceStock(s, left) as typeof s; left = 0; break; }
+    const next = Math.min(restock, kioskTime && !away ? contractBoundary(s) : Infinity, ...s.automation.robots.map(duration));
+    if (!Number.isFinite(next)) { s = advance(s, left) as typeof s; left = 0; break; }
     const step = Math.min(left, next);
     for (const robot of s.automation.robots) {
       if (robot.charging) {
@@ -132,7 +134,7 @@ export function advanceAutomation(state: GameState, elapsedMs: number, away = fa
       }
     }
     left -= step;
-    s = advanceStock(s, step) as typeof s;
+    s = advance(s, step) as typeof s;
     for (const robot of s.automation.robots) {
       const ticket = robot.tray;
       if (!ticket) continue;
@@ -148,7 +150,7 @@ export function advanceAutomation(state: GameState, elapsedMs: number, away = fa
       }
     }
   }
-  return advanceStock(s, left);
+  return advance(s, left);
 }
 
 export function settleAway(s: GameState, now: number, minimumMs = 0): GameState {

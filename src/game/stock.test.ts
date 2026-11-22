@@ -94,7 +94,7 @@ describe('stock saves', () => {
   });
   it('migrates v7 to full stock without timers', () => {
     const state = migrate({ ...soldOut(), version: 7 });
-    expect(state?.version).toBe(8);
+    expect(state?.version).toBe(9);
     expect(state?.stock).toEqual(initialStock());
   });
   it('validates missing, malformed, excessive and negative entries', () => {

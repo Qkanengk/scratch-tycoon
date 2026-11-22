@@ -280,6 +280,52 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 
+.kiosk-notices {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(360px, calc(100% - 420px));
+  pointer-events: none;
+}
+
+.kiosk-notices .incident-notice {
+  position: static;
+  transform: none;
+  zoom: 1;
+}
+
+.kiosk-notices .incident-notice[data-incident] {
+  width: 100%;
+  max-width: none;
+}
+
+.contract-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 10px;
+  background: var(--cream);
+  border: var(--line);
+  border-left: 8px solid var(--green);
+  border-radius: 14px;
+  box-shadow: var(--drop);
+  font-size: 0.82rem;
+  line-height: 1.2;
+}
+
+@media (max-width: 700px), (pointer: coarse) {
+  .kiosk-notices {
+    top: calc(var(--hud-top, 12px) + 58px);
+    width: min(360px, calc(100% - var(--hud-left, 12px) - var(--hud-right, 12px)));
+  }
+  .app[data-view='desk'] .kiosk-notices { top: calc(var(--hud-top, 12px) + 105px); }
+}
+
 .btn-round {
   width: 46px;
   padding: 0;
