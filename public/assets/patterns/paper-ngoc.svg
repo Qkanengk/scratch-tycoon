@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240">
-<rect width="240" height="240" fill="#46ad86"/>
-<polygon points="60,8 112,60 60,112 8,60" fill="#7fd6b0" stroke="#2f8a68" stroke-width="4" stroke-linejoin="round"/><polygon points="60,34 86,60 60,86 34,60" fill="#4fb88f"/><path d="M60 8 V34 M112 60 H86 M60 112 V86 M8 60 H34" stroke="#2f8a68" stroke-width="3"/>
-<polygon points="180,128 232,180 180,232 128,180" fill="#7fd6b0" stroke="#2f8a68" stroke-width="4" stroke-linejoin="round"/><polygon points="180,154 206,180 180,206 154,180" fill="#4fb88f"/><path d="M180 128 V154 M232 180 H206 M180 232 V206 M128 180 H154" stroke="#2f8a68" stroke-width="3"/>
-<polygon points="180,8 232,60 180,112 128,60" fill="#5cc49a" stroke="#2f8a68" stroke-width="4" stroke-linejoin="round"/><polygon points="180,34 206,60 180,86 154,60" fill="#3da37c"/><path d="M180 8 V34 M232 60 H206 M180 112 V86 M128 60 H154" stroke="#2f8a68" stroke-width="3"/>
-<polygon points="60,128 112,180 60,232 8,180" fill="#5cc49a" stroke="#2f8a68" stroke-width="4" stroke-linejoin="round"/><polygon points="60,154 86,180 60,206 34,180" fill="#3da37c"/><path d="M60 128 V154 M112 180 H86 M60 232 V206 M8 180 H34" stroke="#2f8a68" stroke-width="3"/>
-</svg>

@@ -48,14 +48,6 @@
   "use": "symbol: Vé Đồng (jackpot)"
  },
  {
-  "id": "original/gourd",
-  "file": "models/original/gourd.glb",
-  "author": "Scratch Tycoon",
-  "license": "CC0-1.0",
-  "source": "scripts/assets/make-gourd.py",
-  "use": "symbol: Vé Bạc (bầu)"
- },
- {
   "id": "quaternius/crab",
   "file": "models/quaternius/crab.glb",
   "author": "Quaternius",
@@ -198,5 +190,141 @@
   "license": "CC0-1.0",
   "source": "https://kenney.nl/assets/mini-shop",
   "use": "prop: trang trí bàn"
+ },
+ {
+  "id": "kiosk/key",
+  "file": "models/kiosk/key.glb",
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/bg6e1lfNsO",
+  "use": "Key"
+ },
+ {
+  "id": "kiosk/card",
+  "file": "models/kiosk/card.glb",
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/EDvCEBvs8k",
+  "use": "Pickup Key Card"
+ },
+ {
+  "id": "kiosk/scraper",
+  "file": "models/kiosk/scraper.glb",
+  "author": "Kenney",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/VMluJiBnkx",
+  "use": "Cooking Spatula"
+ },
+ {
+  "id": "kiosk/machine",
+  "file": "models/kiosk/machine.glb",
+  "author": "Poly by Google",
+  "license": "CC-BY-3.0",
+  "source": "https://poly.pizza/m/eeYDEQ1jJi5",
+  "use": "Paint roller"
+ },
+ {
+  "id": "kiosk/laser-model",
+  "file": "models/kiosk/laser-model.glb",
+  "author": "Pichuliru",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/h2P7oQ8RVg",
+  "use": "Laser"
+ },
+ {
+  "id": "kiosk/shelf",
+  "file": "models/kiosk/shelf.glb",
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/TDgvIuorcX",
+  "use": "Shelf Tall"
+ },
+ {
+  "id": "kiosk/shelf-wide",
+  "file": "models/kiosk/shelf-wide.glb",
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/3FmjkLClVE",
+  "use": "Shelf Large"
+ },
+ {
+  "id": "kiosk/noticeboard",
+  "file": "models/kiosk/wooden-board.glb",
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/CfQ9CnzQiy",
+  "use": "Wooden Board"
+ },
+ {
+  "id": "kiosk/counter",
+  "file": "models/kiosk/counter.glb",
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/7dcTIks23j",
+  "use": "Counter Drawers"
+ },
+ {
+  "id": "kiosk/robot",
+  "file": "models/kiosk/robot.glb",
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/QCm7qe9uNJ",
+  "use": "Animated Robot"
+ },
+ {
+  "id": "kiosk/robot-2",
+  "file": "models/kiosk/robot-2.glb",
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/1gNo5ezvmr",
+  "use": "Robot Enemy"
+ },
+ {
+  "id": "kiosk/robot-3",
+  "file": "models/kiosk/robot-3.glb",
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/tzOLXetacM",
+  "use": "Rover"
+ },
+ {
+  "id": "kiosk/battery",
+  "file": "models/kiosk/battery.glb",
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/OOvs45iGQg",
+  "use": "Battery"
+ },
+ {
+  "id": "kiosk/power",
+  "file": "models/kiosk/power.glb",
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/U0xmt6tUlL",
+  "use": "Scifi Computer"
+ },
+ {
+  "id": "kiosk/shrine",
+  "file": "models/kiosk/shrine.glb",
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/u3A1t5DIMd",
+  "use": "Cabinet Shelves"
+ },
+ {
+  "id": "kiosk/candle",
+  "file": "models/kiosk/candle.glb",
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/AnzHB44wlW",
+  "use": "Candles"
+ },
+ {
+  "id": "kiosk/lantern",
+  "file": "models/kiosk/lantern.glb",
+  "author": "Kay Lousberg",
+  "license": "CC0-1.0",
+  "source": "https://poly.pizza/m/CtHBJ1ufeW",
+  "use": "Lantern"
  }
 ]

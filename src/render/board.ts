@@ -4,9 +4,10 @@ import { formatMoney } from '../game/format';
 import type { GameState } from '../game/state';
 import { unlockProgress } from '../game/unlocks';
 import { t } from '../i18n';
-import { canvasTexture, image, rasterize } from './assets';
+import { canvasTexture, image, patternPath } from './assets';
 import { palette } from './palette';
-import { inkBox, inkCard } from './shapes';
+import { inkCard } from './shapes';
+import { kioskProp } from './kioskModels';
 
 const W = 0.72;
 const H = 0.9;
@@ -61,7 +62,7 @@ export class LicenseBoard {
     lean.add(card);
     lean.rotation.x = -0.22;
     lean.position.z = 0.1;
-    const foot = inkBox(W * 0.8, 0.06, 0.3, 0x9c5a2a);
+    const foot = kioskProp('noticeboard', [W * .8, .06, .30]);
     this.group.add(foot, lean);
   }
 
@@ -118,8 +119,14 @@ export class LicenseBoard {
     ctx.fillStyle = palette.paper;
     ctx.fillRect(0, 0, w, h);
     // Header band in the paper of the ticket the licence is for.
-    ctx.fillStyle = id ? ctx.createPattern(rasterize(`patterns/paper-${id}.svg`, 180), 'repeat')! : palette.gold;
+    ctx.fillStyle = id ? palette.ticket[id] : palette.gold;
     ctx.fillRect(0, 0, w, 170);
+    if (id) {
+      ctx.save();
+      ctx.globalAlpha = .57;
+      ctx.drawImage(image(patternPath(`paper-${id}`)), 0, 0, w, 170);
+      ctx.restore();
+    }
     ctx.fillStyle = palette.ink;
     ctx.fillRect(0, 170, w, 9);
     const plate = (x: number, y: number, pw: number, ph: number, fill: string, r = 26) => {
@@ -170,7 +177,7 @@ export class LicenseBoard {
         ctx.fill();
       }
     });
-    if (rows.length === 0) ctx.drawImage(image('stickers/star-coin.png'), w / 2 - 150, h / 2 - 190, 300, 300);
+    if (rows.length === 0) ctx.drawImage(image('brand/coin.png'), w / 2 - 125, h / 2 - 165, 250, 250);
 
     plate(44, h - (landscape ? 100 : 150), w - 88, landscape ? 80 : 104, ready ? palette.gold : '#e3d3b3');
     ctx.textAlign = 'center';

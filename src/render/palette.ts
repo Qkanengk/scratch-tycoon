@@ -12,7 +12,7 @@ export const palette = {
   foil: '#c4c9d6',
   foilShade: '#aeb4c2',
   wood: '#c98a4b',
-  /** Paper colour of each ticket tier, matching public/assets/patterns/paper-<id>.svg. */
+  /** Base paper colour under the sourced ticket print. */
   ticket: {
     dong: '#e58a45',
     bac: '#cfdcec',

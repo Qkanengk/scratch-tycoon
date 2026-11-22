@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { INK, toonify } from './toon';
+import { INK } from './toon';
 
 export function roundedRect(w: number, h: number, r: number): THREE.Shape {
   const shape = new THREE.Shape();
@@ -22,16 +22,6 @@ export function flat(shape: THREE.Shape, material: THREE.Material, y: number): T
   const mesh = new THREE.Mesh(new THREE.ShapeGeometry(shape, 8).rotateX(-Math.PI / 2), material);
   mesh.position.y = y;
   return mesh;
-}
-
-/** A cel-shaded box with an ink outline, resting on y = 0. */
-export function inkBox(w: number, h: number, d: number, color: number, outline = 0.012): THREE.Group {
-  const group = new THREE.Group();
-  const box = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color }));
-  box.position.y = h / 2;
-  group.add(box);
-  toonify(group, { outline });
-  return group;
 }
 
 /** An upright card: a picture with an ink border behind it, facing +z, centred on its own origin. */

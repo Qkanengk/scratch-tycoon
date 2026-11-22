@@ -3,7 +3,7 @@ import { formatCompact } from '../game/format';
 import type { Rect, ScratchMask } from '../game/scratch';
 import type { Cell, Ticket } from '../game/state';
 import { t } from '../i18n';
-import { image, rasterize } from './assets';
+import { image, patternPath, rasterize } from './assets';
 import { layoutTicket, type TicketLayout } from './layout';
 import { palette } from './palette';
 
@@ -59,11 +59,15 @@ function text(ctx: Ctx, value: string, x: number, y: number, size: number, color
 }
 
 function sticker(ctx: Ctx, name: string, x: number, y: number, size: number): void {
-  ctx.drawImage(image(`stickers/${name}.png`), x - size / 2, y - size / 2, size, size);
+  const img = image(`stickers/${name}.png`);
+  const scale = size / Math.max(img.naturalWidth, img.naturalHeight);
+  const w = img.naturalWidth * scale;
+  const h = img.naturalHeight * scale;
+  ctx.drawImage(img, x - w / 2, y - h / 2, w, h);
 }
 
 function pattern(ctx: Ctx, name: string, tile: number): CanvasPattern {
-  return ctx.createPattern(rasterize(`patterns/${name}.svg`, Math.round(tile)), 'repeat')!;
+  return ctx.createPattern(rasterize(patternPath(name), Math.round(tile)), 'repeat')!;
 }
 
 function isWinningCell(cell: Cell, cells: readonly Cell[]): boolean {
@@ -133,8 +137,13 @@ export function drawFace(canvas: HTMLCanvasElement, id: TicketId, ticket: Ticket
   const ctx = canvas.getContext('2d')!;
   const cosmic = id === 'vutru';
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = pattern(ctx, `paper-${id}`, S * 0.26);
+  ctx.fillStyle = palette.ticket[id];
   ctx.fillRect(0, 0, S, canvas.height);
+  ctx.save();
+  ctx.globalAlpha = cosmic ? 1 : .57;
+  const backing = image(patternPath(`paper-${id}`));
+  ctx.drawImage(backing, 0, 0, S, canvas.height);
+  ctx.restore();
 
   // Header: name plate on the left, top prize on the right.
   const name = t(`ticket.${id}.name`);
@@ -190,22 +199,10 @@ export function drawFace(canvas: HTMLCanvasElement, id: TicketId, ticket: Ticket
     ctx.fillRect(MARGIN * S + 6, footY + footH * .59, S * .72, footH * .33);
     const number = String(ticket?.serial ?? 1).padStart(6, '0');
     const check = ticket?.fakeTell === 'misprinted-serial' ? 'XX' : number.slice(-2);
-    text(ctx, t('drain.serial', { serial: number, check }), S * .40, footY + footH * .76, band * .28, '#5f482c');
-    ctx.save();
-    ctx.translate(sealX, sealY);
-    ctx.strokeStyle = '#366779';
-    ctx.lineWidth = S * .004;
-    if (ticket?.fakeTell === 'missing-seal') ctx.setLineDash([S * .009, S * .007]);
-    ctx.beginPath(); ctx.arc(0, 0, footH * .16, 0, Math.PI * 2);
-    ctx.fillStyle = '#72c9b5';
-    if (ticket?.fakeTell !== 'missing-seal') ctx.fill();
-    ctx.stroke();
-    ctx.setLineDash([]);
-    if (ticket?.fakeTell !== 'missing-seal') {
-      ctx.fillStyle = '#ffe09a';
-      ctx.beginPath(); ctx.moveTo(0, -footH * .115); ctx.lineTo(footH * .075, 0); ctx.lineTo(0, footH * .115); ctx.lineTo(-footH * .075, 0); ctx.fill();
-    }
-    ctx.restore();
+    text(ctx, t('drain.serial', { serial: number, check }), S * .40, footY + footH * .76, band * .28, '#5f482c', 800, cosmic ? S * .42 : undefined);
+    if (cosmic) sticker(ctx, 'spaceship', S * .13, footY + footH * .76, footH * .34);
+    if (ticket?.fakeTell !== 'missing-seal') sticker(ctx, 'jewel', sealX, sealY, footH * .39);
+    else text(ctx, '–', sealX, sealY, footH * .31, '#366779');
     text(ctx, t('drain.seal'), sealX, sealY + footH * .205, footH * .11, '#366779');
   }
   if (lit && ticket?.fakeTell) {
@@ -216,6 +213,20 @@ export function drawFace(canvas: HTMLCanvasElement, id: TicketId, ticket: Ticket
     text(ctx, t('drain.fake'), 0, 0, S * .038, '#bb3026');
     ctx.restore();
   }
+}
+
+export function ticketSample(id: TicketId, width: number): HTMLCanvasElement {
+  const m = ticketMetrics(id);
+  const face = document.createElement('canvas');
+  face.width = width;
+  face.height = Math.round(width * m.height);
+  drawFace(face, id, null, false);
+  const foil = document.createElement('canvas');
+  foil.width = Math.round(width * m.window.w);
+  foil.height = Math.round(foil.width * m.layout.height);
+  drawFoil(foil, id);
+  face.getContext('2d')!.drawImage(foil, m.window.x * width, m.window.y * width);
+  return face;
 }
 
 /** Paints one foil patch per cell on a canvas that covers the scratch window; scratching erases it. */

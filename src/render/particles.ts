@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { canvasTexture, PARTICLES, rasterize, type ParticleName } from './assets';
+import { canvasTexture, PARTICLES, particlePath, rasterize, type ParticleName } from './assets';
 
 interface Particle {
   sprite: THREE.Sprite;
@@ -24,6 +24,10 @@ export interface Burst {
 }
 
 const rand = (min: number, max: number) => min + Math.random() * (max - min);
+const tints: Partial<Record<ParticleName, number>> = {
+  'confetti-blue': 0x4da9df, 'confetti-green': 0x6baa54, 'confetti-red': 0xe75e52, 'confetti-yellow': 0xffce55,
+  'foil-flake-a': 0x999daa, 'foil-flake-b': 0xb9bcca, 'foil-curl': 0x888d9b, star: 0xffce55, sparkle: 0xffe08c,
+};
 
 /** Flat sticker particles (foil flakes, coins, stars, confetti) that always face the camera. */
 export class Particles {
@@ -33,13 +37,14 @@ export class Particles {
   private readonly pool: THREE.Sprite[] = [];
 
   constructor(private readonly limit = 220) {
-    for (const name of PARTICLES) this.textures.set(name, canvasTexture(rasterize(`particles/${name}.svg`, 128)));
+    for (const name of PARTICLES) this.textures.set(name, canvasTexture(rasterize(particlePath(name), 128)));
   }
 
   emit(origin: THREE.Vector3, burst: Burst): void {
     for (let i = 0; i < burst.count && this.live.length < this.limit; i++) {
       const sprite = this.pool.pop() ?? new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false }));
       sprite.material.map = this.textures.get(burst.name) ?? null;
+      sprite.material.color.setHex(tints[burst.name] ?? 0xffffff);
       sprite.material.opacity = 1;
       sprite.material.rotation = rand(0, Math.PI * 2);
       sprite.position.copy(origin);

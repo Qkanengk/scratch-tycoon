@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { play } from '../audio/sfx';
 import { deserialize, serialize } from '../game/save';
 import { t, type MessageKey } from '../i18n';
+import { ASSETS } from '../render/assets';
 import { Icon } from './Icon';
 import type { Game } from './useGame';
 
@@ -83,6 +84,7 @@ export function SavePanel({ game, onClose }: { game: Game; onClose: () => void }
           </button>
         )}
         <p className="fineprint">{t('app.playMoney')}</p>
+        <p className="fineprint"><a href={`${ASSETS}/credits/credits.html`} target="_blank" rel="noreferrer">{t('save.assetCredits')}</a></p>
       </div>
     </div>
   );

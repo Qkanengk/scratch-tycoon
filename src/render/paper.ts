@@ -3,7 +3,7 @@ import { rentAmount, timeToNextRent } from '../game/economy';
 import { formatCompact } from '../game/format';
 import type { GameState, Ticket } from '../game/state';
 import { t } from '../i18n';
-import { canvasTexture } from './assets';
+import { canvasTexture, image, patternPath } from './assets';
 import { inkCard } from './shapes';
 import { disposeToolObject } from './toolModels';
 
@@ -26,9 +26,10 @@ export class Paper {
     const { width, height } = this.canvas;
     ctx.fillStyle = '#fff1cc';
     ctx.fillRect(0, 0, width, height);
-    ctx.strokeStyle = '#d7bd8e';
-    ctx.lineWidth = 2;
-    for (let y = 30; y < height; y += 35) { ctx.beginPath(); ctx.moveTo(20, y); ctx.lineTo(width - 20, y); ctx.stroke(); }
+    ctx.save();
+    ctx.globalAlpha = .24;
+    ctx.drawImage(image(patternPath('paper')), 0, 0, width, height);
+    ctx.restore();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     lines.forEach((line, i) => {

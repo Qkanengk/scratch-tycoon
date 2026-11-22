@@ -2,25 +2,12 @@ import * as THREE from 'three';
 import { t } from '../i18n';
 import { canvasTexture, image, loadModel, patternTexture } from './assets';
 import { palette } from './palette';
-import { flat, inkBox, inkCard, roundedRect } from './shapes';
+import { flat, inkCard, roundedRect } from './shapes';
+import { kioskProp } from './kioskModels';
 import { fitToSize, toonify } from './toon';
 
 export const WALL_Z = -1.95;
 const FONT = '"Baloo 2", system-ui, sans-serif';
-
-function wallTexture(): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = 256;
-  const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#2f7a8c';
-  ctx.fillRect(0, 0, 256, 256);
-  ctx.fillStyle = '#37879a';
-  ctx.fillRect(0, 0, 128, 256);
-  const texture = canvasTexture(canvas);
-  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(14, 1);
-  return texture;
-}
 
 function signTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
@@ -29,31 +16,35 @@ function signTexture(): THREE.CanvasTexture {
   const ctx = canvas.getContext('2d')!;
   ctx.fillStyle = palette.red;
   ctx.fillRect(0, 0, 1024, 256);
-  ctx.drawImage(image('stickers/star-coin.png'), 28, 38, 180, 180);
-  ctx.drawImage(image('stickers/star-coin.png'), 816, 38, 180, 180);
+  ctx.drawImage(image('brand/coin.png'), 26, 82, 92, 92);
+  ctx.drawImage(image('brand/coin.png'), 906, 82, 92, 92);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = `800 118px ${FONT}`;
   ctx.lineJoin = 'round';
-  ctx.lineWidth = 22;
+  ctx.lineWidth = 10;
   ctx.strokeStyle = palette.ink;
-  ctx.strokeText(t('room.sign'), 512, 138);
+  ctx.strokeText(t('room.sign'), 512, 138, 754);
   ctx.fillStyle = palette.gold;
-  ctx.fillText(t('room.sign'), 512, 138);
+  ctx.fillText(t('room.sign'), 512, 138, 754);
   return canvasTexture(canvas);
 }
 
 /** The lottery kiosk around the player: desk, back wall, shop sign and a shelf of prizes. */
 export function buildRoom(): THREE.Group {
   const room = new THREE.Group();
-  const wood = new THREE.MeshBasicMaterial({ map: patternTexture('table-wood', 1.5) });
+  const woodMap = patternTexture('table-wood', 2.4);
+  woodMap.rotation = Math.PI / 2;
+  const wood = new THREE.MeshBasicMaterial({ map: woodMap, color: 0xe79255 });
   const desk = flat(roundedRect(12, 6, 0.1), wood, 0);
   desk.position.z = -0.6;
   const counterExtension = flat(roundedRect(36, 18, 0.1), wood, -.001);
   counterExtension.name = 'countertop-extension';
   counterExtension.position.z = 7.05;
   counterExtension.visible = false;
-  const wall = new THREE.Mesh(new THREE.PlaneGeometry(14, 5), new THREE.MeshBasicMaterial({ map: wallTexture() }));
+  const wallMap = patternTexture('wall', 1);
+  wallMap.repeat.set(2, .6);
+  const wall = new THREE.Mesh(new THREE.PlaneGeometry(14, 5), new THREE.MeshBasicMaterial({ map: wallMap, color: 0x53a7ba }));
   wall.position.set(0, 2.5, WALL_Z);
   const skirting = new THREE.Mesh(new THREE.PlaneGeometry(14, 0.5), new THREE.MeshBasicMaterial({ color: 0x1f5564 }));
   skirting.position.set(0, 0.25, WALL_Z + 0.004);
@@ -65,7 +56,7 @@ export function buildRoom(): THREE.Group {
   // The prize shelf is its own group so a tall window can lift it out of the rack's way.
   const shelf = new THREE.Group();
   shelf.name = 'shelf';
-  const plank = inkBox(4.6, 0.07, 0.42, 0x9c5a2a);
+  const plank = kioskProp('stand', [4.6, .07, .42], undefined, 0xf5a535);
   plank.position.set(0, 0.95, WALL_Z + 0.21);
   shelf.add(plank);
   room.add(desk, counterExtension, wall, skirting, rail, sign, shelf);
