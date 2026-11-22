@@ -122,6 +122,23 @@ describe('contract lifecycle', () => {
     expect(split).toEqual(done);
   });
 
+  it('keeps robot prize reports and revenue separate from contract payouts, like desk collections', () => {
+    let state = loadRobot(automationAction(active(), 'robot'), 0);
+    state = { ...state, contracts: { ...state.contracts, active: { ...state.contracts.active!, progress: 79 } } };
+    const revealed = revealTicket({ ...state, ticket: state.automation.robots[0]!.tray });
+    const ticket = revealed.ticket!;
+    const desk = collectTicket(revealed);
+    const done = advanceKioskTime(state, 4000);
+    expect(done.contracts.result?.success).toBe(true);
+    expect(done.money).toBe(desk.money);
+    expect(done.totalEarned).toBe(state.totalEarned + ticket.net);
+    expect(done.totalEarned).toBe(desk.totalEarned);
+    expect(done.prestige.runEarned).toBe(state.prestige.runEarned + ticket.net);
+    expect(done.prestige).toEqual(desk.prestige);
+    expect(done.stats).toEqual(desk.stats);
+    expect(done.automation.report.net).toBe(state.automation.report.net + ticket.net);
+  });
+
   it('pauses deadlines and progress during away simulation, and clears contracts on prestige', () => {
     let state = automationAction(automationAction(automationAction(active(), 'robot'), 'autoBuy'), 'away', 0, 1000);
     state = loadRobot(state, 0);

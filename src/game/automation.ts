@@ -139,8 +139,10 @@ export function advanceAutomation(state: GameState, elapsedMs: number, away = fa
       const ticket = robot.tray;
       if (!ticket) continue;
       if (robot.progressMs >= interval - 1e-7) {
-        const result = collectTicket(revealTicket({ ...s, ticket, equippedTool: 'coin' }), away);
-        const net = result.money - s.money;
+        const revealed = revealTicket({ ...s, ticket, equippedTool: 'coin' });
+        const prize = revealed.ticket!.net;
+        const net = prize - Math.min(s.rentDebt, prize);
+        const result = collectTicket(revealed, away);
         s = { ...result, ticket: state.ticket, equippedTool: state.equippedTool,
           stats: away ? state.stats : result.stats, totalEarned: away ? state.totalEarned : result.totalEarned,
           prestige: away ? state.prestige : result.prestige,
