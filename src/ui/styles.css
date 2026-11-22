@@ -303,6 +303,13 @@ textarea:focus-visible {
   background: #f1e4cd;
 }
 
+.prompt-wrap .prompt-message {
+  min-width: 0;
+  white-space: normal;
+  text-align: center;
+  font-size: 1.05rem;
+}
+
 kbd {
   padding: 1px 7px 0;
   font: inherit;

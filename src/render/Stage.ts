@@ -21,11 +21,14 @@ import { INK } from './toon';
 import { Paper, receiptLines, rentLines } from './paper';
 import { PlayClock } from './playClock';
 import { formatCompact } from '../game/format';
+import { RobotStation } from './robotStation';
+import type { AutomationAction } from '../game/automation';
 
 /** Where the player is looking: down at the scratch mat, up at the ticket rack, or at the licence board. */
-export type View = 'desk' | 'shop' | 'board' | 'tools';
+export type View = 'desk' | 'shop' | 'board' | 'tools' | 'robots';
 
 export interface StageCallbacks {
+  onAutomation(action: AutomationAction | 'context', index: number): void;
   /** The player scratched enough of the ticket on the mat. */
   onRevealed(ticket: Ticket): void;
   /** Scratch progress toward the reveal, 0 to 1. */
@@ -46,7 +49,7 @@ export interface StageCallbacks {
   onBomb(ticket: Ticket, index: number): void;
 }
 
-type Action = { kind: 'ticket'; id: TicketId } | { kind: 'board' } | { kind: 'collect' } | { kind: 'tools' } | { kind: 'tool'; intent: ToolIntent | null } | { kind: 'return' } | { kind: 'repair'; id: ToolId };
+type Action = { kind: 'robots' } | { kind: 'automation'; action: AutomationAction | 'context'; index?: number } | { kind: 'ticket'; id: TicketId } | { kind: 'board' } | { kind: 'collect' } | { kind: 'tools' } | { kind: 'tool'; intent: ToolIntent | null } | { kind: 'return' } | { kind: 'repair'; id: ToolId };
 
 const FACE_PX = 1024;
 const FOIL_PX = 768;
@@ -101,6 +104,7 @@ export class Stage {
   private fovGoal = 50;
   private readonly ticket = new THREE.Group();
   private readonly mat = new THREE.Group();
+  private robots!: RobotStation;
   private readonly tool = new THREE.Group();
   private toolLift = 0.045;
   private toolLean = 0;
@@ -268,6 +272,8 @@ export class Stage {
     if (this.disposed) return;
     this.particles = new Particles();
     this.room = buildRoom();
+    this.robots = new RobotStation();
+    this.scene.add(this.robots.group);
     this.rack = new Rack();
     this.rack.group.position.set(0, 0, RACK_Z);
     this.board = new LicenseBoard();
@@ -367,6 +373,7 @@ export class Stage {
       this.toolShelf.dispose();
       disposeToolObject(this.tool);
       this.rent.dispose(); this.receipt.dispose(); this.returnTag.dispose();
+      this.robots.dispose();
     }
     this.faceTexture.dispose();
     this.foilTexture.dispose();
@@ -380,6 +387,7 @@ export class Stage {
     const state = this.state;
     if (!state) return;
     this.toolShelf.update(state);
+    this.robots.update(state);
     const key = JSON.stringify(rentLines(state, this.rentStamp > 0));
     if (key !== this.rentKey) { this.rentKey = key; this.rent.draw(rentLines(state, this.rentStamp > 0)); }
     const ticketForReturn = state.ticket;
@@ -651,13 +659,14 @@ export class Stage {
   /** The thing under the pointer that can be pressed, if any. */
   private pick(event: PointerEvent): Action | null {
     this.raycaster.setFromCamera(this.ndc(event), this.camera);
-    for (const hit of this.raycaster.intersectObjects([this.rack.group, this.board.group, this.toolShelf.group, this.ticket, this.returnTag.group, this.receipt.group], true)) {
+    for (const hit of this.raycaster.intersectObjects([this.rack.group, this.board.group, this.toolShelf.group, this.robots.group, this.ticket, this.returnTag.group, this.receipt.group], true)) {
       let visible = true;
       for (let node: THREE.Object3D | null = hit.object; node; node = node.parent) visible &&= node.visible;
       if (!visible) continue;
       const action = hit.object.userData.action as Action | undefined;
       if (!action) continue;
       if (action.kind === 'tool' && this.view !== 'tools') return { kind: 'tools' };
+      if (action.kind === 'automation' && this.view !== 'robots') return { kind: 'robots' };
       if (action.kind === 'collect' && !(this.shown?.revealed && !this.busy)) continue;
       return action;
     }
@@ -730,7 +739,7 @@ export class Stage {
       const action = this.pick(event);
       if (action) this.press(action);
     } else if ((this.mask === null || this.view !== 'desk') && Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
-      this.look(dx > 0 ? this.view === 'board' ? 'shop' : 'tools' : this.view === 'tools' ? 'shop' : 'board');
+      this.look(dx > 0 ? this.view === 'robots' ? 'board' : this.view === 'board' ? 'shop' : 'tools' : this.view === 'tools' ? 'shop' : this.view === 'shop' ? 'board' : 'robots');
     } else if ((this.mask === null || this.view !== 'desk') && Math.abs(dy) > 50 && Math.abs(dy) > Math.abs(dx)) {
       // With foil still on the mat a drag is an attempt to scratch, not a look.
       // Dragging the scene down looks up, like turning your head.
@@ -766,11 +775,13 @@ export class Stage {
   /** Looks one step up (desk to rack) or down (board or rack back to the desk). */
   nod(direction: 'up' | 'down'): void {
     if (direction === 'up') this.look('shop');
-    else this.look(this.view === 'board' || this.view === 'tools' ? 'shop' : 'desk');
+    else this.look(this.view === 'board' || this.view === 'tools' || this.view === 'robots' ? 'shop' : 'desk');
   }
 
   private press(action: Action): void {
-    if (action.kind === 'return') { this.saveScratch(); this.callbacks.onReturn(); }
+    if (action.kind === 'robots') this.look('robots');
+    else if (action.kind === 'automation') this.callbacks.onAutomation(action.action, action.index ?? 0);
+    else if (action.kind === 'return') { this.saveScratch(); this.callbacks.onReturn(); }
     else if (action.kind === 'repair') this.callbacks.onRepair(action.id);
     else if (action.kind === 'ticket') this.callbacks.onTicket(action.id);
     else if (action.kind === 'tools') this.look('tools');
@@ -918,6 +929,7 @@ export class Stage {
       direction = gaze(desktop ? 72 : touch && !tall ? 85 : tall ? 60 : 50);
       points = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => new THREE.Vector3(sx * halfW, FACE_Y, sz * halfH)));
       if (desktop) {
+        points.push(...this.robots.deskPoints());
         for (const name of ['cash-register', 'gold-bag', 'coins']) {
           const prop = this.room.getObjectByName(name);
           if (!prop) continue;
@@ -928,6 +940,7 @@ export class Stage {
             sz < 0 ? box.min.z : box.max.z,
           )))));
         }
+        target = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
       }
     } else if (this.view === 'shop') {
       points = this.rack.points();
@@ -950,6 +963,10 @@ export class Stage {
       target = box.getCenter(new THREE.Vector3());
       direction = gaze(13);
       lift = desktop ? this.camera.aspect < 1.5 ? 0.2 : 0.03 : touch ? 0 : 0.34;
+    } else if (this.view === 'robots') {
+      points = this.robots.points();
+      target = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
+      direction = gaze(tall ? 70 : 35);
     } else if (this.view === 'tools') {
       points = this.toolShelf.points();
       target = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
@@ -974,6 +991,7 @@ export class Stage {
     if (!this.ready) return;
     const tall = this.camera.aspect < 0.8;
     const desktop = desktopLayout(width, height);
+    this.robots.layout(!desktop);
     this.rack.layout(tall);
     const shelf = this.room.getObjectByName('shelf');
     if (shelf) {
@@ -1021,6 +1039,9 @@ export class Stage {
     canvas.dataset.toolLevel = String(this.state?.toolLevels[this.state.equippedTool] ?? 0);
     canvas.dataset.ticket = JSON.stringify(screen(new THREE.Vector3(0, FACE_Y, 0)));
     canvas.dataset.view = this.view;
+    canvas.dataset.robots = JSON.stringify(screen(this.robots.group.localToWorld(new THREE.Vector3(0, 1.9, .4))));
+    canvas.dataset.robotOffers = JSON.stringify(Object.fromEntries(Object.entries(this.robots.offerAnchors()).map(([action, point]) => [action, screen(point)])));
+    canvas.dataset.robotSlots = JSON.stringify(this.robots.robotAnchors().map(screen));
     canvas.dataset.busy = this.busy || !this.settled ? '1' : '0';
   }
 
@@ -1030,6 +1051,7 @@ export class Stage {
     this.last = time;
     if (this.ready) this.clock(time);
     if (this.paused || document.hidden) return;
+    this.robots?.tick(dt, time);
     if (this.rentStamp > 0) { this.rentStamp = Math.max(0, this.rentStamp - dt); if (!this.rentStamp && this.state) this.sync(); }
     if (this.receiptTime > 0) { this.receiptTime -= dt; if (this.receiptTime <= 0) this.receipt.group.visible = false; }
 

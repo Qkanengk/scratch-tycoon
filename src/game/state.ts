@@ -1,6 +1,7 @@
 import { BALANCE } from '../data/balance';
 import { initialToolLevels, type ToolId } from '../data/tools';
 import { TICKET_IDS, type TicketId } from '../data/tickets';
+import { initialAutomation, type Automation } from './automation';
 
 /** Prizes inside cells are in units of the ticket's price. */
 export type Cell =
@@ -38,9 +39,10 @@ export interface TicketStats {
   bigWins: number;
 }
 
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 
 export interface GameState {
+  automation: Automation;
   version: typeof SAVE_VERSION;
   money: number;
   durability: Record<ToolId, number>;
@@ -72,6 +74,7 @@ export function emptyStats(): Record<TicketId, TicketStats> {
 export function createInitialState(seed: number): GameState {
   return {
     version: SAVE_VERSION,
+    automation: initialAutomation(),
     money: BALANCE.startingMoney,
     durability: { coin: 1, key: 1, card: 1, scraper: 1, machine: 1, laser: 1 },
     rentElapsedMs: 0,

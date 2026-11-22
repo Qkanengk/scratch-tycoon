@@ -31,3 +31,19 @@ describe('licence pacing at the measured scratch cadence', () => {
     }
   });
 });
+
+describe('robot policy pacing', () => {
+  const runs = Array.from({ length: 384 }, (_, i) => simulatePacing(10_001 + i, 6 * 3600, 4, true));
+  it('keeps every licence interval between twenty and forty minutes', () => {
+    for (const { id } of TICKETS.slice(1)) {
+      const median = percentile(runs.map(r => r.intervals[id] ?? Infinity), .5) / 60;
+      expect(median, id).toBeGreaterThanOrEqual(20);
+      expect(median, id).toBeLessThanOrEqual(40);
+    }
+  });
+  it('buys the first robot near one hour', () => {
+    const median = percentile(runs.map(r => r.firstRobot), .5) / 60;
+    expect(median).toBeGreaterThanOrEqual(50);
+    expect(median).toBeLessThanOrEqual(70);
+  });
+});

@@ -5,11 +5,12 @@ import { buyTool, repairPrice, repairTool, toolRadius, toolUpgradePrice, upgrade
 import { advancePlayTime, buyTicket, claimPromo, collectTicket, isBroke, returnFake, revealTicket, updatePromo } from '../src/game/economy';
 import { createInitialState } from '../src/game/state';
 import { buyLicense, unlockProgress } from '../src/game/unlocks';
+import { advanceAutomation, automationAction, automationPrice, loadRobot, type AutomationAction } from '../src/game/automation';
 
 export const CYCLE_SECONDS = 4;
 const PRESTIGE_EARNINGS = 10_000_000_000;
 
-export function simulatePacing(seed: number, horizonSeconds: number, cycleSeconds = CYCLE_SECONDS) {
+export function simulatePacing(seed: number, horizonSeconds: number, cycleSeconds = CYCLE_SECONDS, robots = false) {
   let state = createInitialState(seed);
   let elapsed = 0;
   let previousUnlock = 0;
@@ -17,6 +18,9 @@ export function simulatePacing(seed: number, horizonSeconds: number, cycleSecond
   const intervals: Partial<Record<TicketId, number>> = {};
   let prestige = Infinity;
   let firstUpgrade = Infinity;
+  let firstRobot = Infinity;
+  let autoBuy = Infinity;
+  let away = Infinity;
   const toolPurchases: Partial<Record<ToolId, number>> = { coin: 0 };
 
   while (elapsed <= horizonSeconds) {
@@ -32,6 +36,20 @@ export function simulatePacing(seed: number, horizonSeconds: number, cycleSecond
     if (!candidate && Number.isFinite(prestige)) break;
     // Keep ticket money in reserve and spend at most 15% of the purse per improvement.
     const reserve = TICKETS[next - 1]!.price;
+    if (robots) {
+      const actions: AutomationAction[] = state.automation.robots.length ? ['autoBuy', 'away', 'speed', 'capacity', 'robot', 'cap'] : ['robot'];
+      const action = actions.filter(action => automationPrice(state, action) <= state.money * .15 && state.money - automationPrice(state, action) >= reserve)
+        .sort((a, b) => automationPrice(state, a) - automationPrice(state, b))[0];
+      if (action) state = automationAction(state, action, 0, elapsed * 1000);
+      if (state.automation.robots.length) firstRobot = Math.min(firstRobot, elapsed);
+      if (state.automation.autoBuy) autoBuy = Math.min(autoBuy, elapsed);
+      if (state.automation.away) away = Math.min(away, elapsed);
+      for (let i = 0; i < state.automation.robots.length; i++) {
+        const robot = state.automation.robots[i]!;
+        if ((robot.charging || robot.charge <= 0) && state.money >= reserve + automationPrice(state, 'recharge', i)) state = automationAction(state, 'recharge', i);
+        state = loadRobot(state, i);
+      }
+    }
     if (state.durability[state.equippedTool] < 0.4 && state.money >= reserve + repairPrice(state, state.equippedTool)) {
       state = repairTool(state, state.equippedTool);
     }
@@ -71,8 +89,9 @@ export function simulatePacing(seed: number, horizonSeconds: number, cycleSecond
     // Only scratching speeds up, inversely with radius; overhead stays fixed.
     elapsed += 1.5 + (cycleSeconds - 1.5) * BALANCE.brushRadius / toolRadius(state);
     state = advancePlayTime(state, (elapsed - cycleStart) * 1000);
+    if (robots) state = advanceAutomation(state, (elapsed - cycleStart) * 1000);
   }
-  return { intervals, prestige, firstUpgrade, toolPurchases };
+  return { intervals, prestige, firstUpgrade, toolPurchases, firstRobot, autoBuy, away };
 }
 
 export function percentile(samples: readonly number[], p: number): number {
