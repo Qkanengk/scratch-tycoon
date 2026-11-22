@@ -1,6 +1,6 @@
 import type { Incident } from '../game/incidents';
 import { ticketDef, TICKETS } from '../data/tickets';
-import { canBuyTicket, canClaimPromo, isBroke, promoTicketDef, ticketRefund } from '../game/economy';
+import { canBuyTicket, canClaimPromo, collectTicket, isBroke, promoTicketDef, ticketRefund } from '../game/economy';
 import { formatMoney, formatCompact } from '../game/format';
 import type { GameState } from '../game/state';
 import { jackpotTier } from '../game/tickets';
@@ -84,13 +84,14 @@ export function promptFor(state: GameState, now: number, view: View, progress: n
     };
   }
   if (view === 'shop' && secondary && !isBroke(state)) {
+    const purchaseState = collectTicket(state);
     const def = ticketDef(state.selected);
     const name = t(`ticket.${def.id}.name`);
-    const quantity = Math.min(state.bulkLot, holdCapacity(state) - heldCount(state), state.stock[def.id].remaining, Math.floor(state.money / def.price));
+    const quantity = Math.min(purchaseState.bulkLot, holdCapacity(purchaseState) - heldCount(purchaseState), purchaseState.stock[def.id].remaining, Math.floor(purchaseState.money / def.price));
     return { tone: 'idle', message: t('bulk.lot', { count: state.bulkLot }), secondary,
       button: state.stock[def.id].remaining === 0
         ? { label: t('stock.rush', { fee: money(STOCK[def.id].rushFee) }), command: 'restock', disabled: state.money < STOCK[def.id].rushFee }
-        : { label: t('bulk.buy', { name, count: quantity || state.bulkLot, cost: formatMoney((quantity || state.bulkLot) * def.price) }), command: 'buy', disabled: !canBuyTicket(state, def.id) } };
+        : { label: t('bulk.buy', { name, count: quantity || state.bulkLot, cost: formatMoney((quantity || state.bulkLot) * def.price) }), command: 'buy', disabled: !canBuyTicket(purchaseState, def.id) } };
   }
   if (ticket?.revealed) {
     const round = currentRound(state);

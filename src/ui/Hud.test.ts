@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { buyTicket, revealTicket } from '../game/economy';
+import { buyTicket, collectTicket, revealTicket } from '../game/economy';
 import { createInitialState, type GameState } from '../game/state';
 import { ContractNotice, IncidentNotice, PromptChip, promptFor } from './Hud';
 import { prestigeScenario } from './debugPrestige';
@@ -10,6 +10,19 @@ import { acceptContract, contractOffer } from '../game/contracts';
 const fresh = (): GameState => createInitialState(1);
 
 describe('upgrade and bulk prompt chips', () => {
+  it.each([0, 10, 100])('previews bulk buying after collecting a revealed round with %s xu left', money => {
+    const held = revealTicket(buyTicket({ ...createInitialState(4), money: 1000, upgrades: { luck: 0, desk: 2, bulk: 1 }, bulkLot: 5 }, 'dong'));
+    const state = { ...held, money };
+    const collected = collectTicket(state);
+    const bought = buyTicket(collected, state.selected);
+    const count = collected.nextSerial < bought.nextSerial ? bought.nextSerial - collected.nextSerial : state.bulkLot;
+    const prompt = promptFor(state, 0, 'shop', 0);
+    expect(prompt.button?.label).toBe(`Mua Vé Đồng ×${count} · ${count * 10} xu`);
+    expect(prompt.button?.disabled).toBe(false);
+    expect(bought.money).toBe(collected.money - count * 10);
+    expect(state.money).toBe(money);
+    expect(state.ticket?.revealed).toBe(true);
+  });
   it('keeps keyboard hints separate from touch labels', () => {
     const state = { ...fresh(), upgrades: { luck: 0, desk: 0, bulk: 1 }, bulkLot: 5 as const };
     const upgrade = promptFor(state, 0, 'upgrades', 0, false, false, 'desk');
