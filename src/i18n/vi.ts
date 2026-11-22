@@ -1,4 +1,8 @@
 export const vi = {
+  'stock.remaining': 'còn {count}',
+  'stock.empty': 'Hết hàng · {time}',
+  'stock.wait': '{name} hết hàng · Nhập lại sau {time}',
+  'stock.rush': 'Nhập gấp · {fee}',
   'drain.rent': 'GIẤY THU TIỀN SẠP',
   'drain.debt': 'CÒN NỢ: {cost} xu',
   'drain.paid': 'ĐÃ THU · KỲ MỚI',

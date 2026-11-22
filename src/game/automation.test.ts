@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AUTOMATION as A } from '../data/automation';
-import { TICKET_IDS } from '../data/tickets';
+import { TICKET_IDS, ticketDef } from '../data/tickets';
 import { advanceAutomation, automationAction, automationPrice, awayCapMs, batteryCapacity, loadRobot, robotInterval, settleAway, ticketCharge } from './automation';
 import { buyTicket } from './economy';
 import { deserialize, migrate, serialize } from './save';
@@ -271,8 +271,9 @@ describe('away work and saves', () => {
 
   it('simulates deterministically, caps at twelve hours, and cannot cross an unmet licence gate', () => {
     const s = { ...awayState(), licenses: [] };
-    s.totalEarned = 3999;
-    s.stats.dong = { scratched: 449, bigWins: 22, wins: 100, jackpots: 0 };
+    const unlock = ticketDef('bac').unlock!;
+    s.totalEarned = unlock.totalEarned - 1;
+    s.stats.dong = { scratched: unlock.mission.scratched - 1, bigWins: unlock.mission.bigWins - 1, wins: 100, jackpots: 0 };
     expect(unlockProgress(s, 'bac').canBuyLicense).toBe(false);
     const done = settleAway(s, 1000 + 12 * 3600_000);
     expect(done.automation.report.tickets).toBeGreaterThan(0);

@@ -1,4 +1,5 @@
 import { BALANCE } from '../data/balance';
+import { initialStock, type Stock } from './stock';
 import { initialToolLevels, type ToolId } from '../data/tools';
 import { TICKET_IDS, type TicketId } from '../data/tickets';
 import { initialAutomation, type Automation } from './automation';
@@ -41,9 +42,10 @@ export interface TicketStats {
   bigWins: number;
 }
 
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 
 export interface GameState {
+  stock: Stock;
   /** Active-play prizes in this run, after tax and the permanent bonus, before rent withholding. */
   prestige: { tier: number; runEarned: number };
   /** Active play since the last purchased licence. */
@@ -81,6 +83,7 @@ export function emptyStats(): Record<TicketId, TicketStats> {
 export function createInitialState(seed: number): GameState {
   return {
     version: SAVE_VERSION,
+    stock: initialStock(),
     prestige: { tier: 0, runEarned: 0 },
     licenseElapsedMs: 0,
     automation: initialAutomation(),

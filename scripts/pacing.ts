@@ -1,4 +1,5 @@
-import { BALANCE } from '../src/data/balance';
+import { BALANCE, STOCK } from '../src/data/balance';
+import { rushRestock } from '../src/game/stock';
 import { TICKETS, type TicketId } from '../src/data/tickets';
 import { TOOLS, type ToolId } from '../src/data/tools';
 import { buyTool, repairPrice, repairTool, toolRadius, toolUpgradePrice, upgradeTool } from '../src/game/tools';
@@ -111,7 +112,8 @@ export function simulatePacing(seed: number, horizonSeconds: number, cycleSecond
     } else {
       for (let i = next - 1; i >= 0; i--) {
         const def = tickets[i];
-        if (def && state.money >= def.price) {
+        if (def && state.stock[def.id].remaining === 0 && STOCK[def.id].rushFee <= state.money * .01) state = rushRestock(state, def.id);
+        if (def && state.stock[def.id].remaining > 0 && state.money >= def.price) {
           state = buyTicket(state, def.id);
           break;
         }

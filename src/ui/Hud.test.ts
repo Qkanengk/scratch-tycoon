@@ -4,8 +4,24 @@ import { buyTicket, revealTicket } from '../game/economy';
 import { createInitialState, type GameState } from '../game/state';
 import { IncidentNotice, PromptChip, promptFor } from './Hud';
 import { prestigeScenario } from './debugPrestige';
+import { STOCK } from '../data/balance';
 
 const fresh = (): GameState => createInitialState(1);
+
+describe('stock prompt', () => {
+  it('offers rush restock with a countdown and checks its fee', () => {
+    const state = { ...fresh(), money: STOCK.dong.rushFee };
+    state.stock.dong = { remaining: 0, remainingMs: 61_000 };
+    const prompt = promptFor(state, 0, 'desk', 0);
+    expect(prompt.message).toContain('1:01');
+    expect(prompt.message).toContain('hết hàng');
+    expect(prompt.button).toMatchObject({ command: 'restock', disabled: false });
+    expect(prompt.button?.label).toContain('Nhập gấp');
+    expect(promptFor({ ...state, money: STOCK.dong.rushFee - 1 }, 0, 'desk', 0).button?.disabled).toBe(true);
+    expect(promptFor({ ...state, money: 0 }, 0, 'desk', 0).button?.command).toBe('promo');
+    expect(promptFor(fresh(), 0, 'desk', 0).button?.command).toBe('buy');
+  });
+});
 
 describe('IncidentNotice', () => {
   it.each([

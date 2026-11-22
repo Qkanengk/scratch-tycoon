@@ -15,8 +15,10 @@ import { PRESTIGE } from '../data/prestige';
 import { licenseWait } from '../render/board';
 import { blockRepeatedOffering } from './altarRitual';
 import { Icon } from './Icon';
+import { STOCK } from '../data/balance';
+import { restockCountdown } from '../game/stock';
 
-export type Command = 'buy' | 'collect' | 'return' | 'promo' | 'license' | 'robot' | 'awayReceipt' | 'incense';
+export type Command = 'restock' | 'buy' | 'collect' | 'return' | 'promo' | 'license' | 'robot' | 'awayReceipt' | 'incense';
 
 interface Prompt {
   tone: 'idle' | 'win' | 'jackpot' | 'lose';
@@ -77,6 +79,11 @@ export function promptFor(state: GameState, now: number, view: View, progress: n
   }
   const def = ticketDef(state.selected);
   const name = t(`ticket.${def.id}.name`);
+  if (state.stock[def.id].remaining === 0) return {
+    tone: 'idle', wrap: true,
+    message: t('stock.wait', { name, time: restockCountdown(state.stock[def.id].remainingMs) }),
+    button: { label: t('stock.rush', { fee: money(STOCK[def.id].rushFee) }), command: 'restock', disabled: state.money < STOCK[def.id].rushFee },
+  };
   const affordable = canBuyTicket(state, def.id);
   return {
     tone: 'idle',

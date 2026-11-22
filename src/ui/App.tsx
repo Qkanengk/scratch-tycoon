@@ -4,6 +4,7 @@ import { ticketDef, TICKETS, type TicketId } from '../data/tickets';
 import { applyToolIntent, repairPrice, repairTool, type ToolIntent } from '../game/tools';
 import { shelfOffer } from '../render/toolShelf';
 import { buyTicket, canBuyTicket, claimPromo, collectTicket, isUnlocked, returnTicket, selectTicket, startScratch, uncoverCell } from '../game/economy';
+import { rushRestock } from '../game/stock';
 import { advanceKioskTime } from '../game/kioskTime';
 import { buyLicense, unlockProgress } from '../game/unlocks';
 import { recordReveal, recordScratch } from '../game/save';
@@ -86,6 +87,9 @@ export function App() {
     } else if (!isUnlocked(state, id)) {
       refuse(t('hud.lockedTicket', { name }));
       stage.current?.look('board');
+    } else if (state.stock[id].remaining === 0) {
+      apply(s => selectTicket(collectTicket(s), id));
+      stage.current?.look('desk');
     } else if (!canBuyTicket(collectTicket(state), id)) {
       refuse(t('table.notEnough', { name }));
     } else {
@@ -110,6 +114,7 @@ export function App() {
 
   const run = (command: Command) => {
     if (command === 'incense') incense();
+    else if (command === 'restock') apply(s => rushRestock(s, s.selected));
     else if (command === 'awayReceipt') stage.current?.look('robots');
     else if (command === 'robot') automate('context', 0);
     else if (command === 'buy') buy(state.selected);

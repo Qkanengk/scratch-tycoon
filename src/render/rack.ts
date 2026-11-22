@@ -9,12 +9,13 @@ import { palette } from './palette';
 import { inkCard } from './shapes';
 import { kioskProp } from './kioskModels';
 import { ticketMetrics, ticketSample } from './ticketFace';
+import { restockCountdown } from '../game/stock';
 
 const CARD_W = 0.38;
 const SPACING = 0.5;
 const STAND_H = 0.17;
 const TAG_W = 0.44;
-const TAG_H = 0.15;
+const TAG_H = 0.20;
 const LEAN = -0.2;
 const FONT = '"Baloo 2", system-ui, sans-serif';
 
@@ -29,7 +30,7 @@ interface Slot {
   height: number;
 }
 
-function drawTag(canvas: HTMLCanvasElement, def: TicketDef, unlocked: boolean, affordable: boolean): void {
+function drawTag(canvas: HTMLCanvasElement, def: TicketDef, unlocked: boolean, affordable: boolean, stock: string): void {
   const ctx = canvas.getContext('2d')!;
   const { width: w, height: h } = canvas;
   ctx.clearRect(0, 0, w, h);
@@ -43,11 +44,12 @@ function drawTag(canvas: HTMLCanvasElement, def: TicketDef, unlocked: boolean, a
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = palette.ink;
-  ctx.font = `800 ${h * 0.36}px ${FONT}`;
-  ctx.fillText(t(`ticket.${def.id}.name`), w / 2, h * 0.34);
-  ctx.font = `800 ${h * 0.3}px ${FONT}`;
+  ctx.font = `800 ${h * 0.27}px ${FONT}`;
+  ctx.fillText(t(`ticket.${def.id}.name`), w / 2, h * 0.23);
+  ctx.font = `800 ${h * 0.24}px ${FONT}`;
   ctx.fillStyle = !unlocked ? '#8a5a2b' : affordable ? '#1f8a4c' : palette.red;
-  ctx.fillText(unlocked ? `${formatCompact(def.price)} xu` : t('rack.locked'), w / 2, h * 0.72);
+  ctx.fillText(unlocked ? `${formatCompact(def.price)} xu` : t('rack.locked'), w / 2, h * 0.52);
+  if (unlocked) ctx.fillText(stock, w / 2, h * 0.80);
 }
 
 /** The ticket rack at the back of the desk: one card per ticket type, clicked to buy. */
@@ -75,7 +77,7 @@ export class Rack {
       lean.position.y = STAND_H;
       const tag = document.createElement('canvas');
       tag.width = 352;
-      tag.height = 120;
+      tag.height = 160;
       const tagTexture = canvasTexture(tag);
       const plate = new THREE.Mesh(new THREE.PlaneGeometry(TAG_W, TAG_H), new THREE.MeshBasicMaterial({ map: tagTexture, transparent: true }));
       plate.position.set(0, STAND_H / 2, 0.171);
@@ -125,10 +127,12 @@ export class Rack {
     for (const slot of this.slots.values()) {
       const unlocked = unlockProgress(state, slot.def.id).unlocked;
       const affordable = state.money >= slot.def.price;
-      const key = `${unlocked}:${affordable}`;
+      const entry = state.stock[slot.def.id];
+      const stock = entry.remaining > 0 ? t('stock.remaining', { count: entry.remaining }) : t('stock.empty', { time: restockCountdown(entry.remainingMs) });
+      const key = `${unlocked}:${affordable}:${stock}`;
       if (slot.drawn === key) continue;
       slot.drawn = key;
-      drawTag(slot.tag, slot.def, unlocked, affordable);
+      drawTag(slot.tag, slot.def, unlocked, affordable, stock);
       slot.tagTexture.needsUpdate = true;
       slot.lock.visible = !unlocked;
       slot.front.material.color.set(unlocked ? 0xffffff : 0xb8b2ac);

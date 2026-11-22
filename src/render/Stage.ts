@@ -1082,6 +1082,7 @@ export class Stage {
     const rack: Record<string, readonly [number, number]> = {};
     for (const def of TICKETS.filter(def => (def.minimumPrestige ?? 0) <= (this.state?.prestige.tier ?? 0))) rack[def.id] = screen(this.rack.anchor(def.id));
     canvas.dataset.rack = JSON.stringify(rack);
+    canvas.dataset.stock = JSON.stringify(this.state?.stock ?? {});
     canvas.dataset.board = JSON.stringify(screen(new THREE.Box3().setFromPoints(this.board.points()).getCenter(new THREE.Vector3())));
     canvas.dataset.altar = JSON.stringify(screen(this.altar.anchor()));
     canvas.dataset.altarArmed = this.altarArmed ? '1' : '0';

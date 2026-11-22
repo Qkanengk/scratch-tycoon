@@ -13,7 +13,7 @@ export const AUTOMATION = {
   rechargePerUnit: 8,
   freeChargeMs: 120_000,
   autoBuyPrice: 100_000,
-  awayPrice: 400_000,
+  awayPrice: 350_000,
   capPrice: 150_000,
   maxCapLevel: 5,
   capHours: 2,

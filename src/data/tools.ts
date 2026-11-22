@@ -19,7 +19,7 @@ export const TOOLS: readonly ToolDef[] = [
   { id: 'card', name: 'tool.card.name', price: 2_000, baseRadius: 0.13, radiusGrowth: 0.005, maxLevel: 10, upgradeBase: 300 },
   { id: 'scraper', name: 'tool.scraper.name', price: 20_000, baseRadius: 0.19, radiusGrowth: 0.006, maxLevel: 10, upgradeBase: 2_000 },
   { id: 'machine', name: 'tool.machine.name', price: 200_000, baseRadius: 0.26, radiusGrowth: 0.008, maxLevel: 10, upgradeBase: 15_000 },
-  { id: 'laser', name: 'tool.laser.name', price: 500_000, baseRadius: 0.35, radiusGrowth: 0.01, maxLevel: 10, upgradeBase: 100_000 },
+  { id: 'laser', name: 'tool.laser.name', price: 400_000, baseRadius: 0.35, radiusGrowth: 0.01, maxLevel: 10, upgradeBase: 100_000 },
 ];
 
 export const TOOL_IDS: readonly ToolId[] = TOOLS.map(tool => tool.id);

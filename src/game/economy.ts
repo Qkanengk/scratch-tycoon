@@ -6,6 +6,7 @@ import { incidentActive } from './incidents';
 import type { GameState, Ticket } from './state';
 import { generateCells, jackpotTier } from './tickets';
 import { wearTool } from './tools';
+import { consumeStock } from './stock';
 
 export function isUnlocked(state: GameState, id: TicketId): boolean {
   return isTicketAvailable(state, id) && (ticketDef(id).unlock === null || state.licenses.includes(id));
@@ -16,7 +17,7 @@ export function isTicketAvailable(state: GameState, id: TicketId): boolean {
 }
 
 export function canBuyTicket(state: GameState, id: TicketId): boolean {
-  return state.ticket === null && isUnlocked(state, id) && state.money >= ticketDef(id).price;
+  return state.ticket === null && state.stock[id].remaining > 0 && isUnlocked(state, id) && state.money >= ticketDef(id).price;
 }
 
 type PurchaseSource = 'desk' | 'robot' | 'away';
@@ -58,7 +59,7 @@ export function selectTicket(state: GameState, id: TicketId): GameState {
 export function buyTicket(state: GameState, id: TicketId, source: PurchaseSource = 'desk'): GameState {
   if (!canBuyTicket(state, id)) return state;
   const def = ticketDef(id);
-  return placeTicket({ ...state, money: state.money - def.price, selected: id }, def, false, source);
+  return placeTicket({ ...consumeStock(state, id), money: state.money - def.price, selected: id }, def, false, source);
 }
 
 /** Marks the ticket on the table as fully scratched and counts it toward missions. */
