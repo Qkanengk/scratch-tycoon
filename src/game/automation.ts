@@ -58,10 +58,10 @@ export function automationPrice(s: GameState, action: AutomationAction, index = 
   return ticketDef(s.selected).price;
 }
 
-export function loadRobot(s: GameState, index: number): GameState {
+export function loadRobot(s: GameState, index: number, away = false): GameState {
   const robot = s.automation.robots[index];
   if (!robot || robot.tray || robot.charging || robot.charge <= 0 || s.rentDebt > 0) return s;
-  const bought = buyTicket({ ...s, ticket: null }, s.selected);
+  const bought = buyTicket({ ...s, ticket: null }, s.selected, away);
   if (!bought.ticket) return s;
   const robots = [...s.automation.robots];
   robots[index] = { ...robot, tray: bought.ticket, progressMs: 0 };
@@ -106,7 +106,7 @@ export function advanceAutomation(state: GameState, elapsedMs: number, away = fa
         robot.charge = capacity;
         robot.charging = false;
       }
-      if (!robot.tray && s.automation.autoBuy) s = loadRobot(s, index) as typeof s;
+      if (!robot.tray && s.automation.autoBuy) s = loadRobot(s, index, away) as typeof s;
     }
     const duration = (robot: Robot) => {
       if (robot.charging) return away ? Infinity : (capacity - robot.charge) / capacity * A.freeChargeMs;

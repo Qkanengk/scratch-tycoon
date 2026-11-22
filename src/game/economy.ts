@@ -1,4 +1,4 @@
-import { BALANCE } from '../data/balance';
+import { BALANCE, INCIDENTS } from '../data/balance';
 import { PRESTIGE } from '../data/prestige';
 import { BIG_WIN_MULTIPLIER, TICKETS, ticketDef, type TicketDef, type TicketId } from '../data/tickets';
 import { Rng } from './rng';
@@ -18,9 +18,10 @@ export function canBuyTicket(state: GameState, id: TicketId): boolean {
   return state.ticket === null && isUnlocked(state, id) && state.money >= ticketDef(id).price;
 }
 
-function placeTicket(state: GameState, def: TicketDef, free: boolean): GameState {
+function placeTicket(state: GameState, def: TicketDef, free: boolean, away = false): GameState {
   const rng = new Rng(state.rngState);
-  const { tier, cells } = generateCells(def, rng);
+  const extraMiss = !free && !away && state.incidents.current?.kind === 'badLuck' ? INCIDENTS.extraMissChance : 0;
+  const { tier, cells } = generateCells(def, rng, extraMiss);
   const fakeChance = BALANCE.fakeChances[def.id] + (state.prestige.tier >= 3 ? PRESTIGE.fakeSurcharge : 0);
   const fake = !free && fakeChance > 0 && rng.next() < fakeChance;
   const gross = fake ? 0 : (def.prizes[tier]?.multiplier ?? 0) * def.price;
@@ -48,10 +49,10 @@ export function selectTicket(state: GameState, id: TicketId): GameState {
   return { ...state, selected: id };
 }
 
-export function buyTicket(state: GameState, id: TicketId): GameState {
+export function buyTicket(state: GameState, id: TicketId, away = false): GameState {
   if (!canBuyTicket(state, id)) return state;
   const def = ticketDef(id);
-  return placeTicket({ ...state, money: state.money - def.price, selected: id }, def, false);
+  return placeTicket({ ...state, money: state.money - def.price, selected: id }, def, false, away);
 }
 
 /** Marks the ticket on the table as fully scratched and counts it toward missions. */

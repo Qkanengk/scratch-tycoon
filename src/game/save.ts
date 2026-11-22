@@ -1,4 +1,4 @@
-import { BALANCE } from '../data/balance';
+import { BALANCE, INCIDENTS } from '../data/balance';
 import { AUTOMATION } from '../data/automation';
 import { PRESTIGE } from '../data/prestige';
 import { batteryCapacity, initialAutomation, robotInterval, type Automation, type Robot } from './automation';
@@ -9,6 +9,7 @@ import { revealTicket, startScratch, uncoverCell } from './economy';
 import { createMask, encodeMask, restoreMask, scratchProgress, ticketContentKey } from './scratch';
 import { createInitialState, emptyStats, SAVE_VERSION, type GameState, type Ticket } from './state';
 import { cellCount, jackpotTier } from './tickets';
+import { INCIDENT_KINDS, initialIncidents, type IncidentState } from './incidents';
 
 export const SAVE_KEY = 'scratch-tycoon-save';
 export const SAVE_BACKUP_KEY = `${SAVE_KEY}-backup`;
@@ -20,6 +21,7 @@ type RawSave = Record<string, unknown>;
  * Add an entry (and a test) whenever the shape of GameState changes.
  */
 const MIGRATIONS: Record<number, (save: RawSave) => RawSave> = {
+  6: save => ({ ...save, version: 7, incidents: initialIncidents(amount(save.rngState, 0)) }),
   5: save => ({ ...save, version: 6, prestige: { tier: 0, runEarned: amount(save.totalEarned, 0) }, licenseElapsedMs: 0 }),
   4: save => ({ ...save, version: 5, automation: initialAutomation() }),
   3: (save) => ({ ...save, version: 4, durability: createInitialState(0).durability, rentElapsedMs: 0, rentDebt: 0,
@@ -48,6 +50,19 @@ function isRecord(value: unknown): value is RawSave {
 
 function amount(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+function readIncidents(value: unknown, fallback: IncidentState): IncidentState {
+  if (!isRecord(value)) return fallback;
+  const nextInMs = Math.min(amount(value.nextInMs, fallback.nextInMs), INCIDENTS.nextDelayMs[1]);
+  const saved = isRecord(value.current) ? value.current : null;
+  const kind = INCIDENT_KINDS.find(kind => kind === saved?.kind);
+  const remainingMs = kind && saved ? Math.min(amount(saved.remainingMs, 0), INCIDENTS.durationMs[kind], nextInMs) : 0;
+  return {
+    rngState: amount(value.rngState, fallback.rngState) >>> 0,
+    nextInMs,
+    current: kind && saved && remainingMs > 0 ? { kind, remainingMs, cost: Math.floor(amount(saved.cost, 0)) } : null,
+  };
 }
 
 function isTicketId(value: unknown): value is TicketId {
@@ -192,6 +207,7 @@ export function migrate(raw: unknown, now = Date.now()): GameState | null {
     prestige,
     licenseElapsedMs: amount(save.licenseElapsedMs, 0),
     automation: readAutomation(save.automation, tier),
+    incidents: readIncidents(save.incidents, initialIncidents(amount(save.rngState, 0))),
     money: amount(save.money, base.money) + refund,
     durability,
     rentElapsedMs: amount(save.rentElapsedMs, 0) % BALANCE.rentIntervalMs,

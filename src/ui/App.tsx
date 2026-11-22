@@ -3,19 +3,20 @@ import { isMuted, play, setMuted } from '../audio/sfx';
 import { ticketDef, TICKETS, type TicketId } from '../data/tickets';
 import { applyToolIntent, repairPrice, repairTool, type ToolIntent } from '../game/tools';
 import { shelfOffer } from '../render/toolShelf';
-import { advancePlayTime, buyTicket, canBuyTicket, claimPromo, collectTicket, isUnlocked, returnFake, selectTicket, startScratch, uncoverCell } from '../game/economy';
+import { buyTicket, canBuyTicket, claimPromo, collectTicket, isUnlocked, returnFake, selectTicket, startScratch, uncoverCell } from '../game/economy';
+import { advanceKioskTime } from '../game/kioskTime';
 import { buyLicense, unlockProgress } from '../game/unlocks';
 import { recordReveal, recordScratch } from '../game/save';
 import { ticketContentKey } from '../game/scratch';
 import { t } from '../i18n';
 import type { Stage, StageCallbacks, View } from '../render/Stage';
-import { LookButton, PromptChip, promptFor, type Command } from './Hud';
+import { IncidentNotice, LookButton, PromptChip, promptFor, type Command } from './Hud';
 import { Icon, Sticker } from './Icon';
 import { money } from './money';
 import { SavePanel } from './SavePanel';
 import { StageView } from './StageView';
 import { useGame } from './useGame';
-import { advanceAutomation, automationAction, robotContext, type AutomationAction } from '../game/automation';
+import { automationAction, robotContext, type AutomationAction } from '../game/automation';
 import { prestige } from '../game/prestige';
 import { blockRepeatedOffering, offerIncense } from './altarRitual';
 
@@ -146,7 +147,7 @@ export function App() {
       onAltar: incense,
       onAutomation: automate,
       onPlayTime: elapsed => apply((current, time) => {
-        const next = advanceAutomation(advancePlayTime(current, elapsed), elapsed);
+        const next = advanceKioskTime(current, elapsed);
         return { ...next, automation: { ...next.automation, lastSeenAt: time } };
       }),
       onReturn: () => { play('ticket-collect'); apply(returnFake); },
@@ -220,6 +221,8 @@ export function App() {
           <Icon name="pause" />
         </button>
       </div>
+
+      <IncidentNotice incident={state.incidents.current} />
 
       {toast && (
         <p className="toast" role="status" data-testid="toast">

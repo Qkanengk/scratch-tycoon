@@ -1,10 +1,30 @@
 import { describe, expect, it, vi } from 'vitest';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { buyTicket, revealTicket } from '../game/economy';
 import { createInitialState, type GameState } from '../game/state';
-import { PromptChip, promptFor } from './Hud';
+import { IncidentNotice, PromptChip, promptFor } from './Hud';
 import { prestigeScenario } from './debugPrestige';
 
 const fresh = (): GameState => createInitialState(1);
+
+describe('IncidentNotice', () => {
+  it.each([
+    ['inspection', 'Thanh tra'], ['powerCut', 'Mất điện'], ['theft', 'Trộm'],
+    ['badLuck', 'Vận xui'], ['defectiveStock', 'Hàng lỗi'],
+  ] as const)('shows the Vietnamese name for %s', (kind, name) => {
+    const text = renderToStaticMarkup(IncidentNotice({ incident: { kind, cost: 0, remainingMs: 1100 } }));
+    expect(text).toContain(name);
+    expect(text).toContain('role="status"');
+    if (kind === 'badLuck' || kind === 'powerCut') expect(text).toContain('role="timer">2 giây');
+    else expect(text).toContain('Không mất xu');
+  });
+
+  it('shows the paid amount rather than a countdown for a fee', () => {
+    const text = renderToStaticMarkup(IncidentNotice({ incident: { kind: 'inspection', cost: 10, remainingMs: 1100 } }));
+    expect(text).toContain('−10 xu');
+    expect(text).not.toContain('role="timer"');
+  });
+});
 
 describe('PromptChip keyboard activation', () => {
   it.each(['Enter', ' '])('prevents native %j repeat clicks on the incense button', key => {

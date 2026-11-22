@@ -16,9 +16,9 @@ export function jackpotTier(def: TicketDef): number {
   return def.prizes.length - 1;
 }
 
-export function rollTier(prizes: readonly PrizeTier[], rng: Rng): number {
+export function rollTier(prizes: readonly PrizeTier[], rng: Rng, extraMiss = 0): number {
   const total = prizes.reduce((sum, tier) => sum + tier.weight, 0);
-  let roll = rng.next() * total;
+  let roll = Math.max(0, (rng.next() - extraMiss) / (1 - extraMiss)) * total;
   for (let i = 0; i < prizes.length; i++) {
     roll -= (prizes[i] as PrizeTier).weight;
     if (roll < 0) return i;
@@ -120,8 +120,8 @@ function dragonCells(def: TicketDef, rules: DragonRules, tier: number, rng: Rng)
 }
 
 /** Decides the outcome first, then lays out cells that show exactly that outcome. */
-export function generateCells(def: TicketDef, rng: Rng): { tier: number; cells: Cell[] } {
-  const tier = rollTier(def.prizes, rng);
+export function generateCells(def: TicketDef, rng: Rng, extraMiss = 0): { tier: number; cells: Cell[] } {
+  const tier = rollTier(def.prizes, rng, extraMiss);
   const rules = def.rules;
   switch (rules.kind) {
     case 'match':

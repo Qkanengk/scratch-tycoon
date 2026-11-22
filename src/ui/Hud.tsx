@@ -1,3 +1,4 @@
+import type { Incident } from '../game/incidents';
 import { ticketDef, TICKETS } from '../data/tickets';
 import { canBuyTicket, canClaimPromo, isBroke, promoTicketDef } from '../game/economy';
 import type { GameState } from '../game/state';
@@ -98,6 +99,25 @@ export function PromptChip({ prompt, onCommand }: { prompt: Prompt; onCommand: (
           <kbd>Space</kbd>
         </button>
       )}
+    </div>
+  );
+}
+
+export function IncidentNotice({ incident }: { incident: Incident | null }) {
+  const timed = incident?.kind === 'powerCut' || incident?.kind === 'badLuck';
+  return (
+    <div className="incident-notice" data-incident={incident?.kind}>
+      <p role="status">
+        {incident && <>
+          <strong>
+            {t(`incident.${incident.kind}`)}
+            {incident.cost > 0 && <> · {t('incident.loss', { cost: money(incident.cost) })}</>}
+            {!timed && incident.cost === 0 && <> · {t('incident.noLoss')}</>}
+          </strong>
+          <span>{t(`incident.${incident.kind}.detail`)}</span>
+        </>}
+      </p>
+      {timed && <span className="incident-time" role="timer">{t('incident.seconds', { seconds: Math.ceil(incident.remainingMs / 1000) })}</span>}
     </div>
   );
 }

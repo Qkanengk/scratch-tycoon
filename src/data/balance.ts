@@ -20,3 +20,12 @@ export const BALANCE = {
   promoTicket: 'dong' as TicketId,
   promoIntervalMs: 20_000,
 } as const;
+
+export const INCIDENTS = {
+  firstDelayMs: [180_000, 300_000],
+  nextDelayMs: [360_000, 600_000],
+  durationMs: { inspection: 12_000, powerCut: 18_000, theft: 12_000, badLuck: 30_000, defectiveStock: 12_000 },
+  ticketPriceCap: { inspection: 1, powerCut: 0.5, theft: 2, badLuck: 0, defectiveStock: 0.75 },
+  theftFraction: 0.05,
+  extraMissChance: 0.08,
+} as const;

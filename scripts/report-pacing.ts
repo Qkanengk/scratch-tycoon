@@ -1,9 +1,9 @@
-import { percentile, simulatePacing } from './pacing';
+import { CYCLE_SECONDS, PACING_SEEDS, percentile, simulatePacing } from './pacing';
 import { TICKETS } from '../src/data/tickets';
 import { prestigeThreshold } from '../src/data/prestige';
 
-const seeds = Number(process.env.PACING_SEEDS ?? 384);
-const runs = Array.from({ length: seeds }, (_, i) => simulatePacing(10_001 + i, 12 * 3600, 4, true));
+const seeds = Number(process.env.PACING_SEEDS ?? PACING_SEEDS);
+const runs = Array.from({ length: seeds }, (_, i) => simulatePacing(10_001 + i, 12 * 3600, CYCLE_SECONDS, true));
 console.log(`${seeds} seeds · 12 h horizon · minutes · licence intervals since previous licence (Bạc: since run start)`);
 console.log(`Prestige thresholds: ${Array.from({ length: 5 }, (_, i) => prestigeThreshold(i + 1)).join(', ')} xu`);
 console.log('Milestone\tmedian\tp10\tp90');

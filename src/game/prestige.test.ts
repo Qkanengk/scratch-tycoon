@@ -6,7 +6,7 @@ import { advanceAutomation, automationAction, initialAutomation, loadRobot, tick
 import { advancePlayTime, buyTicket, claimPromo, collectTicket, isUnlocked, rentAmount, revealTicket, updatePromo } from './economy';
 import { canPrestige, prestige } from './prestige';
 import { deserialize, migrate, serialize } from './save';
-import { createInitialState, type GameState } from './state';
+import { createInitialState, SAVE_VERSION, type GameState } from './state';
 import { wearTool } from './tools';
 import { buyLicense, unlockProgress } from './unlocks';
 
@@ -161,10 +161,10 @@ describe('Vũ Trụ and licence time floors', () => {
   });
 });
 
-describe('prestige save v6', () => {
+describe('prestige save', () => {
   it('migrates v5 as an unprestiged current run, retaining lifetime prizes', () => {
     const loaded = migrate({ ...createInitialState(1), version: 5, totalEarned: 12345, prestige: undefined, licenseElapsedMs: undefined })!;
-    expect(loaded.version).toBe(6);
+    expect(loaded.version).toBe(SAVE_VERSION);
     expect(loaded.prestige).toEqual({ tier: 0, runEarned: 12345 });
     expect(loaded.totalEarned).toBe(12345);
     expect(loaded.licenseElapsedMs).toBe(0);
