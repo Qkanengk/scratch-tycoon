@@ -58,6 +58,7 @@ export function automationPrice(s: GameState, action: AutomationAction, index = 
   if (action === 'away') return a.autoBuy && !a.away ? A.awayPrice : Infinity;
   if (action === 'cap') return a.away && a.capLevel < A.maxCapLevel ? Math.ceil(A.capPrice * A.priceGrowth ** a.capLevel) : Infinity;
   if (action === 'recharge') return Math.ceil(Math.max(0, batteryCapacity(s) - (a.robots[index]?.charge ?? 0)) * A.rechargePerUnit);
+  if (s.deskQueue[Math.max(0, currentRound(s).length - 1)]) return 0;
   return ticketDef(s.selected).price;
 }
 

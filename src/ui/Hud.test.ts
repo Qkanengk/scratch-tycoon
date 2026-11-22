@@ -6,8 +6,22 @@ import { ContractNotice, IncidentNotice, PromptChip, promptFor } from './Hud';
 import { prestigeScenario } from './debugPrestige';
 import { STOCK } from '../data/balance';
 import { acceptContract, contractOffer } from '../game/contracts';
+import { automationAction } from '../game/automation';
 
 const fresh = (): GameState => createInitialState(1);
+
+describe('prepaid robot loading prompt', () => {
+  it('enables loading at zero money only when a queued ticket is outside the open round', () => {
+    const hired = automationAction({ ...fresh(), money: 1e8 }, 'robot');
+    const held = buyTicket({ ...hired, upgrades: { luck: 0, desk: 2, bulk: 1 }, bulkLot: 5 }, 'dong');
+    const state = { ...held, money: 0 };
+    expect(promptFor(state, 0, 'robots', 0).button).toMatchObject({ command: 'robot', disabled: false });
+    expect(promptFor(state, 0, 'robots', 0).button?.label).toContain('0 xu');
+    for (const deskQueue of [[], state.deskQueue.slice(0, 2)]) {
+      expect(promptFor({ ...state, deskQueue }, 0, 'robots', 0).button?.disabled).toBe(true);
+    }
+  });
+});
 
 describe('upgrade and bulk prompt chips', () => {
   it.each([0, 10, 100])('previews bulk buying after collecting a revealed round with %s xu left', money => {
