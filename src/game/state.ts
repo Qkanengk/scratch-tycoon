@@ -2,6 +2,7 @@ import { BALANCE } from '../data/balance';
 import { initialToolLevels, type ToolId } from '../data/tools';
 import { TICKET_IDS, type TicketId } from '../data/tickets';
 import { initialAutomation, type Automation } from './automation';
+import { initialIncidents, type IncidentState } from './incidents';
 
 /** Prizes inside cells are in units of the ticket's price. */
 export type Cell =
@@ -25,6 +26,7 @@ export interface Ticket {
   tax: number;
   net: number;
   fakeTell: 'missing-seal' | 'misprinted-serial' | null;
+  defective?: true;
   scratchStarted: boolean;
   hitBombs: number[];
   free: boolean;
@@ -39,7 +41,7 @@ export interface TicketStats {
   bigWins: number;
 }
 
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 
 export interface GameState {
   /** Active-play prizes in this run, after tax and the permanent bonus, before rent withholding. */
@@ -47,6 +49,7 @@ export interface GameState {
   /** Active play since the last purchased licence. */
   licenseElapsedMs: number;
   automation: Automation;
+  incidents: IncidentState;
   version: typeof SAVE_VERSION;
   money: number;
   durability: Record<ToolId, number>;
@@ -81,6 +84,7 @@ export function createInitialState(seed: number): GameState {
     prestige: { tier: 0, runEarned: 0 },
     licenseElapsedMs: 0,
     automation: initialAutomation(),
+    incidents: initialIncidents(seed),
     money: BALANCE.startingMoney,
     durability: { coin: 1, key: 1, card: 1, scraper: 1, machine: 1, laser: 1 },
     rentElapsedMs: 0,

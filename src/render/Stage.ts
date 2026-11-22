@@ -22,6 +22,7 @@ import { INK } from './toon';
 import { Paper, receiptLines, rentLines } from './paper';
 import { PlayClock } from './playClock';
 import { formatCompact } from '../game/format';
+import { ticketRefund } from '../game/economy';
 import { RobotStation } from './robotStation';
 import type { AutomationAction } from '../game/automation';
 import { Altar } from './altar';
@@ -422,11 +423,12 @@ export class Stage {
     const key = JSON.stringify(rentLines(state, this.rentStamp > 0));
     if (key !== this.rentKey) { this.rentKey = key; this.rent.draw(rentLines(state, this.rentStamp > 0)); }
     const ticketForReturn = state.ticket;
-    this.returnTag.group.visible = !!ticketForReturn?.fakeTell && !ticketForReturn.scratchStarted && !ticketForReturn.revealed;
+    const refund = ticketRefund(ticketForReturn);
+    this.returnTag.group.visible = refund > 0;
     this.returnTag.group.position.set(0, .052, this.metrics.height / 2 + .105);
     if (this.returnTag.group.visible && this.returnKey !== String(ticketForReturn!.serial)) {
       this.returnKey = String(ticketForReturn!.serial);
-      this.returnTag.draw([{ text: t('drain.return', { cost: formatCompact(Math.floor(ticketDef(ticketForReturn!.type).price * (1 - BALANCE.fakeReturnFee))) }), size: 55 }]);
+      this.returnTag.draw([{ text: t('drain.return', { cost: formatCompact(refund) }), size: 55 }]);
     }
     const handKey = `${state.equippedTool}:${state.toolLevels[state.equippedTool]}:${state.durability[state.equippedTool]}`;
     if (this.handKey !== handKey) {

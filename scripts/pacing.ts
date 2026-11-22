@@ -2,13 +2,15 @@ import { BALANCE } from '../src/data/balance';
 import { TICKETS, type TicketId } from '../src/data/tickets';
 import { TOOLS, type ToolId } from '../src/data/tools';
 import { buyTool, repairPrice, repairTool, toolRadius, toolUpgradePrice, upgradeTool } from '../src/game/tools';
-import { advancePlayTime, buyTicket, claimPromo, collectTicket, isBroke, isTicketAvailable, returnFake, revealTicket, updatePromo } from '../src/game/economy';
+import { buyTicket, claimPromo, collectTicket, isBroke, isTicketAvailable, returnTicket, revealTicket, updatePromo } from '../src/game/economy';
+import { advanceKioskTime } from '../src/game/kioskTime';
 import { createInitialState } from '../src/game/state';
 import { buyLicense, unlockProgress } from '../src/game/unlocks';
-import { advanceAutomation, automationAction, automationPrice, loadRobot, type AutomationAction } from '../src/game/automation';
+import { automationAction, automationPrice, loadRobot, type AutomationAction } from '../src/game/automation';
 import { canPrestige, prestige as performPrestige } from '../src/game/prestige';
 
 export const CYCLE_SECONDS = 4;
+export const PACING_SEEDS = 384;
 export interface PacingRun {
   intervals: Partial<Record<TicketId, number>>;
   firstRobot: number;
@@ -53,8 +55,7 @@ export function simulatePacing(seed: number, horizonSeconds: number, cycleSecond
         const waitMs = candidate.unlock.minimumPlayMs! - state.licenseElapsedMs;
         const countedMs = Math.min(waitMs, cycleSeconds * 1000, (horizonSeconds - elapsed) * 1000);
         if (countedMs <= 0) break;
-        state = advancePlayTime(state, countedMs);
-        if (robots) state = advanceAutomation(state, countedMs);
+        state = advanceKioskTime(state, countedMs);
         elapsed += countedMs / 1000;
         continue;
       }
@@ -116,14 +117,13 @@ export function simulatePacing(seed: number, horizonSeconds: number, cycleSecond
         }
       }
     }
-    // Serial parity models a player noticing half the visible counterfeit tells.
-    if (state.ticket?.fakeTell && state.ticket.serial % 2 === 0) state = returnFake(state);
+    // Serial parity models a player returning half the tickets they can send back.
+    if ((state.ticket?.fakeTell || state.ticket?.defective) && state.ticket.serial % 2 === 0) state = returnTicket(state);
     state = collectTicket(revealTicket(state));
     // A coin takes 4 s: 1.5 s buying/collecting plus 2.5 s scratching.
     // Only scratching speeds up, inversely with radius; overhead stays fixed.
     elapsed += 1.5 + (cycleSeconds - 1.5) * BALANCE.brushRadius / toolRadius(state);
-    state = advancePlayTime(state, (elapsed - cycleStart) * 1000);
-    if (robots) state = advanceAutomation(state, (elapsed - cycleStart) * 1000);
+    state = advanceKioskTime(state, (elapsed - cycleStart) * 1000);
   }
   return { intervals: runs[0]!.intervals, runs, prestige, prestigeTimes, firstUpgrade, toolPurchases, firstRobot, autoBuy, away,
     runEarned: state.prestige.runEarned, totalEarned: state.totalEarned };

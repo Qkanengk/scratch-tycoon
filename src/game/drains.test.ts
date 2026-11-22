@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE } from '../data/balance';
 import { TICKETS, type TicketId } from '../data/tickets';
-import { advancePlayTime, buyTicket, claimPromo, collectTicket, rentAmount, returnFake, revealTicket, startScratch, timeToNextRent, uncoverCell, updatePromo } from './economy';
+import { advancePlayTime, buyTicket, claimPromo, collectTicket, rentAmount, returnTicket, revealTicket, startScratch, timeToNextRent, uncoverCell, updatePromo } from './economy';
 import { createInitialState, type GameState } from './state';
 import { buyTool, repairPrice, repairTool, toolRadius } from './tools';
 import { deserialize, recordScratch, serialize } from './save';
@@ -74,11 +74,11 @@ describe('drains', () => {
     }
     expect(fake).toBeDefined();
     expect(fake!.ticket!.gross).toBe(0);
-    expect(returnFake(fake!).money).toBe(fake!.money + 950);
-    expect(returnFake(startScratch(fake!)).ticket).not.toBeNull();
+    expect(returnTicket(fake!).money).toBe(fake!.money + 950);
+    expect(returnTicket(startScratch(fake!)).ticket).not.toBeNull();
     expect(collectTicket(revealTicket(fake!)).money).toBe(fake!.money);
     const empty = createInitialState(1);
-    expect(returnFake(empty)).toBe(empty);
+    expect(returnTicket(empty)).toBe(empty);
     for (let seed = 1; seed < 100; seed++) {
       const promo = claimPromo(updatePromo({ ...rich(seed), money: 0, rentDebt: 1e6 }, 0), BALANCE.promoIntervalMs);
       expect(promo.ticket?.fakeTell).toBeNull();

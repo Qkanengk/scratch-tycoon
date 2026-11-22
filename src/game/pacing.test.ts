@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { percentile, simulatePacing } from '../../scripts/pacing';
+import { CYCLE_SECONDS, PACING_SEEDS, percentile, simulatePacing } from '../../scripts/pacing';
 import { TICKETS } from '../data/tickets';
 
 describe('licence pacing at the measured scratch cadence', () => {
   const licenses = TICKETS.slice(1).filter(def => !def.minimumPrestige);
-  const runs = Array.from({ length: 384 }, (_, i) => simulatePacing(10_001 + i, 6 * 3600));
+  const runs = Array.from({ length: PACING_SEEDS }, (_, i) => simulatePacing(10_001 + i, 6 * 3600));
 
   it('reaches every licence median near the long end of 20 to 40 minutes', () => {
     for (const { id } of licenses) {
@@ -33,7 +33,7 @@ describe('licence pacing at the measured scratch cadence', () => {
 });
 
 describe('robot policy pacing', () => {
-  const runs = Array.from({ length: 64 }, (_, i) => simulatePacing(10_001 + i, 12 * 3600, 4, true));
+  const runs = Array.from({ length: PACING_SEEDS }, (_, i) => simulatePacing(10_001 + i, 12 * 3600, CYCLE_SECONDS, true));
   it('keeps every licence interval between twenty and forty minutes', () => {
     for (const { id } of TICKETS.slice(1).filter(def => !def.minimumPrestige)) {
       const median = percentile(runs.map(r => r.intervals[id] ?? Infinity), .5) / 60;
@@ -41,10 +41,10 @@ describe('robot policy pacing', () => {
       expect(median, id).toBeLessThanOrEqual(40);
     }
   });
-  it('buys the first robot near one hour', () => {
+  it('buys the first robot within 75 minutes despite incidents', () => {
     const median = percentile(runs.map(r => r.firstRobot), .5) / 60;
     expect(median).toBeGreaterThanOrEqual(50);
-    expect(median).toBeLessThanOrEqual(70);
+    expect(median).toBeLessThanOrEqual(75);
   });
 
   it('reaches first prestige after five to six hours', () => {

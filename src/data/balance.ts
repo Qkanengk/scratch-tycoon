@@ -20,3 +20,15 @@ export const BALANCE = {
   promoTicket: 'dong' as TicketId,
   promoIntervalMs: 20_000,
 } as const;
+
+export const INCIDENTS = {
+  intervalMs: [240_000, 480_000],
+  warningMs: 10_000,
+  durationMs: { inspection: 12_000, powerCut: 60_000, theft: 12_000, badLuck: 120_000, defectiveStock: 30_000 },
+  fineFraction: 0.15,
+  theftFraction: 0.20,
+  theftCapTickets: 4,
+  badLuckPrizeWeight: 0.5,
+  defectivePrizeWeight: 0.85,
+  defectiveReturnFee: 0.20,
+} as const;

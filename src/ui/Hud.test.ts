@@ -1,10 +1,37 @@
 import { describe, expect, it, vi } from 'vitest';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { buyTicket, revealTicket } from '../game/economy';
 import { createInitialState, type GameState } from '../game/state';
-import { PromptChip, promptFor } from './Hud';
+import { IncidentNotice, PromptChip, promptFor } from './Hud';
 import { prestigeScenario } from './debugPrestige';
 
 const fresh = (): GameState => createInitialState(1);
+
+describe('IncidentNotice', () => {
+  it.each([
+    ['inspection', 'Thanh tra'], ['powerCut', 'Mất điện'], ['theft', 'Trộm'],
+    ['badLuck', 'Vận xui'], ['defectiveStock', 'Hàng lỗi'],
+  ] as const)('shows the Vietnamese name for %s', (kind, name) => {
+    const text = renderToStaticMarkup(IncidentNotice({ incident: { kind, phase: 'active', cost: 0, remainingMs: 1100 } }));
+    expect(text).toContain(name);
+    expect(text).toContain('role="status"');
+    if (kind === 'badLuck' || kind === 'powerCut' || kind === 'defectiveStock') expect(text).toContain('role="timer">2 giây');
+    else expect(text).toContain('Không mất xu');
+  });
+
+  it('shows the paid amount rather than a countdown for a fee', () => {
+    const text = renderToStaticMarkup(IncidentNotice({ incident: { kind: 'inspection', phase: 'active', cost: 10, remainingMs: 1100 } }));
+    expect(text).toContain('−10 xu');
+    expect(text).not.toContain('role="timer"');
+  });
+
+  it('shows a warning countdown before applying the incident', () => {
+    const text = renderToStaticMarkup(IncidentNotice({ incident: { kind: 'inspection', phase: 'warning', cost: 0, remainingMs: 10_000 } }));
+    expect(text).toContain('Sắp có: Thanh tra');
+    expect(text).toContain('Dọn vé giả');
+    expect(text).toContain('role="timer">10 giây');
+  });
+});
 
 describe('PromptChip keyboard activation', () => {
   it.each(['Enter', ' '])('prevents native %j repeat clicks on the incense button', key => {
@@ -64,6 +91,12 @@ describe('promptFor', () => {
     const prompt = promptFor(buyTicket(fresh(), 'dong'), 0, 'desk', 0.5);
     expect(prompt.button).toBeUndefined();
     expect(prompt.progress).toBe(0.5);
+  });
+
+  it('formats the defective ticket refund with a single currency unit', () => {
+    const state = buyTicket(fresh(), 'dong');
+    const prompt = promptFor({ ...state, ticket: { ...state.ticket!, defective: true } }, 0, 'desk', 0);
+    expect(prompt.button).toEqual({ label: 'Trả tại quầy · nhận 8 xu', command: 'return' });
   });
 
   it('offers to collect a scratched ticket', () => {

@@ -241,6 +241,45 @@ textarea:focus-visible {
   gap: 8px;
 }
 
+.incident-notice {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.incident-notice[data-incident] {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: max-content;
+  max-width: min(360px, calc(100% - 420px));
+  padding: 4px 12px 6px;
+  background: var(--cream);
+  border: var(--line);
+  border-left: 8px solid var(--gold-deep);
+  border-radius: 14px;
+  box-shadow: var(--drop);
+  font-size: 0.94rem;
+  line-height: 1.1;
+}
+
+.incident-notice strong {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 1.08rem;
+  font-weight: 800;
+}
+
+.incident-time {
+  padding: 4px 7px;
+  border-radius: 8px;
+  background: var(--card);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .btn-round {
   width: 46px;
   padding: 0;
@@ -461,7 +500,7 @@ textarea {
     --hud-scale: clamp(1, calc(100vw / 1280px), 1.5);
   }
 
-  .purse, .corner, .look, .prompt {
+  .purse, .corner, .look, .prompt, .incident-notice {
     zoom: var(--hud-scale);
   }
 
@@ -547,6 +586,13 @@ textarea {
 
   .purse { top: var(--hud-top); left: var(--hud-left); }
   .corner { top: var(--hud-top); right: var(--hud-right); }
+  .incident-notice[data-incident] {
+    top: calc(var(--hud-top) + 58px);
+    max-width: min(360px, calc(100% - var(--hud-left) - var(--hud-right)));
+  }
+  .app[data-view='desk'] .incident-notice[data-incident] {
+    top: calc(var(--hud-top) + 105px);
+  }
   .purse dd.purse-total { font-size: 0.875rem; }
   .fineprint { font-size: 0.875rem; }
   textarea { font-size: 16px; flex-shrink: 0; }
@@ -582,6 +628,9 @@ textarea {
 }
 
 @media (orientation: landscape) and (max-height: 500px) {
+  .app[data-view='desk'] .incident-notice[data-incident] {
+    top: calc(var(--hud-top) + 58px);
+  }
   .prompt {
     flex-direction: row;
     align-items: center;
