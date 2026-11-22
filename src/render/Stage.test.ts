@@ -60,7 +60,7 @@ describe('desk framing', () => {
     stage.aim = vi.fn();
     stage.host.parentElement = {
       style: { getPropertyValue: () => '', setProperty: vi.fn() },
-      querySelector: () => ({ getBoundingClientRect: () => ({ top: 768, height: 70 }) }),
+      querySelector: (selector: string) => selector === '.prompt' ? { getBoundingClientRect: () => ({ top: 768, height: 70 }) } : null,
       querySelectorAll: () => [element(20, 60), element(72, 116), element(714, 758, true)],
     };
     stage.measureHud();
@@ -69,6 +69,32 @@ describe('desk framing', () => {
     stage.view = 'robots';
     stage.measureHud();
     expect(stage.touchBottom).toBe(136);
+  });
+
+  it('frames the phone shop and robot station below the notice without shifting the scratch desk', () => {
+    const stage = stageAt(390, 844);
+    let notice: { bottom: number } | null = { bottom: 133 };
+    stage.ready = true;
+    stage.aim = vi.fn();
+    stage.host.parentElement = {
+      style: { getPropertyValue: () => '', setProperty: vi.fn() },
+      querySelector: (selector: string) => selector === '.prompt'
+        ? { getBoundingClientRect: () => ({ top: 768, height: 70 }) }
+        : notice && { getBoundingClientRect: () => notice },
+      querySelectorAll: () => [{ matches: () => false, getBoundingClientRect: () => ({ top: 12, bottom: 64 }) }],
+    };
+    for (const view of ['shop', 'robots']) {
+      stage.view = view;
+      stage.measureHud();
+      expect(stage.touchTop).toBe(139);
+    }
+    stage.view = 'desk';
+    stage.measureHud();
+    expect(stage.touchTop).toBe(70);
+    stage.view = 'shop';
+    notice = null;
+    stage.measureHud();
+    expect(stage.touchTop).toBe(70);
   });
 });
 

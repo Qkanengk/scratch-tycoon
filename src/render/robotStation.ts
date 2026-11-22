@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { batteryCapacity, robotInterval, type AutomationAction } from '../game/automation';
 import { formatCompact } from '../game/format';
+import { incidentActive } from '../game/incidents';
 import type { GameState } from '../game/state';
 import { t } from '../i18n';
 import { Paper } from './paper';
@@ -110,7 +111,11 @@ export class RobotStation {
     const column = this.portraitOffers ? 1.35 : .95;
     this.group.position.x = phone ? 2.05 : 1.12;
     this.group.position.z = phone ? this.portraitOffers ? -.40 : -1.70 : .35;
-    this.slots.forEach((s, i) => s.group.position.set(phone ? 0 : i * .84, 0, phone ? i * 1.50 : 0));
+    this.slots.forEach((s, i) => {
+      s.group.position.set(phone ? 0 : i * .84, 0, phone ? i * 1.50 : 0);
+      s.status.group.position.set(0, this.portraitOffers ? .10 : .06, this.portraitOffers ? .99 : .84);
+      s.status.group.scale.set(this.portraitOffers ? 1.75 : 1, this.portraitOffers ? 1.9 : 1, 1);
+    });
     this.board.position.set(phone ? column : 2.80, phone ? .35 : 0, phone ? -.10 : -.48);
     this.board.rotation.x = this.portraitOffers ? -Math.PI / 4 : 0;
     this.board.scale.set(this.portraitOffers ? 1.4 : 1, this.portraitOffers ? 1.35 : 1, 1);
@@ -128,7 +133,8 @@ export class RobotStation {
 
   update(state: GameState): void {
     const a = state.automation;
-    const key = JSON.stringify([a, state.money, state.rentDebt, state.selected, this.portraitOffers]);
+    const powerCut = incidentActive(state, 'powerCut');
+    const key = JSON.stringify([a, state.money, state.rentDebt, state.selected, this.portraitOffers, powerCut]);
     if (key === this.key) return;
     this.key = key;
     for (const { action, paper } of this.offers) {
@@ -138,10 +144,12 @@ export class RobotStation {
     }
     this.slots.forEach((slot, i) => {
       const r = a.robots[i];
+      const status = !r ? 'robot.empty' : powerCut ? 'robot.powerCut' : state.rentDebt ? 'robot.debt'
+        : r.charging || r.charge <= 0 ? 'robot.flat' : r.tray ? 'robot.working' : 'robot.idle';
       slot.group.visible = !!r;
-      slot.status.draw([{ text: !r ? t('robot.empty') : state.rentDebt ? t('robot.debt') : r.charging || r.charge <= 0 ? t('robot.flat') : r.tray ? t('robot.working') : t('robot.idle'), size: 68 },
-        { text: r ? t('robot.battery', { value: Math.round(r.charge / batteryCapacity(state) * 100) }) : t('robot.tapBuy'), size: 65 }]);
-      slot.working = !!r?.tray && r.charge > 0 && !r.charging && !state.rentDebt;
+      slot.status.draw([{ text: t(status), size: this.portraitOffers ? 145 : 88 },
+        { text: r ? t('robot.battery', { value: Math.round(r.charge / batteryCapacity(state) * 100) }) : t('robot.tapBuy'), size: this.portraitOffers ? 105 : 65 }]);
+      slot.working = status === 'robot.working';
       slot.progress = r ? r.progressMs / robotInterval(state) : 0;
       slot.ticket.visible = !!r?.tray;
       if (slot.serial && slot.serial !== r?.tray?.serial && slot.net > 0 && a.report.tickets > 0) {

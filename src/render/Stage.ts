@@ -214,6 +214,10 @@ export class Stage {
       if (rect.top < height / 3) top = Math.max(top, rect.bottom);
       else bottom = Math.max(bottom, height - rect.top);
     }
+    if (this.view === 'shop' || this.view === 'robots') {
+      const notice = app.querySelector('.incident-notice[data-incident]')?.getBoundingClientRect();
+      if (notice) top = Math.max(top, notice.bottom);
+    }
     const bounds = `${top}:${bottom}:${this.view}:${height}`;
     if (bounds === this.hudBounds) return;
     this.hudBounds = bounds;
@@ -232,7 +236,7 @@ export class Stage {
 
   private observeHud(): void {
     this.hudObserver.disconnect();
-    for (const element of this.host.parentElement?.querySelectorAll('.prompt, .purse, .corner, .look') ?? []) {
+    for (const element of this.host.parentElement?.querySelectorAll('.prompt, .purse, .corner, .look, .incident-notice') ?? []) {
       this.hudObserver.observe(element);
     }
     this.queueHudMeasurement();
