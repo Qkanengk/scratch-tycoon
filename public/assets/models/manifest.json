@@ -210,10 +210,10 @@
  {
   "id": "kiosk/scraper",
   "file": "models/kiosk/scraper.glb",
-  "author": "Kenney",
+  "author": "LonesomeDucky",
   "license": "CC0-1.0",
-  "source": "https://poly.pizza/m/VMluJiBnkx",
-  "use": "Cooking Spatula"
+  "source": "https://opengameart.org/content/tool-pack-2",
+  "use": "Utility knife (razor scraper)"
  },
  {
   "id": "kiosk/machine",

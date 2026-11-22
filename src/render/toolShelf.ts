@@ -9,6 +9,7 @@ import { palette } from './palette';
 import { inkCard } from './shapes';
 import { buildToolModel, disposeToolObject } from './toolModels';
 import { kioskProp } from './kioskModels';
+import { isFiniteBox, posedBounds } from './toon';
 
 const FONT = '"Baloo 2", system-ui, sans-serif';
 const WIDTH = 1.75;
@@ -25,6 +26,32 @@ export function shelfOffer(state: GameState, id: ToolId) {
 
 export function shelfSlot(index: number): THREE.Vector3 {
   return new THREE.Vector3(index % 2 ? 0.43 : -0.43, 1.78 - Math.floor(index / 2) * 0.65, 0.14);
+}
+
+const SHELF_TILT: Partial<Record<ToolId, number>> = {
+  card: 0,
+  scraper: -Math.PI * .4,
+  machine: Math.PI * .20,
+  laser: 0,
+};
+
+export function positionShelfTool(model: THREE.Group, id: ToolId): void {
+  model.rotation.y = id === 'laser' ? Math.PI * .42 : -.12;
+  const tilt = SHELF_TILT[id];
+  if (tilt === undefined) {
+    model.scale.multiplyScalar(.34);
+    model.position.y = id === 'coin' ? .035 : -.1;
+    return;
+  }
+  model.rotation.z = tilt;
+  const bounds = posedBounds(model);
+  if (!isFiniteBox(bounds)) return;
+  const size = bounds.getSize(new THREE.Vector3());
+  const centre = bounds.getCenter(new THREE.Vector3());
+  // Fit the broad face between this label and the label on the row above.
+  const fit = Math.min(.62 / size.x, .29 / size.y, .24 / size.z);
+  model.scale.multiplyScalar(fit);
+  model.position.set(0, -.005, .045).addScaledVector(centre, -fit);
 }
 
 export class ToolShelf {
@@ -95,9 +122,7 @@ export class ToolShelf {
       });
       for (const child of [...slot.model.children]) disposeToolObject(child);
       const model = buildToolModel(tool.id, level, !offer.owned, durability);
-      model.scale.multiplyScalar(0.34);
-      model.position.y = tool.id === 'coin' ? 0.035 : -0.1;
-      model.rotation.y = -0.12;
+      positionShelfTool(model, tool.id);
       slot.model.add(model);
       const ctx = slot.canvas.getContext('2d')!;
       ctx.fillStyle = failed ? palette.red : offer.equipped ? palette.gold : palette.paper;

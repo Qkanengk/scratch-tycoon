@@ -60,7 +60,7 @@ export function buildBoard(root: HTMLElement): void {
     stickers.appendChild(tile(name, `<img src="${ASSETS}/stickers/${name}.png" width="96" height="96" alt="">`, 120));
   }
 
-  const patterns = section(root, 'Giấy vé, lớp phủ, mặt bàn', 'Hoa văn và bề mặt từ Kenney và OzMaister.');
+  const patterns = section(root, 'Giấy vé, lớp phủ, mặt bàn', 'Hoa văn vé đời đầu và các bề mặt từ Kenney và OzMaister.');
   for (const name of PATTERNS) {
     patterns.appendChild(
       tile(name, `<div style="height:150px;border:3px solid ${ink};border-radius:10px;background:url(${ASSETS}/${patternPath(name)}) 0 0/120px"></div>`, 250),

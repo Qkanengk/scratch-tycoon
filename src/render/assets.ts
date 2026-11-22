@@ -15,7 +15,8 @@ export type ParticleName = (typeof PARTICLES)[number];
 export const PATTERNS = [
   'foil', 'table-wood', 'mat-felt', 'wall', 'paper', ...TICKETS.map((def) => `paper-${def.id}`),
 ];
-export const patternPath = (name: string): string => `patterns/${name}.png`;
+const ORIGINAL_PAPERS = new Set(['paper-dong', 'paper-bac', 'paper-vang', 'paper-ngoc', 'paper-rong']);
+export const patternPath = (name: string): string => `patterns/${name}.${ORIGINAL_PAPERS.has(name) ? 'svg' : 'png'}`;
 export function particlePath(name: ParticleName): string {
   if (name.startsWith('confetti-')) return 'particles/confetti.png';
   if (name === 'coin') return 'brand/coin.png';

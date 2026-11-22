@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { TOOLS } from '../data/tools';
 import { KIOSK_MODELS, kioskAnimation, kioskProp, preloadKioskModels } from './kioskModels';
 import { animateToolModel, buildToolModel, disposeToolObject } from './toolModels';
+import { positionShelfTool } from './toolShelf';
 import { posedBounds } from './toon';
 
 vi.mock('./assets', async importOriginal => ({
@@ -51,13 +52,31 @@ describe('sourced kiosk models', () => {
 });
 
 describe('sourced tool models', () => {
-  it('presents the broad side of the scraper on the shelf', () => {
+  it('faces the broad side of the extended scraper forward with the blade pointing down', () => {
     const tool = buildToolModel('scraper', 0, true);
-    const size = posedBounds(tool).getSize(new THREE.Vector3());
+    const bounds = posedBounds(tool);
+    const size = bounds.getSize(new THREE.Vector3());
+    expect(bounds.min.y).toBeCloseTo(0);
     expect(size.y).toBeGreaterThan(.7);
-    expect(size.x).toBeGreaterThan(.18);
-    expect(size.x).toBeGreaterThan(size.z * 2);
+    expect(size.x).toBeGreaterThan(size.z);
+    expect(surface(tool).map).not.toBeNull();
     disposeToolObject(tool);
+  });
+
+  it.each(['card', 'scraper', 'machine', 'laser'] as const)('gives the %s a larger face without overlapping its label', id => {
+    const tool = buildToolModel(id, 0, true);
+    const previous = buildToolModel(id, 0, true);
+    previous.rotation.y = -.12;
+    previous.scale.multiplyScalar(.34);
+    const oldSize = posedBounds(previous).getSize(new THREE.Vector3());
+    positionShelfTool(tool, id);
+    const bounds = posedBounds(tool);
+    const size = bounds.getSize(new THREE.Vector3());
+    expect(size.x * size.y).toBeGreaterThan(oldSize.x * oldSize.y * 1.2);
+    expect(bounds.min.y).toBeGreaterThan(-.17);
+    expect(bounds.max.y).toBeLessThan(.16);
+    expect(size.x).toBeLessThan(.73);
+    [tool, previous].forEach(disposeToolObject);
   });
 
   it('tints damage and upgrades per instance and gives locked previews distinct colors', () => {

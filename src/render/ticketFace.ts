@@ -58,12 +58,29 @@ function text(ctx: Ctx, value: string, x: number, y: number, size: number, color
   ctx.fillText(value, x, y, maxWidth ?? 10000);
 }
 
+let greenGourd: HTMLCanvasElement | undefined;
+
+function tintGourd(img: HTMLImageElement): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#36aa67';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.drawImage(img, 0, 0);
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.drawImage(img, 0, 0);
+  return canvas;
+}
+
 function sticker(ctx: Ctx, name: string, x: number, y: number, size: number): void {
   const img = image(`stickers/${name}.png`);
   const scale = size / Math.max(img.naturalWidth, img.naturalHeight);
   const w = img.naturalWidth * scale;
   const h = img.naturalHeight * scale;
-  ctx.drawImage(img, x - w / 2, y - h / 2, w, h);
+  const source = name === 'gourd' ? (greenGourd ??= tintGourd(img)) : img;
+  ctx.drawImage(source, x - w / 2, y - h / 2, w, h);
 }
 
 function pattern(ctx: Ctx, name: string, tile: number): CanvasPattern {
@@ -137,13 +154,9 @@ export function drawFace(canvas: HTMLCanvasElement, id: TicketId, ticket: Ticket
   const ctx = canvas.getContext('2d')!;
   const cosmic = id === 'vutru';
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = palette.ticket[id];
+  ctx.fillStyle = cosmic ? palette.ticket.vutru : pattern(ctx, `paper-${id}`, S * .26);
   ctx.fillRect(0, 0, S, canvas.height);
-  ctx.save();
-  ctx.globalAlpha = cosmic ? 1 : .57;
-  const backing = image(patternPath(`paper-${id}`));
-  ctx.drawImage(backing, 0, 0, S, canvas.height);
-  ctx.restore();
+  if (cosmic) ctx.drawImage(image(patternPath('paper-vutru')), 0, 0, S, canvas.height);
 
   // Header: name plate on the left, top prize on the right.
   const name = t(`ticket.${id}.name`);

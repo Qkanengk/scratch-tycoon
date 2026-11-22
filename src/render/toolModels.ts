@@ -6,7 +6,7 @@ const TOOLS = {
   coin: { rotation: [0, 0, 0], preview: 0xffcc42 },
   key: { rotation: [Math.PI / 2, 0, Math.PI], preview: 0xffc851 },
   card: { rotation: [0, 0, 0], preview: 0x57cdeb },
-  scraper: { rotation: [Math.PI / 2, Math.PI / 2, 0], preview: 0xff806a },
+  scraper: { rotation: [Math.PI / 2, 0, Math.PI / 2], preview: 0xff806a },
   machine: { rotation: [0, 0, Math.PI], preview: 0x82d99d },
   laser: { rotation: [0, 0, Math.PI / 2], preview: 0xc09aef },
 } as const;
@@ -30,13 +30,13 @@ export function buildToolModel(id: ToolId, level = 0, silhouette = false, durabi
       pivot.attach(roller);
     }
   }
-  styleTool(model, silhouette ? TOOLS[id].preview : undefined, durability, level);
+  styleTool(model, silhouette ? TOOLS[id].preview : undefined, durability, level, id === 'scraper');
   tool.add(model);
   tool.scale.setScalar(1 + level * .012);
   return tool;
 }
 
-function styleTool(model: THREE.Object3D, previewColor: number | undefined, durability: number, level: number): void {
+function styleTool(model: THREE.Object3D, previewColor: number | undefined, durability: number, level: number, keepMap: boolean): void {
   const preview = previewColor === undefined ? undefined : new THREE.Color(previewColor);
   const wear = new THREE.Color(0x756553);
   const polish = new THREE.Color(0xffca55);
@@ -45,8 +45,8 @@ function styleTool(model: THREE.Object3D, previewColor: number | undefined, dura
     for (const material of [node.material].flat()) {
       if (!(material instanceof THREE.MeshToonMaterial)) continue;
       if (preview) {
-        material.color.lerp(preview, .8);
-        material.map = null;
+          material.color.lerp(preview, keepMap ? .55 : .8);
+          if (!keepMap) material.map = null;
       } else material.color.lerp(polish, Math.min(level, 10) * .025).lerp(wear, (1 - durability) * .72);
     }
   });

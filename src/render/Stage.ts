@@ -1005,8 +1005,8 @@ export class Stage {
       }
       const box = new THREE.Box3().setFromPoints(points);
       target = box.getCenter(new THREE.Vector3());
-      direction = gaze(13);
-      lift = desktop ? this.camera.aspect < 1.5 ? 0.2 : 0.03 : touch ? 0 : 0.34;
+      direction = gaze(7);
+      lift = desktop ? this.camera.aspect < 1.5 ? 0.10 : 0 : touch ? 0 : 0.17;
     } else if (this.view === 'robots') {
       points = this.robots.points();
       target = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
