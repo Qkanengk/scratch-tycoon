@@ -125,6 +125,20 @@ describe('robot work', () => {
     expect(done.stats.vang.scratched).toBe(1);
   });
 
+  it('never wears any player tool, including the coin, on normal or bomb tickets', () => {
+    for (const away of [false, true]) {
+      for (const equippedTool of ['coin', 'key'] as const) {
+        const s = loadRobot({ ...hired(), equippedTool, ownedTools: ['coin', 'key'],
+          durability: { coin: .4, key: .5, card: .6, scraper: .7, machine: .8, laser: .9 } }, 0);
+        s.automation.robots[0]!.tray!.cells[0] = { type: 'bomb' };
+        const done = advanceAutomation(s, 4000, away);
+        expect(done.automation.report.tickets).toBe(1);
+        expect(done.durability).toEqual(s.durability);
+        expect(done.equippedTool).toBe(equippedTool);
+      }
+    }
+  });
+
   it('drains extra charge for bombs and stops mid-ticket when flat', () => {
     const s = loadRobot(hired(), 0);
     const robot = s.automation.robots[0]!;
