@@ -60,6 +60,57 @@ describe('robot work', () => {
     expect(idle.automation.autoBuy).toBe(false);
   });
 
+  it('shares payouts between robots on one timeline and matches fine away ticks', () => {
+    let s = hired();
+    for (let seed = 1; seed < 1000; seed++) {
+      const candidate = loadRobot(automationAction(automationAction(hired(seed), 'robot'), 'autoBuy'), 1);
+      const next = loadRobot(candidate, 0);
+      if (candidate.automation.robots[1]!.tray!.net >= 20 && next.automation.robots[0]!.tray!.net === 0) {
+        s = { ...candidate, money: 10 };
+        break;
+      }
+    }
+    expect(s.automation.robots).toHaveLength(2);
+    s.automation.robots[1]!.progressMs = 1000;
+    const done = advanceAutomation(s, 60_000, true);
+    let reference = s;
+    for (let elapsed = 0; elapsed < 60_000; elapsed += 10) reference = advanceAutomation(reference, 10, true);
+    expect(done.automation.robots[0]!.charge).toBeLessThan(39);
+    expect(done.money).toBe(reference.money);
+    expect(done.rngState).toBe(reference.rngState);
+    expect(done.nextSerial).toBe(reference.nextSerial);
+    expect(done.automation.report).toEqual(reference.automation.report);
+    expect(done.stats).toEqual(reference.stats);
+    done.automation.robots.forEach((r, i) => {
+      const expected = reference.automation.robots[i]!;
+      expect(r.tray).toEqual(expected.tray);
+      expect(r.progressMs).toBeCloseTo(expected.progressMs, 6);
+      expect(r.charge).toBeCloseTo(expected.charge, 8);
+    });
+    expect(s.automation.robots[0]!.charge).toBe(40);
+  });
+
+  it('shares active time across battery stops, free charging and simultaneous completions', () => {
+    const s = automationAction(automationAction(hired(4), 'robot'), 'autoBuy');
+    s.automation.robots[0]!.charge = .25;
+    s.automation.robots[1]!.charge = .5;
+    const elapsed = 130_000;
+    const done = advanceAutomation(s, elapsed);
+    let reference = s;
+    for (let time = 0; time < elapsed; time += 25) reference = advanceAutomation(reference, 25);
+    expect(done.money).toBe(reference.money);
+    expect(done.automation.report).toEqual(reference.automation.report);
+    expect(done.stats).toEqual(reference.stats);
+    expect(done.rngState).toBe(reference.rngState);
+    done.automation.robots.forEach((r, i) => {
+      const expected = reference.automation.robots[i]!;
+      expect(r.tray).toEqual(expected.tray);
+      expect(r.charging).toBe(expected.charging);
+      expect(r.progressMs).toBeCloseTo(expected.progressMs, 5);
+      expect(r.charge).toBeCloseTo(expected.charge, 8);
+    });
+  });
+
   it('loses fake tickets without spotting or refunding them', () => {
     let s = hired();
     for (let seed = 1; seed < 500; seed++) {

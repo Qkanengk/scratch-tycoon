@@ -94,32 +94,43 @@ export function automationAction(s: GameState, action: AutomationAction, index =
 export function advanceAutomation(state: GameState, elapsedMs: number, away = false): GameState {
   if (!Number.isFinite(elapsedMs) || elapsedMs <= 0 || state.rentDebt > 0 || !state.automation.robots.length) return state;
   let s = { ...state, automation: { ...state.automation, robots: state.automation.robots.map(r => ({ ...r })) } };
-  for (let index = 0; index < s.automation.robots.length; index++) {
-    let left = elapsedMs;
-    while (left > 0) {
-      let robot = s.automation.robots[index]!;
-      if (robot.charging || robot.charge <= 1e-9) {
-        if (away) break;
-        robot.charging = true;
-        const duration = (batteryCapacity(s) - robot.charge) / batteryCapacity(s) * A.freeChargeMs;
-        const step = Math.min(left, duration);
-        robot.charge = Math.min(batteryCapacity(s), robot.charge + step / A.freeChargeMs * batteryCapacity(s));
-        left -= step;
-        if (step < duration) break;
+  let left = elapsedMs;
+  while (left > 0 && s.rentDebt <= 0) {
+    const capacity = batteryCapacity(s);
+    const interval = robotInterval(s);
+    for (let index = 0; index < s.automation.robots.length; index++) {
+      const robot = s.automation.robots[index]!;
+      if (!away && robot.charge <= 1e-9) robot.charging = true;
+      if (!away && robot.charging && robot.charge >= capacity - 1e-9) {
+        robot.charge = capacity;
         robot.charging = false;
       }
-      if (!robot.tray && s.automation.autoBuy) {
-        s = loadRobot(s, index) as typeof s;
-        robot = s.automation.robots[index]!;
+      if (!robot.tray && s.automation.autoBuy) s = loadRobot(s, index) as typeof s;
+    }
+    const duration = (robot: Robot) => {
+      if (robot.charging) return away ? Infinity : (capacity - robot.charge) / capacity * A.freeChargeMs;
+      if (!robot.tray || robot.charge <= 1e-9) return Infinity;
+      return Math.min(interval - robot.progressMs, robot.charge * interval / ticketCharge(robot.tray));
+    };
+    const next = Math.min(...s.automation.robots.map(duration));
+    if (!Number.isFinite(next)) break;
+    const step = Math.min(left, next);
+    for (const robot of s.automation.robots) {
+      if (robot.charging) {
+        if (!away) {
+          robot.charge = Math.min(capacity, robot.charge + step / A.freeChargeMs * capacity);
+          if (robot.charge >= capacity - 1e-9) { robot.charge = capacity; robot.charging = false; }
+        }
+      } else if (robot.tray && robot.charge > 1e-9) {
+        robot.progressMs += step;
+        robot.charge = Math.max(0, robot.charge - step * ticketCharge(robot.tray) / interval);
+        if (robot.charge <= 1e-9) robot.charge = 0;
       }
+    }
+    left -= step;
+    for (const robot of s.automation.robots) {
       const ticket = robot.tray;
-      if (!ticket) break;
-      const interval = robotInterval(s);
-      const drainRate = ticketCharge(ticket) / interval;
-      const step = Math.min(left, interval - robot.progressMs, robot.charge / drainRate);
-      robot.progressMs += step;
-      robot.charge = Math.max(0, robot.charge - step * drainRate);
-      left -= step;
+      if (!ticket) continue;
       if (robot.progressMs >= interval - 1e-7) {
         const result = collectTicket(revealTicket({ ...s, ticket, equippedTool: 'coin' }));
         const net = result.money - s.money;
@@ -129,7 +140,6 @@ export function advanceAutomation(state: GameState, elapsedMs: number, away = fa
         robot.tray = null;
         robot.progressMs = 0;
       }
-      if (s.rentDebt > 0) break;
     }
   }
   return s;
