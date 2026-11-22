@@ -6,9 +6,18 @@ import { drawFace, restoreFoil, ticketMetrics } from './ticketFace';
 vi.mock('./assets', async importOriginal => ({
   ...await importOriginal<typeof import('./assets')>(),
   image: (path: string) => ({ path, naturalWidth: 100, naturalHeight: 100 }),
+  rasterize: (path: string, size: number) => ({ path, size }),
 }));
 
 describe('ticketMetrics', () => {
+  it.each(['dong', 'bac', 'vang', 'ngoc', 'rong'] as const)('tiles the original %s paper rather than stretching a card back', id => {
+    const createPattern = vi.fn(() => '#fff');
+    const ctx = new Proxy({ createPattern, measureText: () => ({ width: 100 }) }, { get: (target, key) => Reflect.get(target, key) ?? vi.fn() });
+    const canvas = { width: 1024, height: 1024, getContext: () => ctx } as unknown as HTMLCanvasElement;
+    drawFace(canvas, id, null, false);
+    expect(createPattern).toHaveBeenCalledWith({ path: `patterns/paper-${id}.svg`, size: 266 }, 'repeat');
+  });
+
   it.each(['ngoc', 'rong', 'vutru'] as const)('keeps the %s seal below the entire printed rule line', id => {
     const fillText = vi.fn();
     const drawImage = vi.fn();
