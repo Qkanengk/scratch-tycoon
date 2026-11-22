@@ -202,6 +202,7 @@ export class Stage {
     let top = 0;
     let bottom = height - prompt.top;
     for (const element of app.querySelectorAll('.purse, .corner, .look')) {
+      if (this.view === 'desk' && element.matches('.look-right')) continue;
       const rect = element.getBoundingClientRect();
       if (rect.top < height / 3) top = Math.max(top, rect.bottom);
       else bottom = Math.max(bottom, height - rect.top);
@@ -907,6 +908,7 @@ export class Stage {
     this.renderer.domElement.dataset.busy = '1';
     const tall = this.camera.aspect < 0.8;
     const desktop = desktopLayout(this.host.clientWidth, this.host.clientHeight);
+    this.robots.group.visible = this.view !== 'desk';
     this.robots.layout(this.view === 'robots' ? tall : !desktop, this.view === 'robots');
     const counterExtension = this.room.getObjectByName('countertop-extension');
     if (counterExtension) counterExtension.visible = this.view === 'robots';
@@ -932,7 +934,6 @@ export class Stage {
       direction = gaze(desktop ? 72 : touch && !tall ? 85 : tall ? 60 : 50);
       points = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => new THREE.Vector3(sx * halfW, FACE_Y, sz * halfH)));
       if (desktop) {
-        points.push(...this.robots.deskPoints());
         for (const name of ['cash-register', 'gold-bag', 'coins']) {
           const prop = this.room.getObjectByName(name);
           if (!prop) continue;
@@ -943,7 +944,6 @@ export class Stage {
             sz < 0 ? box.min.z : box.max.z,
           )))));
         }
-        target = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
       }
     } else if (this.view === 'shop') {
       points = this.rack.points();
