@@ -1,7 +1,76 @@
 import { describe, expect, it, vi } from 'vitest';
+import * as THREE from 'three';
 import type { ToolIntent } from '../game/tools';
 import { Stage } from './Stage';
 import { PlayClock } from './playClock';
+
+describe('desk framing', () => {
+  const stageAt = (width: number, height: number) => Object.assign(Object.create(Stage.prototype), {
+    host: { clientWidth: width, clientHeight: height },
+    camera: new THREE.PerspectiveCamera(50, width / height),
+    renderer: { domElement: { dataset: {} } },
+    view: 'desk',
+    robots: {
+      group: new THREE.Group(), layout: vi.fn(),
+      deskPoints: vi.fn(() => [new THREE.Vector3(100, 100, 100)]),
+      points: vi.fn(() => [new THREE.Vector3(1, 0, 0), new THREE.Vector3(5, 2, 3)]),
+    },
+    room: new THREE.Group(),
+    metrics: { height: 1.4 },
+    touchLayout: () => width < 900,
+    touchTop: 70, touchBottom: 120,
+    frameUp: vi.fn(() => new THREE.Vector3()),
+    eyeGoal: new THREE.Vector3(), focusGoal: new THREE.Vector3(),
+  });
+
+  it.each([[1280, 800], [1280, 960], [1024, 768], [390, 844], [844, 390]])('keeps the pre-robot ticket bounds at %i×%i', (width, height) => {
+    const stage = stageAt(width, height);
+    const prop = new THREE.Mesh(new THREE.BoxGeometry(.3, .4, .2));
+    prop.name = 'cash-register';
+    prop.position.set(-.8, .2, -.2);
+    stage.room.add(prop);
+    stage.aim();
+    const [target, , points] = stage.frameUp.mock.calls[0];
+    expect(target).toEqual(new THREE.Vector3());
+    expect(points).toHaveLength(width >= 900 ? 12 : 4);
+    expect(points.every((point: THREE.Vector3) => point.x < 1)).toBe(true);
+    expect(stage.robots.deskPoints).not.toHaveBeenCalled();
+    expect(stage.robots.group.visible).toBe(false);
+  });
+
+  it('frames the ticket without optional counter props and restores the unchanged robot bounds', () => {
+    const stage = stageAt(1280, 800);
+    stage.aim();
+    expect(stage.frameUp.mock.calls[0][2]).toHaveLength(4);
+    stage.view = 'robots';
+    stage.aim();
+    expect(stage.robots.group.visible).toBe(true);
+    expect(stage.robots.layout).toHaveBeenLastCalledWith(false, true);
+    expect(stage.frameUp.mock.calls[1][2]).toEqual(stage.robots.points.mock.results[0].value);
+    expect(stage.focusGoal).toEqual(new THREE.Vector3(3, .55, 1.5));
+  });
+
+  it('keeps the phone desk safe area independent of the robot glance button', () => {
+    const stage = stageAt(390, 844);
+    const element = (top: number, bottom: number, right = false) => ({
+      matches: () => right,
+      getBoundingClientRect: () => ({ top, bottom }),
+    });
+    stage.ready = true;
+    stage.aim = vi.fn();
+    stage.host.parentElement = {
+      style: { getPropertyValue: () => '', setProperty: vi.fn() },
+      querySelector: () => ({ getBoundingClientRect: () => ({ top: 768, height: 70 }) }),
+      querySelectorAll: () => [element(20, 60), element(72, 116), element(714, 758, true)],
+    };
+    stage.measureHud();
+    expect(stage.touchTop).toBe(122);
+    expect(stage.touchBottom).toBe(82);
+    stage.view = 'robots';
+    stage.measureHud();
+    expect(stage.touchBottom).toBe(136);
+  });
+});
 
 describe('stage shelf interactions', () => {
   it('never scratches a return-tag press and returns only when released on the tag', () => {
