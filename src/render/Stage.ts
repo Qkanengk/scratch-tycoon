@@ -159,6 +159,7 @@ export class Stage {
   private collectionDebt = 0;
   private collectionTicket: Ticket | null = null;
   private roundSize = 0;
+  private returnableRound = false;
   private rentKey = '';
   private returnKey = '';
   private readonly bombHits = new Set<number>();
@@ -223,8 +224,9 @@ export class Stage {
     const height = this.host.clientHeight;
     let top = 0;
     let bottom = height - prompt.top;
+    const returnableRound = this.state && currentRound(this.state).length > 1 && ticketRefund(this.state.ticket) > 0;
     for (const element of app.querySelectorAll('.purse, .corner, .look')) {
-      if (this.view === 'desk' && element.matches('.look-right')) continue;
+      if (this.view === 'desk' && element.matches('.look-right') && !returnableRound) continue;
       const rect = element.getBoundingClientRect();
       if (rect.top < height / 3) top = Math.max(top, rect.bottom);
       else bottom = Math.max(bottom, height - rect.top);
@@ -469,6 +471,11 @@ export class Stage {
     if (key !== this.rentKey) { this.rentKey = key; this.rent.draw(rentLines(state, this.rentStamp > 0)); }
     const ticketForReturn = state.ticket;
     const refund = ticketRefund(ticketForReturn);
+    const returnableRound = spread > 0 && refund > 0;
+    if (returnableRound !== this.returnableRound) {
+      this.returnableRound = returnableRound;
+      this.queueHudMeasurement();
+    }
     this.returnTag.group.visible = refund > 0;
     this.positionReturnTag(this.deskLayout());
     if (this.returnTag.group.visible && this.returnKey !== String(ticketForReturn!.serial)) {

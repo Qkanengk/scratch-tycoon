@@ -17,12 +17,12 @@ describe('collection receipt before queued dealing', () => {
     const updated = () => ({ update: vi.fn() });
     const stage = Object.assign(Object.create(Stage.prototype), {
       state, shown: before.ticket, first: false, view: 'desk', receiptWaiting: false,
-      receiptTime: 0, collectionDebt: 0, rentStamp: 0, roundSize: 0,
+      receiptTime: 0, collectionDebt: 0, rentStamp: 0, roundSize: 0, returnableRound: false,
       toolShelf: updated(), upgrades: updated(), robots: updated(), altar: updated(),
       roundDisplay: { ...updated(), layout: vi.fn(), followers: new THREE.Group() },
       mat: new THREE.Group(), ticket: new THREE.Group(),
       rent: { draw: vi.fn() }, receipt: { draw: vi.fn(), group: new THREE.Group() },
-      returnTag: { group: new THREE.Group() }, metrics: { height: 1 },
+      returnTag: { draw: vi.fn(), group: new THREE.Group() }, metrics: { height: 1 },
       handKey: `${state.equippedTool}:${state.toolLevels[state.equippedTool]}:${state.durability[state.equippedTool]}`,
       rack: updated(), board: updated(), camera: { aspect: 1 },
       touchLayout: () => false, aim: vi.fn(), pendingScratch: new Set(),
@@ -72,6 +72,44 @@ describe('collection receipt before queued dealing', () => {
     stage.advanceReceipt(5);
     expect(stage.receipt.group.visible).toBe(false);
     expect(stage.show).not.toHaveBeenCalled();
+  });
+
+  it('remeasures phone navigation through sync when scratching removes round returnability', () => {
+    const stage = collectedStage(true);
+    stage.state = buyTicket({ ...createInitialState(4), money: 1000,
+      upgrades: { luck: 0, desk: 7, bulk: 1 }, bulkLot: 5 }, 'dong');
+    stage.state.ticket = { ...stage.state.ticket, defective: true };
+    stage.shown = stage.state.ticket;
+    stage.ready = true;
+    stage.hudFrame = 0;
+    stage.host = { clientWidth: 390, clientHeight: 844, parentElement: {
+      style: { getPropertyValue: () => '', setProperty: vi.fn() },
+      querySelector: (selector: string) => selector === '.prompt'
+        ? { getBoundingClientRect: () => ({ top: 731, height: 101 }) } : null,
+      querySelectorAll: () => [{ matches: () => true,
+        getBoundingClientRect: () => ({ top: 677, bottom: 721 }) }],
+    } };
+    stage.touchLayout = () => true;
+    const frames: FrameRequestCallback[] = [];
+    const requestFrame = vi.fn((callback: FrameRequestCallback) => frames.push(callback));
+    vi.stubGlobal('requestAnimationFrame', requestFrame);
+    try {
+      stage.sync();
+      frames.shift()!(0);
+      expect(stage.touchBottom).toBe(173);
+      const roundSize = stage.roundSize;
+      stage.state = { ...stage.state, ticket: { ...stage.state.ticket, scratchStarted: true } };
+      stage.sync();
+      expect(stage.roundSize).toBe(roundSize);
+      expect(stage.returnTag.group.visible).toBe(false);
+      expect(requestFrame).toHaveBeenCalledTimes(2);
+      frames.shift()!(0);
+      expect(stage.touchBottom).toBe(119);
+      stage.sync();
+      expect(requestFrame).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 
@@ -203,6 +241,32 @@ describe('desk framing', () => {
     stage.view = 'robots';
     stage.measureHud();
     expect(stage.touchBottom).toBe(136);
+  });
+
+  it.each([1, 2, 3, 4, 5, 6, 7, 8])('reserves phone navigation above a returnable %i-ticket round without changing normal rounds', count => {
+    const stage = stageAt(390, 844);
+    const initial = createInitialState(4);
+    const held = buyTicket({ ...initial, money: 1000000, licenses: ['dong', 'bac'],
+      upgrades: { luck: 0, desk: count - 1, bulk: 3 }, bulkLot: 10,
+      incidents: { ...initial.incidents, current: { kind: 'defectiveStock', phase: 'active', remainingMs: 10000, cost: 0 } },
+    }, 'bac');
+    stage.state = { ...held, deskQueue: held.deskQueue.slice(0, count - 1) };
+    stage.ready = true;
+    stage.aim = vi.fn();
+    const nav = { matches: () => true, getBoundingClientRect: () => ({ top: 677, bottom: 721 }) };
+    stage.host.parentElement = {
+      style: { getPropertyValue: () => '', setProperty: vi.fn() },
+      querySelector: (selector: string) => selector === '.prompt' ? { getBoundingClientRect: () => ({ top: 731, height: 101 }) } : null,
+      querySelectorAll: () => [nav],
+    };
+    stage.measureHud();
+    expect(stage.touchBottom).toBe(count > 1 ? 173 : 119);
+    stage.state = { ...stage.state, ticket: { ...stage.state.ticket, scratchStarted: true } };
+    stage.measureHud();
+    expect(stage.touchBottom).toBe(119);
+    stage.state = { ...stage.state, ticket: null, deskQueue: [] };
+    stage.measureHud();
+    expect(stage.touchBottom).toBe(119);
   });
 
   it.each([
