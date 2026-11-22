@@ -5,6 +5,8 @@ import { initialToolLevels, type ToolId } from '../data/tools';
 import { TICKET_IDS, type TicketId } from '../data/tickets';
 import { initialAutomation, type Automation } from './automation';
 import { initialIncidents, type IncidentState } from './incidents';
+import { initialJournal, type Journal } from './journal';
+import { initialGoldenHour, type GoldenHour } from './goldenHour';
 
 /** Prizes inside cells are in units of the ticket's price. */
 export type Cell =
@@ -27,6 +29,8 @@ export interface Ticket {
   gross: number;
   tax: number;
   net: number;
+  /** Final payout percentage, frozen at reveal (100 for a normal prize). */
+  payoutPercent?: number;
   fakeTell: 'missing-seal' | 'misprinted-serial' | null;
   defective?: true;
   scratchStarted: boolean;
@@ -43,7 +47,7 @@ export interface TicketStats {
   bigWins: number;
 }
 
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 
 export interface GameState {
   contracts: ContractState;
@@ -54,6 +58,8 @@ export interface GameState {
   licenseElapsedMs: number;
   automation: Automation;
   incidents: IncidentState;
+  journal: Journal;
+  goldenHour: GoldenHour;
   version: typeof SAVE_VERSION;
   money: number;
   durability: Record<ToolId, number>;
@@ -91,6 +97,8 @@ export function createInitialState(seed: number): GameState {
     licenseElapsedMs: 0,
     automation: initialAutomation(),
     incidents: initialIncidents(seed),
+    journal: initialJournal(),
+    goldenHour: initialGoldenHour(seed),
     money: BALANCE.startingMoney,
     durability: { coin: 1, key: 1, card: 1, scraper: 1, machine: 1, laser: 1 },
     rentElapsedMs: 0,

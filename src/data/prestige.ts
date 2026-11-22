@@ -1,6 +1,6 @@
 export const PRESTIGE = {
   maxTier: 5,
-  firstThreshold: 36_000_000,
+  firstThreshold: 55_000_000,
   thresholdGrowth: 64,
   bonusPerTier: 0.20,
   taxSurcharge: 0.05,

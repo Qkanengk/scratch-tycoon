@@ -32,6 +32,7 @@ export type View = 'desk' | 'shop' | 'board' | 'tools' | 'robots' | 'altar';
 
 export interface StageCallbacks {
   onContract(): void;
+  onJournal(): void;
   onAltar(): void;
   onAutomation(action: AutomationAction | 'context', index: number): void;
   /** The player scratched enough of the ticket on the mat. */
@@ -54,7 +55,7 @@ export interface StageCallbacks {
   onBomb(ticket: Ticket, index: number): void;
 }
 
-type Action = { kind: 'contract' } | { kind: 'altar'; offer?: boolean } | { kind: 'robots' } | { kind: 'automation'; action: AutomationAction | 'context'; index?: number } | { kind: 'ticket'; id: TicketId } | { kind: 'board' } | { kind: 'collect' } | { kind: 'tools' } | { kind: 'tool'; intent: ToolIntent | null } | { kind: 'return' } | { kind: 'repair'; id: ToolId };
+type Action = { kind: 'contract' } | { kind: 'journal' } | { kind: 'altar'; offer?: boolean } | { kind: 'robots' } | { kind: 'automation'; action: AutomationAction | 'context'; index?: number } | { kind: 'ticket'; id: TicketId } | { kind: 'board' } | { kind: 'collect' } | { kind: 'tools' } | { kind: 'tool'; intent: ToolIntent | null } | { kind: 'return' } | { kind: 'repair'; id: ToolId };
 
 const FACE_PX = 1024;
 const FOIL_PX = 768;
@@ -704,6 +705,7 @@ export class Stage {
       const action = hit.object.userData.action as Action | undefined;
       if (!action) continue;
       if (action.kind === 'board' && this.board.contractHit(hit.uv)) return { kind: 'contract' };
+      if (action.kind === 'board' && this.board.journalHit(hit.uv)) return { kind: 'journal' };
       if (action.kind === 'tool' && this.view !== 'tools') return { kind: 'tools' };
       if (action.kind === 'automation' && this.view !== 'robots') return { kind: 'robots' };
       if (action.kind === 'collect' && !(this.shown?.revealed && !this.busy)) continue;
@@ -825,6 +827,7 @@ export class Stage {
 
   private press(action: Action): void {
     if (action.kind === 'contract') { this.look('board'); this.callbacks.onContract(); }
+    else if (action.kind === 'journal') this.callbacks.onJournal();
     else if (action.kind === 'altar') {
       if (this.view === 'altar' && action.offer) this.callbacks.onAltar();
       else this.look('altar');

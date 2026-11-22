@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BIG_WIN_MULTIPLIER, TICKETS, type TicketId } from '../data/tickets';
+import { BIG_WIN_MULTIPLIER, TICKETS, ticketDef, type TicketId } from '../data/tickets';
 import { formatMoney } from '../game/format';
 import type { GameState } from '../game/state';
 import { unlockProgress } from '../game/unlocks';
@@ -21,8 +21,9 @@ const money = (value: number) => `${formatMoney(value)} xu`;
 export function licenseWait(state: GameState, id: TicketId): string | null {
   const progress = unlockProgress(state, id);
   if (!progress.available || progress.timeDone || !progress.revenueDone || !progress.scratchedDone || !progress.bigWinsDone || !progress.affordable) return null;
-  const seconds = Math.ceil(Math.max(0, (TICKETS.find(def => def.id === id)?.unlock?.minimumPlayMs ?? 0) - state.licenseElapsedMs) / 1000);
-  return t('board.wait', { time: `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}` });
+  const minimumMs = ticketDef(id).unlock?.minimumPlayMs ?? 0;
+  const seconds = Math.ceil((minimumMs - state.licenseElapsedMs) / 1000);
+  return t('board.wait', { minutes: minimumMs / 60_000, time: `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}` });
 }
 
 interface Row {
@@ -147,10 +148,14 @@ export class LicenseBoard {
     };
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'center';
-    plate(40, 34, w - 80, 102, palette.cream);
+    plate(40, 18, w - 80, 88, palette.cream);
     ctx.fillStyle = palette.ink;
     ctx.font = `800 ${landscape ? 80 : 54}px ${FONT}`;
-    ctx.fillText(title, w / 2, 90);
+    ctx.fillText(title, w / 2, 65, w - 112);
+    plate(w / 6, 116, w * 2 / 3, 46, palette.gold, 16);
+    ctx.fillStyle = palette.ink;
+    ctx.font = `800 36px ${FONT}`;
+    ctx.fillText(t('journal.board'), w / 2, 141, w - 260);
 
     const top = landscape ? 180 : 220;
     const step = (h - top - (this.note ? 370 : landscape ? 120 : 190)) / Math.max(rows.length, 1);
@@ -207,6 +212,11 @@ export class LicenseBoard {
   contractHit(uv: THREE.Vector2 | undefined): boolean {
     return !!this.note && !!uv && uv.x >= 44 / PX && uv.x <= 1 - 44 / PX
       && uv.y >= 170 / this.canvas.height && uv.y <= 350 / this.canvas.height;
+  }
+
+  journalHit(uv: THREE.Vector2 | undefined): boolean {
+    return !!uv && uv.x >= 120 / PX && uv.x <= 1 - 120 / PX
+      && uv.y >= 1 - 162 / this.canvas.height && uv.y <= 1 - 116 / this.canvas.height;
   }
 
   contractAnchor(): THREE.Vector3 {

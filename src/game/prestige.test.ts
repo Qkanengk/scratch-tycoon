@@ -74,10 +74,12 @@ describe('permanent payouts and cumulative curses', () => {
     expect(ticket.gross).toBe(50);
     expect(ticket.tax).toBe(tier >= 1 ? 2 : 0);
     expect(ticket.net).toBe(Math.floor((ticket.gross - ticket.tax) * (1 + tier * PRESTIGE.bonusPerTier)));
-    const collected = collectTicket({ ...revealTicket(state), rentDebt: 10 });
-    expect(collected.money).toBe(state.money + ticket.net - 10);
-    expect(collected.totalEarned).toBe(ticket.net);
-    expect(collected.prestige.runEarned).toBe(ticket.net);
+    const revealed = revealTicket(state);
+    const net = Math.floor(ticket.net * (100 + Number(tier >= 1) + Number(tier >= 5)) / 100);
+    const collected = collectTicket({ ...revealed, rentDebt: 10 });
+    expect(collected.money).toBe(state.money + net - 10);
+    expect(collected.totalEarned).toBe(net);
+    expect(collected.prestige.runEarned).toBe(net);
     expect(collectTicket(collected)).toBe(collected);
     expect(deserialize(serialize(state))).toEqual(state);
     expect(rentAmount(atTier(tier))).toBe(tier >= 2 ? 8 : 5);
@@ -86,9 +88,10 @@ describe('permanent payouts and cumulative curses', () => {
   it('never awards a bonus on a losing ticket and does not double-count a collected promo', () => {
     const broke = { ...atTier(5), money: 0 };
     const promo = claimPromo(updatePromo(broke, 0), BALANCE.promoIntervalMs);
-    const collected = collectTicket(revealTicket(promo));
-    expect(collected.prestige.runEarned).toBe(promo.ticket!.net);
-    expect(collected.totalEarned).toBe(promo.ticket!.net);
+    const revealed = revealTicket(promo);
+    const collected = collectTicket(revealed);
+    expect(collected.prestige.runEarned).toBe(revealed.ticket!.net);
+    expect(collected.totalEarned).toBe(revealed.ticket!.net);
     const loss = { ...buyTicket(atTier(5), 'dong'), ticket: { ...promo.ticket!, gross: 0, prize: 0, tax: 0, net: 0 } };
     expect(collectTicket(revealTicket(loss)).prestige.runEarned).toBe(0);
   });
@@ -124,8 +127,9 @@ describe('permanent payouts and cumulative curses', () => {
       const robot = loaded.automation.robots[0]!;
       const done = advanceAutomation(loaded, 4000);
       expect(robot.charge - done.automation.robots[0]!.charge).toBeCloseTo(ticketCharge(robot.tray!, tier));
-      expect(done.prestige.runEarned).toBe(robot.tray!.net);
-      expect(done.totalEarned).toBe(robot.tray!.net);
+      const net = revealTicket({ ...loaded, ticket: robot.tray }).ticket!.net;
+      expect(done.prestige.runEarned).toBe(net);
+      expect(done.totalEarned).toBe(net);
       const away = advanceAutomation(loaded, 4000, true);
       expect(away.prestige).toEqual(loaded.prestige);
       expect(away.totalEarned).toBe(loaded.totalEarned);
@@ -148,14 +152,17 @@ describe('Vũ Trụ and licence time floors', () => {
     expect(buyTicket(licensed, def.id).ticket?.type).toBe('vutru');
   });
 
-  it.each(['vang', 'ngoc', 'rong', 'vutru'] as const)('requires twenty active minutes before %s, without weakening other missions', id => {
+  it.each(['vang', 'ngoc', 'rong', 'vutru'] as const)('requires the active-time minimum for %s, in addition to the missions', id => {
     const def = ticketDef(id);
     const mission = def.unlock!.mission;
     const state = { ...atTier(1), totalEarned: 1e12,
       stats: { ...atTier(1).stats, [mission.ticket]: { scratched: mission.scratched, bigWins: mission.bigWins, wins: 0, jackpots: 0 } } };
     expect(unlockProgress(state, id).timeDone).toBe(false);
     expect(buyLicense(state, id)).toBe(state);
-    const ready = advancePlayTime(state, 20 * 60_000);
+    const minimumMs = def.unlock!.minimumPlayMs!;
+    expect(minimumMs).toBeGreaterThanOrEqual(20 * 60_000);
+    expect(unlockProgress(advancePlayTime(state, minimumMs - 1), id).timeDone).toBe(false);
+    const ready = advancePlayTime(state, minimumMs);
     expect(unlockProgress(ready, id).canBuyLicense).toBe(true);
     expect(buyLicense(ready, id).licenseElapsedMs).toBe(0);
   });

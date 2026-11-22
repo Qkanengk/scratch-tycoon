@@ -19,8 +19,10 @@ import { STOCK } from '../data/balance';
 import { restockCountdown } from '../game/stock';
 import { canAcceptContract } from '../game/contracts';
 import { contractGoal } from './contractText';
+import { GOLDEN_HOUR } from '../data/journal';
+import type { GoldenHour } from '../game/goldenHour';
 
-export type Command = 'acceptContract' | 'declineContract' | 'restock' | 'buy' | 'collect' | 'return' | 'promo' | 'license' | 'robot' | 'awayReceipt' | 'incense';
+export type Command = 'acceptContract' | 'declineContract' | 'restock' | 'buy' | 'collect' | 'return' | 'promo' | 'license' | 'robot' | 'awayReceipt' | 'incense' | 'journal';
 
 interface Prompt {
   tone: 'idle' | 'win' | 'jackpot' | 'lose';
@@ -59,10 +61,12 @@ export function promptFor(state: GameState, now: number, view: View, progress: n
   if (view === 'tools') return { tone: 'idle', message: t('tools.hint') };
   if (view === 'board') {
     const next = TICKETS.find((def) => { const progress = unlockProgress(state, def.id); return progress.available && !progress.unlocked; });
-    if (!next?.unlock) return { tone: 'idle', message: t('board.allDone') };
+    const secondary = { label: t('journal.open'), command: 'journal' as const };
+    if (!next?.unlock) return { tone: 'idle', message: t('board.allDone'), secondary };
     return {
       tone: 'idle',
       message: licenseWait(state, next.id) ?? t('board.for', { name: t(`ticket.${next.id}.name`) }),
+      secondary,
       button: { label: t('shop.buyLicense', { cost: money(next.unlock.licenseCost) }), command: 'license', disabled: !unlockProgress(state, next.id).canBuyLicense },
     };
   }
@@ -70,7 +74,11 @@ export function promptFor(state: GameState, now: number, view: View, progress: n
     const amount = money(ticket.net);
     if (ticket.prize === 0) return { tone: 'lose', message: t('table.lose'), button: { label: t('table.discard'), command: 'collect' } };
     const jackpot = ticket.tier === jackpotTier(ticketDef(ticket.type));
-    return { tone: jackpot ? 'jackpot' : 'win', message: t(jackpot ? 'table.jackpot' : 'table.win', { amount }), button: { label: t('table.collect', { amount }), command: 'collect' } };
+    const won = t(jackpot ? 'table.jackpot' : 'table.win', { amount });
+    const golden = (ticket.payoutPercent ?? 100) >= GOLDEN_HOUR.multiplier * 100;
+    return { tone: jackpot ? 'jackpot' : 'win', wrap: golden,
+      message: golden ? `${won} · ${t('golden.payout', { multiplier: GOLDEN_HOUR.multiplier })}` : won,
+      button: { label: t('table.collect', { amount }), command: 'collect' } };
   }
   if (ticket) {
     const refund = ticket.defective ? ticketRefund(ticket) : 0;
@@ -131,6 +139,15 @@ export function ContractNotice({ state }: { state: GameState }) {
   return <div className="contract-notice" role="status" data-testid="contract-progress">
     <span>{contractGoal(active)} <b>{formatMoney(active.progress)}/{formatMoney(active.target)}</b></span>
     <span className="incident-time" role="timer">{restockCountdown(active.remainingMs)}</span>
+  </div>;
+}
+
+export function GoldenNotice({ event }: { event: GoldenHour }) {
+  if (!event.active) return null;
+  return <div className="golden-notice" data-testid="golden-hour">
+    <Icon name="star" />
+    <p role="status"><strong>{t('golden.title')}</strong> · {t('golden.detail')}</p>
+    <span className="incident-time" role="timer">{t('incident.seconds', { seconds: Math.ceil(event.remainingMs / 1000) })}</span>
   </div>;
 }
 

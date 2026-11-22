@@ -7,7 +7,7 @@ import { buyTicket, canBuyTicket, claimPromo, updatePromo } from './economy';
 import { advanceKioskTime } from './kioskTime';
 import { prestige } from './prestige';
 import { deserialize, migrate, serialize } from './save';
-import { createInitialState } from './state';
+import { createInitialState, SAVE_VERSION } from './state';
 import { advanceStock, consumeStock, initialStock, restockCountdown, rushRestock } from './stock';
 
 const lastTicket = () => ({ ...createInitialState(4), money: 1e8,
@@ -94,7 +94,7 @@ describe('stock saves', () => {
   });
   it('migrates v7 to full stock without timers', () => {
     const state = migrate({ ...soldOut(), version: 7 });
-    expect(state?.version).toBe(9);
+    expect(state?.version).toBe(SAVE_VERSION);
     expect(state?.stock).toEqual(initialStock());
   });
   it('validates missing, malformed, excessive and negative entries', () => {
