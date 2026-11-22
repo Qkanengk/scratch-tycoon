@@ -154,6 +154,7 @@ export class Stage {
   private paused = false;
   private rentStamp = 0;
   private receiptTime = 0;
+  private receiptWaiting = false;
   private collectionDebt = 0;
   private collectionTicket: Ticket | null = null;
   private roundSize = 0;
@@ -362,6 +363,8 @@ export class Stage {
       this.particles.emit(this.altar.anchor(), { name: 'coin', count: 24, speed: [.4, .9], spread: .8, size: [.06, .1], life: [1.5, 2.8], gravity: .5 });
       play('unlock');
       this.receipt.group.visible = false;
+      this.receiptTime = 0;
+      this.receiptWaiting = false;
       this.collectionDebt = 0;
       this.ticket.visible = false;
       this.shown = null;
@@ -455,6 +458,7 @@ export class Stage {
     this.toolShelf.update(state);
     this.upgrades.update(state);
     this.roundDisplay.update(state);
+    this.roundDisplay.followers.visible = this.view === 'desk' && !this.receiptWaiting;
     const spread = Math.max(0, currentRound(state).length - 1);
     this.mat.scale.set(1 + spread * .10, 1, 1 + spread * .08);
     if (this.roundSize !== spread + Number(state.ticket !== null)) {
@@ -489,6 +493,7 @@ export class Stage {
     }
     this.rack.update(state);
     this.board.update(state, this.view === 'board' && this.touchLayout() && this.camera.aspect > 1);
+    if (this.receiptWaiting) return;
     const ticket = state.ticket;
     const before = this.shown;
     if (this.first) {
@@ -519,6 +524,12 @@ export class Stage {
     }
     if (!before && !ticket) return;
     const deal = () => {
+      if (this.receiptWaiting) {
+        this.ticket.visible = false;
+        this.callbacks.onProgress(0);
+        this.setState(null);
+        return;
+      }
       if (!ticket) {
         this.ticket.visible = false;
         this.callbacks.onProgress(0);
@@ -538,6 +549,8 @@ export class Stage {
         this.receipt.draw(receiptLines(this.collectionTicket ?? before, this.collectionDebt));
         this.receipt.group.visible = true;
         this.receiptTime = 5;
+        this.receiptWaiting = ticket !== null;
+        if (this.receiptWaiting) this.roundDisplay.followers.visible = false;
       }
       play('ticket-collect');
       this.move(this.pose, TILL, 0.3, easeOut, deal);
@@ -548,6 +561,17 @@ export class Stage {
 
   private setState(ticket: Ticket | null): void {
     this.renderer.domElement.dataset.state = !ticket ? 'empty' : ticket.revealed ? 'revealed' : 'live';
+  }
+
+  private advanceReceipt(dt: number): void {
+    if (this.receiptTime <= 0) return;
+    this.receiptTime = Math.max(0, this.receiptTime - dt);
+    if (this.receiptTime > 0) return;
+    this.receipt.group.visible = false;
+    if (this.receiptWaiting) {
+      this.receiptWaiting = false;
+      this.sync();
+    }
   }
 
   /** The pose of a ticket as it hangs on the rack, where a bought ticket starts its flight to the mat. */
@@ -1005,7 +1029,7 @@ export class Stage {
     this.robots.group.visible = this.view !== 'desk';
     if (this.upgrades) this.upgrades.group.visible = this.view !== 'desk';
     if (this.roundDisplay) {
-      this.roundDisplay.followers.visible = this.view === 'desk';
+      this.roundDisplay.followers.visible = this.view === 'desk' && !this.receiptWaiting;
       this.roundDisplay.pile.visible = this.view === 'shop';
     }
     this.robots.layout(this.view === 'robots' ? tall : !desktop, this.view === 'robots');
@@ -1189,7 +1213,7 @@ export class Stage {
       }
     }
     if (this.rentStamp > 0) { this.rentStamp = Math.max(0, this.rentStamp - dt); if (!this.rentStamp && this.state) this.sync(); }
-    if (this.receiptTime > 0) { this.receiptTime -= dt; if (this.receiptTime <= 0) this.receipt.group.visible = false; }
+    this.advanceReceipt(dt);
 
     for (let i = this.tweens.length - 1; i >= 0; i--) {
       const tween = this.tweens[i] as Tween;
