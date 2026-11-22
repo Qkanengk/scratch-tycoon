@@ -10,6 +10,7 @@ import { consumeStock } from './stock';
 import { progressContract } from './contracts';
 import { GOLDEN_HOUR } from '../data/journal';
 import { journalBonusPercent, recordTicketInJournal } from './journal';
+import { currentRound, heldCount, holdCapacity, luckPercent } from './upgrades';
 
 export function isUnlocked(state: GameState, id: TicketId): boolean {
   return isTicketAvailable(state, id) && (ticketDef(id).unlock === null || state.licenses.includes(id));
@@ -20,16 +21,18 @@ export function isTicketAvailable(state: GameState, id: TicketId): boolean {
 }
 
 export function canBuyTicket(state: GameState, id: TicketId): boolean {
-  return state.ticket === null && state.stock[id].remaining > 0 && isUnlocked(state, id) && state.money >= ticketDef(id).price;
+  return heldCount(state) < holdCapacity(state) && state.stock[id].remaining > 0 && isUnlocked(state, id) && state.money >= ticketDef(id).price;
 }
 
 type PurchaseSource = 'desk' | 'robot' | 'away';
 
 function placeTicket(state: GameState, def: TicketDef, free: boolean, source: PurchaseSource = 'desk'): GameState {
+  if (heldCount(state) >= holdCapacity(state)) return state;
   const rng = new Rng(state.rngState);
   const defective = !free && source === 'desk' && incidentActive(state, 'defectiveStock');
   const unlucky = !free && source !== 'away' && incidentActive(state, 'badLuck');
-  const { tier, cells } = generateCells(def, rng, unlucky ? INCIDENTS.badLuckPrizeWeight : defective ? INCIDENTS.defectivePrizeWeight : 1);
+  const luck = luckPercent(state) * (incidentActive(state, 'badLuck') ? 0.5 : 1);
+  const { tier, cells } = generateCells(def, rng, unlucky ? INCIDENTS.badLuckPrizeWeight : defective ? INCIDENTS.defectivePrizeWeight : 1, luck);
   const fakeChance = BALANCE.fakeChances[def.id] + (state.prestige.tier >= 3 ? PRESTIGE.fakeSurcharge : 0);
   const fake = !free && fakeChance > 0 && rng.next() < fakeChance;
   const gross = fake ? 0 : (def.prizes[tier]?.multiplier ?? 0) * def.price;
@@ -50,7 +53,8 @@ function placeTicket(state: GameState, def: TicketDef, free: boolean, source: Pu
     revealed: false,
   };
   const incidents = defective ? { ...state.incidents, current: null } : state.incidents;
-  return { ...state, rngState: rng.state, nextSerial: state.nextSerial + 1, ticket, incidents };
+  return { ...state, rngState: rng.state, nextSerial: state.nextSerial + 1,
+    ticket: state.ticket ?? ticket, deskQueue: state.ticket ? [...state.deskQueue, ticket] : state.deskQueue, incidents };
 }
 
 /** Picks the ticket type the empty table offers next. */
@@ -62,11 +66,28 @@ export function selectTicket(state: GameState, id: TicketId): GameState {
 export function buyTicket(state: GameState, id: TicketId, source: PurchaseSource = 'desk'): GameState {
   if (!canBuyTicket(state, id)) return state;
   const def = ticketDef(id);
-  return placeTicket({ ...consumeStock(state, id), money: state.money - def.price, selected: id }, def, false, source);
+  const quantity = Math.min(source === 'desk' ? state.bulkLot : 1, holdCapacity(state) - heldCount(state), state.stock[id].remaining, Math.floor(state.money / def.price));
+  for (let i = 0; i < quantity; i++) {
+    state = placeTicket({ ...consumeStock(state, id), money: state.money - def.price, selected: id }, def, false, source);
+  }
+  return state;
 }
 
 /** Marks the ticket on the table as fully scratched and counts it toward missions. */
 export function revealTicket(state: GameState, away = false): GameState {
+  if (!state.ticket || state.ticket.revealed) return state;
+  const round = currentRound(state);
+  const remaining = state.deskQueue.slice(round.length - 1);
+  const revealed: Ticket[] = [];
+  const equippedTool = state.equippedTool;
+  for (const ticket of round) {
+    state = revealSingleTicket({ ...state, ticket, deskQueue: [], equippedTool: revealed.length ? 'coin' : equippedTool }, away);
+    revealed.push(state.ticket!);
+  }
+  return { ...state, equippedTool, ticket: revealed[0]!, deskQueue: [...revealed.slice(1), ...remaining] };
+}
+
+function revealSingleTicket(state: GameState, away = false): GameState {
   if (!state.ticket || state.ticket.revealed) return state;
   state = startScratch(state);
   for (let i = 0; i < state.ticket!.cells.length; i++) state = uncoverCell(state, i);
@@ -100,6 +121,14 @@ export function applyPayoutPercent(net: number, percent: number): number {
 
 /** Pays out a scratched ticket and clears the table. */
 export function collectTicket(state: GameState, away = false): GameState {
+  if (!state.ticket?.revealed) return state;
+  const round = currentRound(state);
+  const remaining = state.deskQueue.slice(round.length - 1);
+  for (const ticket of round) state = collectSingleTicket({ ...state, ticket, deskQueue: [] }, away);
+  return { ...state, ticket: remaining[0] ?? null, deskQueue: remaining.slice(1) };
+}
+
+function collectSingleTicket(state: GameState, away = false): GameState {
   const ticket = state.ticket;
   if (ticket === null || !ticket.revealed) return state;
   const withheld = Math.min(state.rentDebt, ticket.net);
@@ -136,7 +165,7 @@ export function returnTicket(state: GameState): GameState {
   const ticket = state.ticket;
   const refund = ticketRefund(ticket);
   if (!refund) return state;
-  return { ...state, money: state.money + refund, ticket: null };
+  return { ...state, money: state.money + refund, ticket: state.deskQueue[0] ?? null, deskQueue: state.deskQueue.slice(1) };
 }
 
 export function rentAmount(state: GameState): number {
@@ -168,13 +197,17 @@ export function isBroke(state: GameState): boolean {
 
 /** Starts or cancels the free-ticket countdown. Returns the same object when nothing changes. */
 export function updatePromo(state: GameState, now: number): GameState {
-  if (!isBroke(state)) return state.promoReadyAt === null ? state : { ...state, promoReadyAt: null };
+  if (!promoEligible(state)) return state.promoReadyAt === null ? state : { ...state, promoReadyAt: null };
   if (state.promoReadyAt !== null) return state;
   return { ...state, promoReadyAt: now + BALANCE.promoIntervalMs };
 }
 
 export function canClaimPromo(state: GameState, now: number): boolean {
-  return isBroke(state) && state.promoReadyAt !== null && now >= state.promoReadyAt;
+  return promoEligible(state) && state.promoReadyAt !== null && now >= state.promoReadyAt;
+}
+
+export function promoEligible(state: GameState): boolean {
+  return state.money < cheapestPrice() && heldCount(state) < holdCapacity(state);
 }
 
 export function promoTicketDef(state: GameState): TicketDef {

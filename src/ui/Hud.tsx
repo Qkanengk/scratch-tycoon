@@ -1,7 +1,7 @@
 import type { Incident } from '../game/incidents';
 import { ticketDef, TICKETS } from '../data/tickets';
-import { canBuyTicket, canClaimPromo, isBroke, promoTicketDef, ticketRefund } from '../game/economy';
-import { formatMoney } from '../game/format';
+import { canBuyTicket, canClaimPromo, collectTicket, isBroke, promoEligible, promoTicketDef, ticketRefund } from '../game/economy';
+import { formatMoney, formatCompact } from '../game/format';
 import type { GameState } from '../game/state';
 import { jackpotTier } from '../game/tickets';
 import { unlockProgress } from '../game/unlocks';
@@ -21,22 +21,35 @@ import { canAcceptContract } from '../game/contracts';
 import { contractGoal } from './contractText';
 import { GOLDEN_HOUR } from '../data/journal';
 import type { GoldenHour } from '../game/goldenHour';
+import { currentRound, upgradePrice, holdCapacity, heldCount } from '../game/upgrades';
+import type { UpgradeId } from '../data/upgrades';
+import { upgradeEffect } from '../render/upgradeStation';
 
-export type Command = 'acceptContract' | 'declineContract' | 'restock' | 'buy' | 'collect' | 'return' | 'promo' | 'license' | 'robot' | 'awayReceipt' | 'incense' | 'journal';
+export type Command = 'upgrade' | 'lot' | 'acceptContract' | 'declineContract' | 'restock' | 'buy' | 'collect' | 'return' | 'promo' | 'license' | 'robot' | 'awayReceipt' | 'incense' | 'journal';
 
 interface Prompt {
   tone: 'idle' | 'win' | 'jackpot' | 'lose';
   message: string;
+  keyHint?: string;
   button?: { label: string; command: Command; disabled?: boolean };
-  secondary?: { label: string; command: Command };
+  secondary?: { label: string; command: Command; shortcut?: string };
   progress?: number;
   wrap?: boolean;
 }
 
 /** What the game asks of the player right now, given what is on the desk and where they are looking. */
-export function promptFor(state: GameState, now: number, view: View, progress: number, armed = false, contractSelected = false): Prompt {
+export function promptFor(state: GameState, now: number, view: View, progress: number, armed = false, contractSelected = false, selectedUpgrade: UpgradeId = 'luck'): Prompt {
   const ticket = state.ticket;
   const offer = state.contracts.offered;
+  if (view === 'upgrades') {
+    const price = upgradePrice(state, selectedUpgrade);
+    return { tone: 'idle', wrap: true,
+      message: `${t('upgrade.hint')} ${upgradeEffect(state, selectedUpgrade)}`,
+      keyHint: t('upgrade.keyHint', { name: t(`upgrade.${selectedUpgrade}.name`) }),
+      button: { label: Number.isFinite(price) ? t('upgrade.buy', { cost: formatCompact(price) }) : t('upgrade.max'), command: 'upgrade', disabled: !Number.isFinite(price) || state.money < price } };
+  }
+  const secondary = view === 'shop' && state.upgrades.bulk > 0
+    ? { label: t('bulk.cycle', { count: state.bulkLot }), command: 'lot' as const, shortcut: 'B' } : undefined;
   if (view === 'board' && contractSelected && offer) return {
     tone: 'idle', wrap: true,
     message: t('contract.offer', { goal: contractGoal(offer), time: restockCountdown(offer.durationMs), deposit: money(offer.deposit), reward: money(offer.reward) }),
@@ -70,12 +83,32 @@ export function promptFor(state: GameState, now: number, view: View, progress: n
       button: { label: t('shop.buyLicense', { cost: money(next.unlock.licenseCost) }), command: 'license', disabled: !unlockProgress(state, next.id).canBuyLicense },
     };
   }
+  if ((view === 'shop' && promoEligible(state)) || isBroke(state)) {
+    const ready = canClaimPromo(state, now);
+    const seconds = Math.max(1, Math.ceil(((state.promoReadyAt ?? now) - now) / 1000));
+    return {
+      tone: 'idle',
+      message: ready ? t('table.promoReady', { name: t(`ticket.${promoTicketDef(state).id}.name`) }) : t('table.promoWait', { seconds }),
+      button: { label: t('table.promoClaim'), command: 'promo', disabled: !ready },
+    };
+  }
+  if (view === 'shop' && secondary && !isBroke(state)) {
+    const purchaseState = collectTicket(state);
+    const def = ticketDef(state.selected);
+    const name = t(`ticket.${def.id}.name`);
+    const quantity = Math.min(purchaseState.bulkLot, holdCapacity(purchaseState) - heldCount(purchaseState), purchaseState.stock[def.id].remaining, Math.floor(purchaseState.money / def.price));
+    return { tone: 'idle', message: t('bulk.lot', { count: state.bulkLot }), secondary,
+      button: state.stock[def.id].remaining === 0
+        ? { label: t('stock.rush', { fee: money(STOCK[def.id].rushFee) }), command: 'restock', disabled: state.money < STOCK[def.id].rushFee }
+        : { label: t('bulk.buy', { name, count: quantity || state.bulkLot, cost: formatMoney((quantity || state.bulkLot) * def.price) }), command: 'buy', disabled: !canBuyTicket(purchaseState, def.id) } };
+  }
   if (ticket?.revealed) {
-    const amount = money(ticket.net);
-    if (ticket.prize === 0) return { tone: 'lose', message: t('table.lose'), button: { label: t('table.discard'), command: 'collect' } };
-    const jackpot = ticket.tier === jackpotTier(ticketDef(ticket.type));
+    const round = currentRound(state);
+    const amount = money(round.reduce((sum, ticket) => sum + ticket.net, 0));
+    if (round.every(ticket => ticket.prize === 0)) return { tone: 'lose', message: t('table.lose'), button: { label: t('table.discard'), command: 'collect' } };
+    const jackpot = round.some(ticket => ticket.tier === jackpotTier(ticketDef(ticket.type)));
     const won = t(jackpot ? 'table.jackpot' : 'table.win', { amount });
-    const golden = (ticket.payoutPercent ?? 100) >= GOLDEN_HOUR.multiplier * 100;
+    const golden = round.some(ticket => (ticket.payoutPercent ?? 100) >= GOLDEN_HOUR.multiplier * 100);
     return { tone: jackpot ? 'jackpot' : 'win', wrap: golden,
       message: golden ? `${won} · ${t('golden.payout', { multiplier: GOLDEN_HOUR.multiplier })}` : won,
       button: { label: t('table.collect', { amount }), command: 'collect' } };
@@ -85,15 +118,6 @@ export function promptFor(state: GameState, now: number, view: View, progress: n
     if (refund > 0) return { tone: 'idle', wrap: true, message: t('incident.defectiveStock.ticket'),
       button: { label: t('drain.return', { cost: formatMoney(refund) }), command: 'return' } };
     return { tone: 'idle', message: progress > 0 ? t('table.progress', { percent: Math.floor(progress * 100) }) : t('table.hint'), progress };
-  }
-  if (isBroke(state)) {
-    const ready = canClaimPromo(state, now);
-    const seconds = Math.max(1, Math.ceil(((state.promoReadyAt ?? now) - now) / 1000));
-    return {
-      tone: 'idle',
-      message: ready ? t('table.promoReady', { name: t(`ticket.${promoTicketDef(state).id}.name`) }) : t('table.promoWait', { seconds }),
-      button: { label: t('table.promoClaim'), command: 'promo', disabled: !ready },
-    };
   }
   const def = ticketDef(state.selected);
   const name = t(`ticket.${def.id}.name`);
@@ -105,7 +129,8 @@ export function promptFor(state: GameState, now: number, view: View, progress: n
   const affordable = canBuyTicket(state, def.id);
   return {
     tone: 'idle',
-    message: affordable ? t('hud.pick') : t('table.notEnough', { name }),
+    message: affordable ? state.upgrades.bulk > 0 ? t('bulk.lot', { count: state.bulkLot }) : t('hud.pick') : t('table.notEnough', { name }),
+    secondary,
     button: { label: t('table.buy', { name, price: money(def.price) }), command: 'buy', disabled: !affordable },
   };
 }
@@ -116,13 +141,14 @@ export function PromptChip({ prompt, onCommand }: { prompt: Prompt; onCommand: (
     <div className={`prompt prompt-${prompt.tone}${prompt.wrap ? ' prompt-wrap' : ''}`}>
       <p className="prompt-message" role="status" data-testid="status">
         {prompt.message}
+        {prompt.keyHint && <span className="keyboard-hint"> {prompt.keyHint}</span>}
       </p>
       {prompt.progress !== undefined && (
         <div className="meter" aria-hidden="true">
           <span style={{ width: `${Math.round(prompt.progress * 100)}%` }} />
         </div>
       )}
-      {prompt.secondary && <button className="btn" onClick={() => onCommand(prompt.secondary!.command)}>{prompt.secondary.label}</button>}
+      {prompt.secondary && <button className="btn" onClick={() => onCommand(prompt.secondary!.command)}>{prompt.secondary.label}{prompt.secondary.shortcut && <kbd>{prompt.secondary.shortcut}</kbd>}</button>}
       {button && (
         <button className="btn btn-primary" data-testid="action" disabled={button.disabled} onKeyDown={event => { if (button.command === 'incense') blockRepeatedOffering(event); }} onClick={() => onCommand(button.command)}>
           {button.label}

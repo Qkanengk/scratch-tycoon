@@ -3,6 +3,73 @@ import * as THREE from 'three';
 import type { ToolIntent } from '../game/tools';
 import { Stage } from './Stage';
 import { PlayClock } from './playClock';
+import { buyTicket, collectTicket, revealTicket } from '../game/economy';
+import { createInitialState } from '../game/state';
+
+describe('collection receipt before queued dealing', () => {
+  const collectedStage = (queued: boolean) => {
+    const before = revealTicket(buyTicket({ ...createInitialState(4), money: 1000,
+      upgrades: { luck: 0, desk: 2, bulk: 1 }, bulkLot: queued ? 5 : 1 }, 'dong'));
+    const state = collectTicket(before);
+    const updated = () => ({ update: vi.fn() });
+    const stage = Object.assign(Object.create(Stage.prototype), {
+      state, shown: before.ticket, first: false, view: 'desk', receiptWaiting: false,
+      receiptTime: 0, collectionDebt: 0, rentStamp: 0, roundSize: 0,
+      toolShelf: updated(), upgrades: updated(), robots: updated(), altar: updated(),
+      roundDisplay: { ...updated(), followers: new THREE.Group() },
+      mat: new THREE.Group(), ticket: new THREE.Group(),
+      rent: { draw: vi.fn() }, receipt: { draw: vi.fn(), group: new THREE.Group() },
+      returnTag: { group: new THREE.Group() }, metrics: { height: 1 },
+      handKey: `${state.equippedTool}:${state.toolLevels[state.equippedTool]}:${state.durability[state.equippedTool]}`,
+      rack: updated(), board: updated(), camera: { aspect: 1 },
+      touchLayout: () => false, aim: vi.fn(), pendingScratch: new Set(),
+      callbacks: { onProgress: vi.fn() }, renderer: { domElement: { dataset: {} } },
+      move: vi.fn(), look: vi.fn(), rackPose: vi.fn(),
+    });
+    stage.show = vi.fn(ticket => {
+      stage.shown = ticket;
+      stage.receipt.group.visible = false;
+      stage.receiptTime = 0;
+    });
+    return stage;
+  };
+
+  it('retains the receipt through the collect animation and state syncs, then deals the promoted round after five seconds', () => {
+    const stage = collectedStage(true);
+    const promoted = stage.state.ticket;
+    const creditedMoney = stage.state.money;
+    expect(promoted).not.toBeNull();
+    stage.sync();
+    expect(stage.receiptTime).toBe(5);
+    stage.advanceReceipt(.3);
+    stage.move.mock.calls[0][4]();
+    stage.sync();
+    expect(stage.show).not.toHaveBeenCalled();
+    expect(stage.ticket.visible).toBe(false);
+    expect(stage.roundDisplay.followers.visible).toBe(false);
+    expect(stage.receipt.group.visible).toBe(true);
+    stage.advanceReceipt(4.6);
+    stage.sync();
+    expect(stage.receipt.group.visible).toBe(true);
+    expect(stage.show).not.toHaveBeenCalled();
+    stage.advanceReceipt(.11);
+    expect(stage.receipt.group.visible).toBe(false);
+    expect(stage.show).toHaveBeenCalledExactlyOnceWith(promoted);
+    expect(stage.roundDisplay.followers.visible).toBe(true);
+    expect(stage.state.money).toBe(creditedMoney);
+  });
+
+  it('expires an empty-desk receipt without attempting a queued deal', () => {
+    const stage = collectedStage(false);
+    stage.sync();
+    stage.move.mock.calls[0][4]();
+    expect(stage.receipt.group.visible).toBe(true);
+    expect(stage.receiptWaiting).toBe(false);
+    stage.advanceReceipt(5);
+    expect(stage.receipt.group.visible).toBe(false);
+    expect(stage.show).not.toHaveBeenCalled();
+  });
+});
 
 describe('desk framing', () => {
   const stageAt = (width: number, height: number) => Object.assign(Object.create(Stage.prototype), {
@@ -99,6 +166,35 @@ describe('desk framing', () => {
 });
 
 describe('stage shelf interactions', () => {
+  it('reserves incident and contract notices above the desktop upgrade station', () => {
+    const app = {
+      style: { getPropertyValue: () => '', setProperty: vi.fn() },
+      querySelector: (selector: string) => ({ getBoundingClientRect: () => selector === '.kiosk-notices' ? { bottom: 150 } : { top: 720, height: 65 } }),
+      querySelectorAll: () => [],
+    };
+    const stage = Object.assign(Object.create(Stage.prototype), {
+      ready: true, view: 'upgrades', touchLayout: () => false, aim: vi.fn(),
+      host: { clientHeight: 800, parentElement: app },
+    });
+    stage.measureHud();
+    expect(stage.touchTop).toBe(156);
+    expect(stage.aim).toHaveBeenCalledOnce();
+  });
+  it('enters the upgrade view before a purchase and dispatches upgrade and lot controls', () => {
+    const callbacks = { onUpgrade: vi.fn(), onLot: vi.fn() };
+    const stage = Object.assign(Object.create(Stage.prototype), { view: 'shop', callbacks, look: vi.fn() });
+    stage.press({ kind: 'upgrades' });
+    expect(stage.look).toHaveBeenCalledExactlyOnceWith('upgrades');
+    expect(callbacks.onUpgrade).not.toHaveBeenCalled();
+    stage.view = 'upgrades';
+    stage.press({ kind: 'upgrade', id: 'desk' });
+    stage.press({ kind: 'lot' });
+    expect(callbacks.onUpgrade).toHaveBeenCalledExactlyOnceWith('desk');
+    expect(callbacks.onLot).toHaveBeenCalledOnce();
+    expect(stage.sideView('right')).toBe('tools');
+    stage.nod('down');
+    expect(stage.look).toHaveBeenLastCalledWith('shop');
+  });
   it('looks at the altar on the first tap and offers incense only from its view', () => {
     const callbacks = { onAltar: vi.fn() };
     const stage = Object.assign(Object.create(Stage.prototype), { view: 'shop', callbacks, look: vi.fn() });

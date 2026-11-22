@@ -25,6 +25,8 @@ export const KIOSK_MODELS = {
   lantern: 'kiosk/lantern.glb',
   ingots: 'quaternius/gold-ingots.glb',
   fruit: 'kenney-food-kit/lemon.glb',
+  luckyStar: 'quaternius/star-coin.glb',
+  bulkChest: 'kenney-platformer-kit/chest.glb',
 } as const;
 
 export type KioskModel = keyof typeof KIOSK_MODELS;

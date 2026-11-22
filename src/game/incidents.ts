@@ -38,7 +38,7 @@ export function incidentActive(s: GameState, kind: IncidentKind): boolean {
 
 function resolveIncident(state: GameState, kind: IncidentKind): GameState {
   const fraction = kind === 'theft' ? INCIDENTS.theftFraction
-    : kind === 'inspection' && state.ticket?.fakeTell ? INCIDENTS.fineFraction : 0;
+    : kind === 'inspection' && [state.ticket, ...state.deskQueue].some(ticket => ticket?.fakeTell) ? INCIDENTS.fineFraction : 0;
   const reserve = Math.max(ticketDef('dong').price, ...TICKETS.filter(def => state.licenses.includes(def.id)).map(def => def.price));
   const cap = kind === 'theft' ? reserve * INCIDENTS.theftCapTickets : Infinity;
   const cost = Math.floor(Math.min(state.money * fraction, cap, Math.max(0, state.money - reserve)));

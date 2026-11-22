@@ -1,13 +1,96 @@
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { buyTicket, revealTicket } from '../game/economy';
+import { buyTicket, canClaimPromo, claimPromo, collectTicket, revealTicket } from '../game/economy';
 import { createInitialState, type GameState } from '../game/state';
 import { ContractNotice, IncidentNotice, PromptChip, promptFor } from './Hud';
 import { prestigeScenario } from './debugPrestige';
 import { STOCK } from '../data/balance';
 import { acceptContract, contractOffer } from '../game/contracts';
+import { automationAction } from '../game/automation';
 
 const fresh = (): GameState => createInitialState(1);
+
+describe('prepaid robot loading prompt', () => {
+  it('enables loading at zero money only when a queued ticket is outside the open round', () => {
+    const hired = automationAction({ ...fresh(), money: 1e8 }, 'robot');
+    const held = buyTicket({ ...hired, upgrades: { luck: 0, desk: 2, bulk: 1 }, bulkLot: 5 }, 'dong');
+    const state = { ...held, money: 0 };
+    expect(promptFor(state, 0, 'robots', 0).button).toMatchObject({ command: 'robot', disabled: false });
+    expect(promptFor(state, 0, 'robots', 0).button?.label).toContain('0 xu');
+    for (const deskQueue of [[], state.deskQueue.slice(0, 2)]) {
+      expect(promptFor({ ...state, deskQueue }, 0, 'robots', 0).button?.disabled).toBe(true);
+    }
+  });
+});
+
+describe('upgrade and bulk prompt chips', () => {
+  it('offers the broke-player promo at the rack with a busy desk and spare capacity', () => {
+    const held = buyTicket({ ...fresh(), money: 1000, upgrades: { luck: 0, desk: 0, bulk: 1 } }, 'dong');
+    const state = { ...held, money: 0, promoReadyAt: 1000 };
+    expect(canClaimPromo(state, 1000)).toBe(true);
+    expect(promptFor(state, 500, 'shop', 0).button).toMatchObject({ command: 'promo', disabled: true });
+    expect(promptFor(state, 1000, 'shop', 0).button).toMatchObject({ command: 'promo', disabled: false });
+    const claimed = claimPromo(state, 1000);
+    expect(claimed.ticket).toBe(state.ticket);
+    expect(claimed.deskQueue[0]?.free).toBe(true);
+    expect(claimed.money).toBe(0);
+    expect(promptFor(state, 1000, 'desk', 0).button?.command).not.toBe('promo');
+    const full = { ...state, deskQueue: Array.from({ length: 4 }, () => state.ticket!) };
+    expect(canClaimPromo(full, 1000)).toBe(false);
+    expect(promptFor(full, 1000, 'shop', 0).button?.command).not.toBe('promo');
+    expect(promptFor({ ...state, money: 10 }, 1000, 'shop', 0).button?.command).toBe('buy');
+  });
+  it.each([0, 10, 100])('previews bulk buying after collecting a revealed round with %s xu left', money => {
+    const held = revealTicket(buyTicket({ ...createInitialState(4), money: 1000, upgrades: { luck: 0, desk: 2, bulk: 1 }, bulkLot: 5 }, 'dong'));
+    const state = { ...held, money };
+    const collected = collectTicket(state);
+    const bought = buyTicket(collected, state.selected);
+    const count = collected.nextSerial < bought.nextSerial ? bought.nextSerial - collected.nextSerial : state.bulkLot;
+    const prompt = promptFor(state, 0, 'shop', 0);
+    expect(prompt.button?.label).toBe(`Mua Vé Đồng ×${count} · ${count * 10} xu`);
+    expect(prompt.button?.disabled).toBe(false);
+    expect(bought.money).toBe(collected.money - count * 10);
+    expect(state.money).toBe(money);
+    expect(state.ticket?.revealed).toBe(true);
+  });
+  it('keeps keyboard hints separate from touch labels', () => {
+    const state = { ...fresh(), upgrades: { luck: 0, desk: 0, bulk: 1 }, bulkLot: 5 as const };
+    const upgrade = promptFor(state, 0, 'upgrades', 0, false, false, 'desk');
+    expect(upgrade.message).not.toContain('Space');
+    expect(upgrade.keyHint).toBe('Space: Bàn rộng.');
+    expect(renderToStaticMarkup(PromptChip({ prompt: upgrade, onCommand: vi.fn() }))).toContain('class="keyboard-hint"');
+    const lot = promptFor(state, 0, 'shop', 0);
+    expect(lot.secondary).toMatchObject({ label: 'Đổi lô · ×5', shortcut: 'B' });
+    expect(renderToStaticMarkup(PromptChip({ prompt: lot, onCommand: vi.fn() }))).toContain('<kbd>B</kbd>');
+  });
+  it('offers an upgrade with price and effect and disables unaffordable or maxed offers', () => {
+    const state = { ...fresh(), money: 1000 };
+    expect(promptFor(state, 0, 'upgrades', 0).button).toMatchObject({ command: 'upgrade', disabled: false });
+    expect(promptFor(fresh(), 0, 'upgrades', 0).button?.disabled).toBe(true);
+    expect(promptFor({ ...state, upgrades: { luck: 50, desk: 0, bulk: 0 } }, 0, 'upgrades', 0).button).toMatchObject({ label: 'Đã tối đa', disabled: true });
+  });
+  it('keeps lot selection available at a busy rack and disables buying a full hold', () => {
+    const state = buyTicket({ ...fresh(), money: 1000, upgrades: { luck: 0, desk: 0, bulk: 1 }, bulkLot: 1 }, 'dong');
+    const prompt = promptFor(state, 0, 'shop', 0);
+    expect(prompt.secondary?.command).toBe('lot');
+    expect(prompt.button).toMatchObject({ command: 'buy', disabled: false });
+    expect(promptFor({ ...state, deskQueue: Array(4).fill(state.ticket) }, 0, 'shop', 0).button?.disabled).toBe(true);
+    expect(promptFor(state, 0, 'desk', 0).secondary).toBeUndefined();
+    expect(promptFor(fresh(), 0, 'shop', 0).secondary).toBeUndefined();
+  });
+});
+
+describe('round payout prompt', () => {
+  it('shows the combined round payout even when only a follower wins', () => {
+    const state = revealTicket(buyTicket(fresh(), 'dong'));
+    const active = { ...state.ticket!, prize: 0, gross: 0, net: 0, tier: 0 };
+    const follower = { ...state.ticket!, serial: 2, prize: 50, gross: 50, net: 50, tier: 3 };
+    const prompt = promptFor({ ...state, upgrades: { luck: 0, desk: 1, bulk: 0 }, ticket: active, deskQueue: [follower] }, 0, 'desk', 1);
+    expect(prompt.tone).toBe('win');
+    expect(prompt.button?.command).toBe('collect');
+    expect(prompt.button?.label).toContain('50');
+  });
+});
 
 describe('contract HUD', () => {
   it('shows goal, duration, deposit, reward and decline only for the selected board note', () => {

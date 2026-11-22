@@ -7,6 +7,7 @@ import { initialAutomation, type Automation } from './automation';
 import { initialIncidents, type IncidentState } from './incidents';
 import { initialJournal, type Journal } from './journal';
 import { initialGoldenHour, type GoldenHour } from './goldenHour';
+import type { BulkLot } from '../data/upgrades';
 
 /** Prizes inside cells are in units of the ticket's price. */
 export type Cell =
@@ -47,9 +48,12 @@ export interface TicketStats {
   bigWins: number;
 }
 
-export const SAVE_VERSION = 10;
+export const SAVE_VERSION = 11;
 
 export interface GameState {
+  upgrades: { luck: number; desk: number; bulk: number };
+  bulkLot: BulkLot;
+  deskQueue: Ticket[];
   contracts: ContractState;
   stock: Stock;
   /** Active-play prizes in this run, after tax and the permanent bonus, before rent withholding. */
@@ -91,6 +95,9 @@ export function emptyStats(): Record<TicketId, TicketStats> {
 export function createInitialState(seed: number): GameState {
   return {
     version: SAVE_VERSION,
+    upgrades: { luck: 0, desk: 0, bulk: 0 },
+    bulkLot: 1,
+    deskQueue: [],
     contracts: initialContracts(seed),
     stock: initialStock(),
     prestige: { tier: 0, runEarned: 0 },

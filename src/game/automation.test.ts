@@ -11,6 +11,19 @@ const rich = (seed = 1) => ({ ...createInitialState(seed), money: 1e8, licenses:
 const hired = (seed = 1) => automationAction(rich(seed), 'robot');
 
 describe('robot work', () => {
+  it('quotes prepaid queued loads as free, but charges when only open-round followers remain', () => {
+    const held = buyTicket({ ...hired(), upgrades: { luck: 0, desk: 2, bulk: 1 }, bulkLot: 5 }, 'dong');
+    const state = { ...held, money: 0 };
+    expect(automationPrice(state, 'load')).toBe(0);
+    const loaded = automationAction(state, 'load');
+    expect(loaded.automation.robots[0]?.tray).toEqual(state.deskQueue[2]);
+    expect(loaded.money).toBe(0);
+    for (const deskQueue of [[], state.deskQueue.slice(0, 2)]) {
+      const noPrepaid = { ...state, deskQueue };
+      expect(automationPrice(noPrepaid, 'load')).toBe(10);
+      expect(automationAction(noPrepaid, 'load')).toBe(noPrepaid);
+    }
+  });
   it('loads a paid independent tray without touching the hand ticket', () => {
     const hand = buyTicket(hired(), 'dong');
     const loaded = loadRobot(hand, 0);

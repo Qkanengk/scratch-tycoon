@@ -24,6 +24,8 @@ import { prestige } from '../game/prestige';
 import { blockRepeatedOffering, offerIncense } from './altarRitual';
 import { achievementCount } from '../game/journal';
 import { Journal } from './Journal';
+import { BULK_LOTS, type UpgradeId } from '../data/upgrades';
+import { buyUpgrade, setBulkLot, upgradePrice } from '../game/upgrades';
 
 export function App() {
   const game = useGame();
@@ -31,6 +33,7 @@ export function App() {
   const stage = useRef<Stage | null>(null);
   const [progress, setProgress] = useState(0);
   const [view, setView] = useState<View>('shop');
+  const [selectedUpgrade, setSelectedUpgrade] = useState<UpgradeId>('luck');
   const [contractSelected, setContractSelected] = useState(false);
   const [journalOpen, setJournalOpen] = useState(false);
   const earned = achievementCount(state.journal, state.prestige.tier);
@@ -106,7 +109,7 @@ export function App() {
 
   const buy = (id: TicketId) => {
     const name = t(`ticket.${id}.name`);
-    if (state.ticket && !state.ticket.revealed) {
+    if (state.ticket && !state.ticket.revealed && !canBuyTicket(state, id)) {
       refuse(t('hud.tableBusy'));
       stage.current?.look('desk');
     } else if (!isUnlocked(state, id)) {
@@ -138,7 +141,9 @@ export function App() {
   };
 
   const run = (command: Command) => {
-    if (command === 'incense') incense();
+    if (command === 'upgrade') upgrade(selectedUpgrade);
+    else if (command === 'lot') cycleLot();
+    else if (command === 'incense') incense();
     else if (command === 'journal') setJournalOpen(true);
     else if (command === 'acceptContract' || command === 'declineContract') {
       apply(command === 'acceptContract' ? acceptContract : declineContract);
@@ -176,10 +181,22 @@ export function App() {
   };
 
   const handlers = useRef<StageCallbacks>(null as unknown as StageCallbacks);
-  const prompt = promptFor(state, now, view, progress, armedUntil > now, contractSelected);
+  const cycleLot = () => apply(current => {
+    const lots = BULK_LOTS.slice(0, current.upgrades.bulk + 1);
+    return setBulkLot(current, lots[(lots.indexOf(current.bulkLot) + 1) % lots.length]!);
+  });
+  const upgrade = (id: UpgradeId) => {
+    setSelectedUpgrade(id);
+    if (state.money < upgradePrice(state, id)) { play('ui-error'); return; }
+    play('unlock');
+    apply(current => buyUpgrade(current, id));
+  };
+  const prompt = promptFor(state, now, view, progress, armedUntil > now, contractSelected, selectedUpgrade);
   const keys = useRef<(event: KeyboardEvent) => void>(() => undefined);
   useEffect(() => {
     handlers.current = {
+      onUpgrade: upgrade,
+      onLot: cycleLot,
       onAltar: incense,
       onAutomation: automate,
       onPlayTime: elapsed => apply((current, time) => {
@@ -218,7 +235,8 @@ export function App() {
         if (event.target instanceof Element && event.target.closest('button, a, input, select')) return;
         event.preventDefault();
         if (prompt.button && !prompt.button.disabled) run(prompt.button.command);
-      } else if (key === 'arrowup' || key === 'w') stage.current?.nod('up');
+      } else if (key === 'b' && view === 'shop') cycleLot();
+      else if (key === 'arrowup' || key === 'w') stage.current?.nod('up');
       else if (key === 'arrowdown' || key === 's') stage.current?.nod('down');
       else if (key === 'arrowright' || key === 'd') { const next = stage.current?.sideView('right'); if (next) stage.current?.look(next); }
       else if (key === 'arrowleft' || key === 'a') { const next = stage.current?.sideView('left'); if (next) stage.current?.look(next); }
@@ -280,6 +298,8 @@ export function App() {
       {view === 'altar' && <LookButton direction="left" testid="look-tools" label={t('look.tools')} onClick={() => stage.current?.look('tools')} />}
       {view === 'altar' && <LookButton direction="right" testid="look-shop" label={t('look.shop')} onClick={() => stage.current?.look('shop')} />}
       {view === 'tools' && <LookButton direction="right" testid="look-shop" label={t('look.shop')} onClick={() => stage.current?.look('shop')} />}
+      {view === 'tools' && <LookButton direction="left" testid="look-upgrades" label={t('upgrade.nav')} onClick={() => stage.current?.look('upgrades')} />}
+      {view === 'upgrades' && <LookButton direction="right" testid="look-tools" label={t('look.tools')} onClick={() => stage.current?.look('tools')} />}
       {view === 'board' && <LookButton direction="left" testid="look-shop" label={t('look.shop')} onClick={() => stage.current?.look('shop')} />}
       {view === 'board' && <LookButton direction="right" testid="look-robots" label={t('robot.title')} onClick={() => stage.current?.look('robots')} />}
       {view === 'robots' && <LookButton direction="left" testid="look-shop" label={t('look.shop')} onClick={() => stage.current?.look('shop')} />}

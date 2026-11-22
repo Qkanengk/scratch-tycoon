@@ -18,6 +18,8 @@ export function StageView({ state, handlers, stage, paused }: Props) {
   useEffect(() => {
     if (!host.current) return;
     const created = new Stage(host.current, {
+      onUpgrade: id => handlers.current.onUpgrade(id),
+      onLot: () => handlers.current.onLot(),
       onAltar: () => handlers.current.onAltar(),
       onAutomation: (action, index) => handlers.current.onAutomation(action, index),
       onRevealed: (ticket) => handlers.current.onRevealed(ticket),
