@@ -11,7 +11,7 @@ export const PARTICLES = [
 ] as const;
 export type ParticleName = (typeof PARTICLES)[number];
 
-const PATTERNS = ['foil', 'table-wood', 'mat-felt', ...TICKETS.map((def) => `paper-${def.id}`)];
+const PATTERNS = ['foil', 'table-wood', 'mat-felt', ...TICKETS.filter(def => !def.minimumPrestige).map((def) => `paper-${def.id}`)];
 const STICKERS = [
   ...TICKETS.flatMap((def) => (def.rules.kind === 'match' ? def.rules.symbols : [])),
   'dragon-evolved', 'bomb', 'lock', 'star-coin',

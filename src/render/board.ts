@@ -61,7 +61,7 @@ export class LicenseBoard {
   update(state: GameState, landscape = false): void {
     const width = landscape ? WIDE_PX : PX;
     this.group.scale.x = this.group.scale.y * width / PX;
-    const def = TICKETS.find((ticket) => !unlockProgress(state, ticket.id).unlocked);
+    const def = TICKETS.filter(def => !def.minimumPrestige).find((ticket) => !unlockProgress(state, ticket.id).unlocked);
     this.next = def?.id ?? null;
     const unlock = def?.unlock;
     if (!def || !unlock) {

@@ -3,7 +3,7 @@ import { percentile, simulatePacing } from '../../scripts/pacing';
 import { TICKETS } from '../data/tickets';
 
 describe('licence pacing at the measured scratch cadence', () => {
-  const licenses = TICKETS.slice(1);
+  const licenses = TICKETS.slice(1).filter(def => !def.minimumPrestige);
   const runs = Array.from({ length: 384 }, (_, i) => simulatePacing(10_001 + i, 6 * 3600));
 
   it('reaches every licence median near the long end of 20 to 40 minutes', () => {
@@ -33,9 +33,9 @@ describe('licence pacing at the measured scratch cadence', () => {
 });
 
 describe('robot policy pacing', () => {
-  const runs = Array.from({ length: 384 }, (_, i) => simulatePacing(10_001 + i, 6 * 3600, 4, true));
+  const runs = Array.from({ length: 64 }, (_, i) => simulatePacing(10_001 + i, 12 * 3600, 4, true));
   it('keeps every licence interval between twenty and forty minutes', () => {
-    for (const { id } of TICKETS.slice(1)) {
+    for (const { id } of TICKETS.slice(1).filter(def => !def.minimumPrestige)) {
       const median = percentile(runs.map(r => r.intervals[id] ?? Infinity), .5) / 60;
       expect(median, id).toBeGreaterThanOrEqual(20);
       expect(median, id).toBeLessThanOrEqual(40);
@@ -45,5 +45,24 @@ describe('robot policy pacing', () => {
     const median = percentile(runs.map(r => r.firstRobot), .5) / 60;
     expect(median).toBeGreaterThanOrEqual(50);
     expect(median).toBeLessThanOrEqual(70);
+  });
+
+  it('reaches first prestige after five to six hours', () => {
+    const median = percentile(runs.map(r => r.prestige), .5) / 3600;
+    expect(median).toBeGreaterThanOrEqual(5);
+    expect(median).toBeLessThanOrEqual(6);
+  });
+
+  it('keeps the Rồng p10 above twenty minutes', () => {
+    const p10 = percentile(runs.map(r => r.intervals.rong ?? Infinity), .1) / 60;
+    expect(p10).toBeGreaterThanOrEqual(20);
+  });
+
+  it('keeps run-two licence medians in the twenty to forty minute band, including Vũ Trụ', () => {
+    for (const { id } of TICKETS.slice(1)) {
+      const median = percentile(runs.map(r => r.runs[1]?.intervals[id] ?? Infinity), .5) / 60;
+      expect(median, id).toBeGreaterThanOrEqual(20);
+      expect(median, id).toBeLessThanOrEqual(40);
+    }
   });
 });

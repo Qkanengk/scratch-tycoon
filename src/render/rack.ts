@@ -75,7 +75,7 @@ export class Rack {
   constructor() {
     this.group.add(this.stands);
     const lockTexture = canvasTexture(rasterize('stickers/lock.png', 256));
-    for (const def of TICKETS) {
+    for (const def of TICKETS.filter(def => !def.minimumPrestige)) {
       const height = ticketMetrics(def.id).height * CARD_W;
       const card = inkCard(CARD_W, height, canvasTexture(sample(def.id)));
       card.position.y = height / 2;
@@ -105,7 +105,7 @@ export class Rack {
   layout(tall: boolean): void {
     if (this.tall === tall) return;
     this.tall = tall;
-    const ids = TICKETS.map((def) => def.id);
+    const ids = TICKETS.filter(def => !def.minimumPrestige).map((def) => def.id);
     this.rows = tall ? [ids.slice(0, 3), ids.slice(3)] : [ids];
     this.stands.traverse((node) => {
       const mesh = node as THREE.Mesh;

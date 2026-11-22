@@ -32,7 +32,7 @@ export function promptFor(state: GameState, now: number, view: View, progress: n
   }
   if (view === 'tools') return { tone: 'idle', message: t('tools.hint') };
   if (view === 'board') {
-    const next = TICKETS.find((def) => !unlockProgress(state, def.id).unlocked);
+    const next = TICKETS.filter(def => !def.minimumPrestige).find((def) => !unlockProgress(state, def.id).unlocked);
     if (!next?.unlock) return { tone: 'idle', message: t('board.allDone') };
     return {
       tone: 'idle',

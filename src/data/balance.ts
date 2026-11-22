@@ -2,10 +2,10 @@ import type { TicketId } from './tickets';
 
 export const BALANCE = {
   startingMoney: 100,
-  taxRates: { dong: 0, bac: 0.04, vang: 0.09, ngoc: 0.14, rong: 0.20 },
+  taxRates: { dong: 0, bac: 0.04, vang: 0.09, ngoc: 0.14, rong: 0.20, vutru: 0.25 },
   rentIntervalMs: 180_000,
-  rentAmounts: { dong: 5, bac: 35, vang: 250, ngoc: 2_000, rong: 15_000 },
-  fakeChances: { dong: 0, bac: 0, vang: 0.05, ngoc: 0.06, rong: 0.08 },
+  rentAmounts: { dong: 5, bac: 35, vang: 250, ngoc: 2_000, rong: 15_000, vutru: 200_000 },
+  fakeChances: { dong: 0, bac: 0, vang: 0.05, ngoc: 0.06, rong: 0.08, vutru: 0.10 },
   fakeReturnFee: 0.05,
   ticketWear: 0.012,
   bombWear: 0.22,

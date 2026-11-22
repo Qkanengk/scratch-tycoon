@@ -68,7 +68,7 @@ export function App() {
   };
 
   const license = () => {
-    const next = TICKETS.find((def) => !unlockProgress(state, def.id).unlocked);
+    const next = TICKETS.filter(def => !def.minimumPrestige).find((def) => !unlockProgress(state, def.id).unlocked);
     if (!next) return;
     if (!unlockProgress(state, next.id).canBuyLicense) {
       play('ui-error');
