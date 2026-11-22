@@ -231,7 +231,23 @@ describe('away receipts', () => {
     expect(settleAway({ ...s, money: 10000 }, 1001).automation.awaySummary?.limits).toEqual([]);
   });
 
-  it('does not create receipts without a positive credit or for invalid elapsed time', () => {
+  it('shows exact negative and zero away results and preserves them in saves', () => {
+    let s = automationAction(automationAction(automationAction(hired(0), 'capacity'), 'autoBuy'), 'away', 0, 1000);
+    s.automation.robots[0]!.charge = batteryCapacity(s);
+    const done = settleAway(s, 1000 + 4 * 3600_000);
+    expect(done.automation.report).toEqual({ tickets: 68, net: 650 });
+    expect(done.money - s.money).toBe(-30);
+    expect(done.automation.awaySummary).toMatchObject({ tickets: 68, credited: -30 });
+    expect(deserialize(serialize(done))?.automation.awaySummary).toEqual(done.automation.awaySummary);
+    s = loadRobot(prepared(), 0);
+    s.automation.robots[0]!.tray = { ...s.automation.robots[0]!.tray!, net: 0, prize: 0, gross: 0 };
+    const zero = settleAway(s, 1000 + 4000);
+    expect(zero.money - s.money).toBe(0);
+    expect(zero.automation.awaySummary?.credited).toBe(0);
+    expect(deserialize(serialize(zero))?.automation.awaySummary).toEqual(zero.automation.awaySummary);
+  });
+
+  it('does not create receipts without completed tickets or for invalid elapsed time', () => {
     const s = prepared();
     s.automation.robots[0]!.charge = 0;
     expect(settleAway(s, 3600_000).automation.awaySummary).toBeNull();

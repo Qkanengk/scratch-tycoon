@@ -122,10 +122,10 @@ function readAutomation(value: unknown): Automation {
       progressMs: tray && !tray.revealed ? Math.min(robotInterval(shell) - 1e-6, amount(r.progressMs, 0)) : 0 };
   }) : [];
   if (isRecord(value.report)) a.report = { tickets: Math.floor(amount(value.report.tickets, 0)), net: amount(value.report.net, 0) };
-  if (isRecord(value.awaySummary) && amount(value.awaySummary.credited, 0) > 0) {
+  if (isRecord(value.awaySummary) && amount(value.awaySummary.tickets, 0) > 0 && typeof value.awaySummary.credited === 'number' && Number.isFinite(value.awaySummary.credited)) {
     const summary = value.awaySummary;
     a.awaySummary = { countedMs: Math.min(12 * 3600_000, amount(summary.countedMs, 0)), tickets: Math.floor(amount(summary.tickets, 0)),
-      credited: Math.floor(amount(summary.credited, 0)), limits: Array.isArray(summary.limits) ? [...new Set(summary.limits.filter((limit): limit is 'battery' | 'cap' | 'money' => limit === 'battery' || limit === 'cap' || limit === 'money'))] : [] };
+      credited: Math.trunc(summary.credited as number), limits: Array.isArray(summary.limits) ? [...new Set(summary.limits.filter((limit): limit is 'battery' | 'cap' | 'money' => limit === 'battery' || limit === 'cap' || limit === 'money'))] : [] };
   }
   return a;
 }

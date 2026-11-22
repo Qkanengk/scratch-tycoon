@@ -155,7 +155,7 @@ export function settleAway(s: GameState, now: number, minimumMs = 0): GameState 
   const countedMs = Math.min(elapsed, awayCapMs(s));
   const result = advanceAutomation(prepared, countedMs, true);
   const credited = result.money - s.money;
-  if (credited <= 0) return result;
+  if (result.automation.report.tickets === 0) return result;
   const limits: AwaySummary['limits'] = [];
   if (result.automation.robots.some(r => r.charging || r.charge <= 1e-9)) limits.push('battery');
   if (elapsed >= awayCapMs(s)) limits.push('cap');

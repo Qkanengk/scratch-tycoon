@@ -9,7 +9,7 @@ describe('away receipt text', () => {
     const text = awaySummaryText(summary);
     expect(text.time).toBe('Thời gian tính: 1 giờ 0 phút 0 giây');
     expect(text.tickets).toBe('Đã cào: 38 vé');
-    expect(text.credited).toBe('Thực cộng ví: +24.590 xu (đã trừ vé và thuế)');
+    expect(text.credited).toBe('Thay đổi ví: +24.590 xu (đã trừ vé và thuế)');
     expect(text.limits).toBe('Giới hạn: Hết pin');
     const s = createInitialState(1);
     s.automation.awaySummary = summary;
@@ -20,5 +20,7 @@ describe('away receipt text', () => {
     expect(awaySummaryText({ countedMs: 7200_000, tickets: 1, credited: 5, limits: ['cap', 'money'] }).limits)
       .toBe('Giới hạn: Chạm trần thời gian · Hết tiền mua vé');
     expect(awaySummaryText({ countedMs: 1000, tickets: 1, credited: 1, limits: [] }).limits).toBe('Giới hạn: Đủ thời gian vắng');
+    expect(awaySummaryText({ countedMs: 1000, tickets: 1, credited: -30, limits: [] }).credited).toBe('Thay đổi ví: -30 xu (đã trừ vé và thuế)');
+    expect(awaySummaryText({ countedMs: 1000, tickets: 1, credited: 0, limits: [] }).credited).toBe('Thay đổi ví: 0 xu (đã trừ vé và thuế)');
   });
 });

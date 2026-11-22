@@ -110,7 +110,7 @@ export const vi = {
   'robot.awayTitle': 'BIÊN LAI LÀM KHI VẮNG CHỦ',
   'robot.awayTime': 'Thời gian tính: {hours} giờ {minutes} phút {seconds} giây',
   'robot.awayTickets': 'Đã cào: {tickets} vé',
-  'robot.awayCredit': 'Thực cộng ví: +{cost} xu (đã trừ vé và thuế)',
+  'robot.awayCredit': 'Thay đổi ví: {cost} xu (đã trừ vé và thuế)',
   'robot.awayLimits': 'Giới hạn: {limits}',
   'robot.limit.battery': 'Hết pin',
   'robot.limit.cap': 'Chạm trần thời gian',
