@@ -296,9 +296,20 @@ export class RobotStation {
   }
 
   points(): THREE.Vector3[] {
-    this.group.updateWorldMatrix(true, false);
-    const box = new THREE.Box3().setFromObject(this.group);
-    return [-1, 1].flatMap(x => [-1, 1].flatMap(y => [-1, 1].map(z => new THREE.Vector3(x < 0 ? box.min.x : box.max.x, y < 0 ? box.min.y : box.max.y, z < 0 ? box.min.z : box.max.z))));
+    this.group.updateWorldMatrix(true, true);
+    const points: THREE.Vector3[] = [];
+    this.group.traverseVisible(object => {
+      if (!(object instanceof THREE.Mesh)) return;
+      if (!object.geometry.boundingBox) object.geometry.computeBoundingBox();
+      const box = object.geometry.boundingBox!;
+      if (box.isEmpty()) return;
+      points.push(...[-1, 1].flatMap(x => [-1, 1].flatMap(y => [-1, 1].map(z => new THREE.Vector3(
+        x < 0 ? box.min.x : box.max.x,
+        y < 0 ? box.min.y : box.max.y,
+        z < 0 ? box.min.z : box.max.z,
+      ).applyMatrix4(object.matrixWorld)))));
+    });
+    return points;
   }
 
   dispose(): void {

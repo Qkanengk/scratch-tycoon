@@ -46,8 +46,13 @@ function signTexture(): THREE.CanvasTexture {
 /** The lottery kiosk around the player: desk, back wall, shop sign and a shelf of prizes. */
 export function buildRoom(): THREE.Group {
   const room = new THREE.Group();
-  const desk = flat(roundedRect(12, 6, 0.1), new THREE.MeshBasicMaterial({ map: patternTexture('table-wood', 1.5) }), 0);
+  const wood = new THREE.MeshBasicMaterial({ map: patternTexture('table-wood', 1.5) });
+  const desk = flat(roundedRect(12, 6, 0.1), wood, 0);
   desk.position.z = -0.6;
+  const counterExtension = flat(roundedRect(36, 18, 0.1), wood, -.001);
+  counterExtension.name = 'countertop-extension';
+  counterExtension.position.z = 7.05;
+  counterExtension.visible = false;
   const wall = new THREE.Mesh(new THREE.PlaneGeometry(14, 5), new THREE.MeshBasicMaterial({ map: wallTexture() }));
   wall.position.set(0, 2.5, WALL_Z);
   const skirting = new THREE.Mesh(new THREE.PlaneGeometry(14, 0.5), new THREE.MeshBasicMaterial({ color: 0x1f5564 }));
@@ -63,7 +68,7 @@ export function buildRoom(): THREE.Group {
   const plank = inkBox(4.6, 0.07, 0.42, 0x9c5a2a);
   plank.position.set(0, 0.95, WALL_Z + 0.21);
   shelf.add(plank);
-  room.add(desk, wall, skirting, rail, sign, shelf);
+  room.add(desk, counterExtension, wall, skirting, rail, sign, shelf);
 
   const stand = async (file: string, size: number, x: number, y: number, z: number, turn: number, parent: THREE.Group = room) => {
     const model = fitToSize(await loadModel(file), size);
