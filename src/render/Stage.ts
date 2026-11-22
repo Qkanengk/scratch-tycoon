@@ -907,7 +907,7 @@ export class Stage {
     this.renderer.domElement.dataset.busy = '1';
     const tall = this.camera.aspect < 0.8;
     const desktop = desktopLayout(this.host.clientWidth, this.host.clientHeight);
-    this.robots.layout(this.view === 'robots' ? tall : !desktop);
+    this.robots.layout(this.view === 'robots' ? tall : !desktop, this.view === 'robots');
     const counterExtension = this.room.getObjectByName('countertop-extension');
     if (counterExtension) counterExtension.visible = this.view === 'robots';
     this.fovGoal = desktop && this.view === 'shop' ? this.camera.aspect < 1.5 ? 85 : 65 : 50;
