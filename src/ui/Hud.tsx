@@ -1,6 +1,7 @@
 import type { Incident } from '../game/incidents';
 import { ticketDef, TICKETS } from '../data/tickets';
 import { canBuyTicket, canClaimPromo, isBroke, promoTicketDef, ticketRefund } from '../game/economy';
+import { formatMoney } from '../game/format';
 import type { GameState } from '../game/state';
 import { jackpotTier } from '../game/tickets';
 import { unlockProgress } from '../game/unlocks';
@@ -62,7 +63,7 @@ export function promptFor(state: GameState, now: number, view: View, progress: n
   if (ticket) {
     const refund = ticket.defective ? ticketRefund(ticket) : 0;
     if (refund > 0) return { tone: 'idle', wrap: true, message: t('incident.defectiveStock.ticket'),
-      button: { label: t('drain.return', { cost: money(refund) }), command: 'return' } };
+      button: { label: t('drain.return', { cost: formatMoney(refund) }), command: 'return' } };
     return { tone: 'idle', message: progress > 0 ? t('table.progress', { percent: Math.floor(progress * 100) }) : t('table.hint'), progress };
   }
   if (isBroke(state)) {

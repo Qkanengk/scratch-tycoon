@@ -93,6 +93,12 @@ describe('promptFor', () => {
     expect(prompt.progress).toBe(0.5);
   });
 
+  it('formats the defective ticket refund with a single currency unit', () => {
+    const state = buyTicket(fresh(), 'dong');
+    const prompt = promptFor({ ...state, ticket: { ...state.ticket!, defective: true } }, 0, 'desk', 0);
+    expect(prompt.button).toEqual({ label: 'Trả tại quầy · nhận 8 xu', command: 'return' });
+  });
+
   it('offers to collect a scratched ticket', () => {
     const prompt = promptFor(revealTicket(buyTicket(fresh(), 'dong')), 0, 'desk', 1);
     expect(prompt.button?.command).toBe('collect');
