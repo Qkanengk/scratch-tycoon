@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
+import { loadRobot } from '../game/automation';
 import { createInitialState } from '../game/state';
 import { RobotStation } from './robotStation';
 import { WALL_Z } from './room';
@@ -53,7 +54,7 @@ function layoutStation() {
   const nodes = {
     group: new THREE.Group(), board: new THREE.Group(), charger: new THREE.Group(),
     motor: new THREE.Group(), hiring: new THREE.Group(), receipt: paper(), awayReceipt: paper(),
-    slots: [] as { group: THREE.Group }[],
+    slots: [] as { group: THREE.Group; status: { group: THREE.Group } }[],
     offers: (['robot', 'speed', 'capacity', 'autoBuy', 'away', 'cap'] as const).map(action => ({ action, paper: paper() })),
   };
   const model = Object.assign(Object.create(RobotStation.prototype), nodes) as RobotStation;
@@ -99,6 +100,17 @@ describe('robot view offer layout', () => {
     expect(offers.every(({ paper }) => paper.group.scale.equals(new THREE.Vector3(1, 1, 1)))).toBe(true);
   });
 
+  it('enlarges the robot card in the focused portrait view without placing it below the countertop', () => {
+    const { model, slots } = layoutStation();
+    const card = new THREE.Group();
+    slots.push({ group: new THREE.Group(), status: { group: card } });
+    model.layout(true, true);
+    expect(card.scale.x).toBeGreaterThan(1);
+    expect(card.position.y - .095 * card.scale.y * Math.cos(Math.PI / 3)).toBeGreaterThan(0);
+    model.layout(true);
+    expect(card.scale.toArray()).toEqual([1, 1, 1]);
+  });
+
   it('redraws larger prices and prerequisite labels even when the game state has not changed', () => {
     const { model, offers } = layoutStation();
     const state = createInitialState(0);
@@ -113,5 +125,35 @@ describe('robot view offer layout', () => {
     model.layout(false);
     model.update(state);
     expect(offers[0]!.paper.draw.mock.lastCall?.[0].map((line: { size: number }) => line.size)).toEqual([68, 65]);
+  });
+});
+
+describe('robot outage status', () => {
+  it('pauses the card and work animation only while the outage is active', () => {
+    const { model, slots } = layoutStation();
+    const initial = createInitialState(0);
+    initial.automation.robots.push({ charge: 5, charging: false, tray: null, progressMs: 0 });
+    const state = loadRobot(initial, 0);
+    const tray = state.automation.robots[0]!.tray!;
+    const slot = { group: new THREE.Group(), status: { group: new THREE.Group(), draw: vi.fn() }, ticket: { visible: false },
+      key: `${tray.serial}:0`, progress: 0, working: false };
+    slots.push(slot);
+    const warning = { kind: 'powerCut', phase: 'warning', remainingMs: 10_000, cost: 0 } as const;
+    model.update({ ...state, incidents: { ...state.incidents, current: warning } });
+    const label = () => slot.status.draw.mock.lastCall?.[0][0].text;
+    expect(label()).toBe('Đang cào vé');
+    expect(slot.working).toBe(true);
+
+    const outage = { ...warning, phase: 'active', remainingMs: 60_000 } as const;
+    model.update({ ...state, incidents: { ...state.incidents, current: outage } });
+    expect(label()).toBe('Tạm dừng: mất điện');
+    expect(slot.working).toBe(false);
+    expect(slot.ticket.visible).toBe(true);
+    model.update({ ...state, incidents: { ...state.incidents, current: { ...outage, remainingMs: 59_000 } } });
+    expect(slot.status.draw).toHaveBeenCalledTimes(2);
+
+    model.update(state);
+    expect(label()).toBe('Đang cào vé');
+    expect(slot.working).toBe(true);
   });
 });

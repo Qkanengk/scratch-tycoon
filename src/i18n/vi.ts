@@ -124,6 +124,7 @@ export const vi = {
   'robot.tapBuy': 'Chạm để thuê',
   'robot.debt': 'Nghỉ vì nợ sạp',
   'robot.flat': 'Đang sạc chậm',
+  'robot.powerCut': 'Tạm dừng: mất điện',
   'robot.working': 'Đang cào vé',
   'robot.idle': 'Chờ nạp vé',
   'robot.battery': 'Pin {value}%',
