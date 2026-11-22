@@ -20,9 +20,14 @@ export interface PacingRun {
   firstRobot: number;
   autoBuy: number;
   away: number;
+  luck1: number;
+  luck10: number;
+  desk1: number;
+  desk3: number;
+  bulk1: number;
 }
 
-const emptyRun = (): PacingRun => ({ intervals: {}, firstRobot: Infinity, autoBuy: Infinity, away: Infinity });
+const emptyRun = (): PacingRun => ({ intervals: {}, firstRobot: Infinity, autoBuy: Infinity, away: Infinity, luck1: Infinity, luck10: Infinity, desk1: Infinity, desk3: Infinity, bulk1: Infinity });
 
 export function simulatePacing(seed: number, horizonSeconds: number, cycleSeconds = CYCLE_SECONDS, robots = false) {
   let state = createInitialState(seed);
@@ -80,6 +85,9 @@ export function simulatePacing(seed: number, horizonSeconds: number, cycleSecond
       .filter(id => upgradePrice(state, id) <= state.money * .15 && state.money - upgradePrice(state, id) >= reserve)
       .sort((a, b) => upgradePrice(state, a) - upgradePrice(state, b))[0];
     if (upgrade) state = buyUpgrade(state, upgrade);
+    for (const [id, level, key] of [['luck', 1, 'luck1'], ['luck', 10, 'luck10'], ['desk', 1, 'desk1'], ['desk', 3, 'desk3'], ['bulk', 1, 'bulk1']] as const) {
+      if (state.upgrades[id] >= level) run[key] = Math.min(run[key], elapsed - runStart);
+    }
     if (robots) {
       const actions: AutomationAction[] = state.automation.robots.length ? ['autoBuy', 'away', 'speed', 'capacity', 'robot', 'cap'] : ['robot'];
       const action = actions.filter(action => automationPrice(state, action) <= state.money * .15 && state.money - automationPrice(state, action) >= reserve)

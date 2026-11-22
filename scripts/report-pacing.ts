@@ -15,7 +15,7 @@ for (let run = 0; run < 2; run++) {
   for (const def of TICKETS.slice(1).filter(def => (def.minimumPrestige ?? 0) <= run)) {
     row(`run${run + 1}.${def.id}`, runs.map(r => r.runs[run]?.intervals[def.id] ?? Infinity));
   }
-  for (const id of ['firstRobot', 'autoBuy', 'away'] as const) {
+  for (const id of ['firstRobot', 'autoBuy', 'away', 'luck1', 'luck10', 'desk1', 'desk3', 'bulk1'] as const) {
     row(`run${run + 1}.${id}`, runs.map(r => r.runs[run]?.[id] ?? Infinity));
   }
 }

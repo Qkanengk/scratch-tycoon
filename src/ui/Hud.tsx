@@ -1,7 +1,7 @@
 import type { Incident } from '../game/incidents';
 import { ticketDef, TICKETS } from '../data/tickets';
 import { canBuyTicket, canClaimPromo, isBroke, promoTicketDef, ticketRefund } from '../game/economy';
-import { formatMoney } from '../game/format';
+import { formatMoney, formatCompact } from '../game/format';
 import type { GameState } from '../game/state';
 import { jackpotTier } from '../game/tickets';
 import { unlockProgress } from '../game/unlocks';
@@ -21,9 +21,11 @@ import { canAcceptContract } from '../game/contracts';
 import { contractGoal } from './contractText';
 import { GOLDEN_HOUR } from '../data/journal';
 import type { GoldenHour } from '../game/goldenHour';
-import { currentRound } from '../game/upgrades';
+import { currentRound, upgradePrice, holdCapacity, heldCount } from '../game/upgrades';
+import type { UpgradeId } from '../data/upgrades';
+import { upgradeEffect } from '../render/upgradeStation';
 
-export type Command = 'acceptContract' | 'declineContract' | 'restock' | 'buy' | 'collect' | 'return' | 'promo' | 'license' | 'robot' | 'awayReceipt' | 'incense' | 'journal';
+export type Command = 'upgrade' | 'lot' | 'acceptContract' | 'declineContract' | 'restock' | 'buy' | 'collect' | 'return' | 'promo' | 'license' | 'robot' | 'awayReceipt' | 'incense' | 'journal';
 
 interface Prompt {
   tone: 'idle' | 'win' | 'jackpot' | 'lose';
@@ -35,9 +37,17 @@ interface Prompt {
 }
 
 /** What the game asks of the player right now, given what is on the desk and where they are looking. */
-export function promptFor(state: GameState, now: number, view: View, progress: number, armed = false, contractSelected = false): Prompt {
+export function promptFor(state: GameState, now: number, view: View, progress: number, armed = false, contractSelected = false, selectedUpgrade: UpgradeId = 'luck'): Prompt {
   const ticket = state.ticket;
   const offer = state.contracts.offered;
+  if (view === 'upgrades') {
+    const price = upgradePrice(state, selectedUpgrade);
+    return { tone: 'idle', wrap: true,
+      message: `${t('upgrade.hint', { name: t(`upgrade.${selectedUpgrade}.name`) })} ${upgradeEffect(state, selectedUpgrade)}`,
+      button: { label: Number.isFinite(price) ? t('upgrade.buy', { cost: formatCompact(price) }) : t('upgrade.max'), command: 'upgrade', disabled: !Number.isFinite(price) || state.money < price } };
+  }
+  const secondary = view === 'shop' && state.upgrades.bulk > 0
+    ? { label: t('bulk.cycle', { count: state.bulkLot }), command: 'lot' as const } : undefined;
   if (view === 'board' && contractSelected && offer) return {
     tone: 'idle', wrap: true,
     message: t('contract.offer', { goal: contractGoal(offer), time: restockCountdown(offer.durationMs), deposit: money(offer.deposit), reward: money(offer.reward) }),
@@ -70,6 +80,15 @@ export function promptFor(state: GameState, now: number, view: View, progress: n
       secondary,
       button: { label: t('shop.buyLicense', { cost: money(next.unlock.licenseCost) }), command: 'license', disabled: !unlockProgress(state, next.id).canBuyLicense },
     };
+  }
+  if (view === 'shop' && secondary && !isBroke(state)) {
+    const def = ticketDef(state.selected);
+    const name = t(`ticket.${def.id}.name`);
+    const quantity = Math.min(state.bulkLot, holdCapacity(state) - heldCount(state), state.stock[def.id].remaining, Math.floor(state.money / def.price));
+    return { tone: 'idle', message: t('bulk.lot', { count: state.bulkLot }), secondary,
+      button: state.stock[def.id].remaining === 0
+        ? { label: t('stock.rush', { fee: money(STOCK[def.id].rushFee) }), command: 'restock', disabled: state.money < STOCK[def.id].rushFee }
+        : { label: t('bulk.buy', { name, count: quantity || state.bulkLot, cost: formatMoney((quantity || state.bulkLot) * def.price) }), command: 'buy', disabled: !canBuyTicket(state, def.id) } };
   }
   if (ticket?.revealed) {
     const round = currentRound(state);
@@ -107,7 +126,8 @@ export function promptFor(state: GameState, now: number, view: View, progress: n
   const affordable = canBuyTicket(state, def.id);
   return {
     tone: 'idle',
-    message: affordable ? t('hud.pick') : t('table.notEnough', { name }),
+    message: affordable ? state.upgrades.bulk > 0 ? t('bulk.lot', { count: state.bulkLot }) : t('hud.pick') : t('table.notEnough', { name }),
+    secondary,
     button: { label: t('table.buy', { name, price: money(def.price) }), command: 'buy', disabled: !affordable },
   };
 }

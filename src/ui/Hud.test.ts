@@ -9,6 +9,24 @@ import { acceptContract, contractOffer } from '../game/contracts';
 
 const fresh = (): GameState => createInitialState(1);
 
+describe('upgrade and bulk prompt chips', () => {
+  it('offers an upgrade with price and effect and disables unaffordable or maxed offers', () => {
+    const state = { ...fresh(), money: 1000 };
+    expect(promptFor(state, 0, 'upgrades', 0).button).toMatchObject({ command: 'upgrade', disabled: false });
+    expect(promptFor(fresh(), 0, 'upgrades', 0).button?.disabled).toBe(true);
+    expect(promptFor({ ...state, upgrades: { luck: 50, desk: 0, bulk: 0 } }, 0, 'upgrades', 0).button).toMatchObject({ label: 'Đã tối đa', disabled: true });
+  });
+  it('keeps lot selection available at a busy rack and disables buying a full hold', () => {
+    const state = buyTicket({ ...fresh(), money: 1000, upgrades: { luck: 0, desk: 0, bulk: 1 }, bulkLot: 1 }, 'dong');
+    const prompt = promptFor(state, 0, 'shop', 0);
+    expect(prompt.secondary?.command).toBe('lot');
+    expect(prompt.button).toMatchObject({ command: 'buy', disabled: false });
+    expect(promptFor({ ...state, deskQueue: Array(4).fill(state.ticket) }, 0, 'shop', 0).button?.disabled).toBe(true);
+    expect(promptFor(state, 0, 'desk', 0).secondary).toBeUndefined();
+    expect(promptFor(fresh(), 0, 'shop', 0).secondary).toBeUndefined();
+  });
+});
+
 describe('round payout prompt', () => {
   it('shows the combined round payout even when only a follower wins', () => {
     const state = revealTicket(buyTicket(fresh(), 'dong'));

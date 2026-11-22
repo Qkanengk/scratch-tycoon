@@ -17,7 +17,7 @@ export function jackpotTier(def: TicketDef): number {
 }
 
 export function luckTierWeight(tier: PrizeTier, index: number, count: number, luck = 0): number {
-  const bonus = Math.min(50, Math.max(0, luck)) / 100;
+  const bonus = Math.min(50, Math.max(0, luck)) / 200;
   return tier.weight * (tier.multiplier > 0 ? 1 + bonus * index / Math.max(1, count - 1) : 1);
 }
 

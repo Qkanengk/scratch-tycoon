@@ -10,6 +10,7 @@ import { inkCard } from './shapes';
 import { kioskProp } from './kioskModels';
 import { ticketMetrics, ticketSample } from './ticketFace';
 import { restockCountdown } from '../game/stock';
+import { Paper } from './paper';
 
 const CARD_W = 0.38;
 const SPACING = 0.5;
@@ -55,6 +56,10 @@ function drawTag(canvas: HTMLCanvasElement, def: TicketDef, unlocked: boolean, a
 /** The ticket rack at the back of the desk: one card per ticket type, clicked to buy. */
 export class Rack {
   readonly group = new THREE.Group();
+  private readonly lot = new Paper(.9, .18);
+  private lotKey = '';
+  private lotShown = true;
+  private lotUnlocked = false;
   private readonly slots = new Map<TicketId, Slot>();
   private readonly stands = new THREE.Group();
   private rows: TicketId[][] = [];
@@ -62,6 +67,9 @@ export class Rack {
   private prestige = false;
 
   constructor() {
+    this.lot.group.position.set(0, 1.42, .05);
+    this.lot.group.traverse(node => { node.userData.action = { kind: 'lot' }; });
+    this.group.add(this.lot.group);
     this.group.add(this.stands);
     const lockTexture = canvasTexture(rasterize('stickers/lock.png', 256));
     for (const def of TICKETS) {
@@ -118,6 +126,12 @@ export class Rack {
   }
 
   update(state: GameState): void {
+    this.lotUnlocked = state.upgrades.bulk > 0;
+    this.lot.group.visible = this.lotShown && this.lotUnlocked;
+    if (this.lotKey !== String(state.bulkLot)) {
+      this.lotKey = String(state.bulkLot);
+      this.lot.draw([{ text: t('bulk.lot', { count: state.bulkLot }), size: 100 }]);
+    }
     if (this.prestige !== (state.prestige.tier >= 1)) {
       this.prestige = state.prestige.tier >= 1;
       const tall = this.tall ?? false;
@@ -149,6 +163,13 @@ export class Rack {
     const slot = this.slots.get(id);
     if (!slot) return new THREE.Vector3();
     return slot.group.localToWorld(new THREE.Vector3(0, STAND_H + slot.height / 2, 0.05));
+  }
+
+  lotAnchor(): THREE.Vector3 { return this.lot.group.getWorldPosition(new THREE.Vector3()); }
+
+  showLot(shown: boolean): void {
+    this.lotShown = shown;
+    this.lot.group.visible = shown && this.lotUnlocked;
   }
 
   /** Corner points the camera has to keep in view. */

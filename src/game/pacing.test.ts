@@ -34,6 +34,12 @@ describe('licence pacing at the measured scratch cadence', () => {
 
 describe('robot policy pacing', () => {
   const runs = Array.from({ length: PACING_SEEDS }, (_, i) => simulatePacing(10_001 + i, 12 * 3600, CYCLE_SECONDS, true));
+  it.each(['luck1', 'desk1', 'bulk1'] as const)('introduces %s before first prestige for the typical player', milestone => {
+    const first = percentile(runs.map(run => run.runs[0]![milestone]), .5);
+    expect(first).toBeLessThan(percentile(runs.map(run => run.prestige), .5));
+    expect(first / 60).toBeGreaterThanOrEqual(milestone === 'luck1' ? 45 : 90);
+    expect(first / 60).toBeLessThanOrEqual(milestone === 'luck1' ? 90 : 180);
+  });
   it('keeps every licence interval between twenty and forty minutes', () => {
     for (const { id } of TICKETS.slice(1).filter(def => !def.minimumPrestige)) {
       const median = percentile(runs.map(r => r.intervals[id] ?? Infinity), .5) / 60;

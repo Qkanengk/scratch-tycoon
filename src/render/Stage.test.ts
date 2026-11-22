@@ -99,6 +99,35 @@ describe('desk framing', () => {
 });
 
 describe('stage shelf interactions', () => {
+  it('reserves incident and contract notices above the desktop upgrade station', () => {
+    const app = {
+      style: { getPropertyValue: () => '', setProperty: vi.fn() },
+      querySelector: (selector: string) => ({ getBoundingClientRect: () => selector === '.kiosk-notices' ? { bottom: 150 } : { top: 720, height: 65 } }),
+      querySelectorAll: () => [],
+    };
+    const stage = Object.assign(Object.create(Stage.prototype), {
+      ready: true, view: 'upgrades', touchLayout: () => false, aim: vi.fn(),
+      host: { clientHeight: 800, parentElement: app },
+    });
+    stage.measureHud();
+    expect(stage.touchTop).toBe(156);
+    expect(stage.aim).toHaveBeenCalledOnce();
+  });
+  it('enters the upgrade view before a purchase and dispatches upgrade and lot controls', () => {
+    const callbacks = { onUpgrade: vi.fn(), onLot: vi.fn() };
+    const stage = Object.assign(Object.create(Stage.prototype), { view: 'shop', callbacks, look: vi.fn() });
+    stage.press({ kind: 'upgrades' });
+    expect(stage.look).toHaveBeenCalledExactlyOnceWith('upgrades');
+    expect(callbacks.onUpgrade).not.toHaveBeenCalled();
+    stage.view = 'upgrades';
+    stage.press({ kind: 'upgrade', id: 'desk' });
+    stage.press({ kind: 'lot' });
+    expect(callbacks.onUpgrade).toHaveBeenCalledExactlyOnceWith('desk');
+    expect(callbacks.onLot).toHaveBeenCalledOnce();
+    expect(stage.sideView('right')).toBe('tools');
+    stage.nod('down');
+    expect(stage.look).toHaveBeenLastCalledWith('shop');
+  });
   it('looks at the altar on the first tap and offers incense only from its view', () => {
     const callbacks = { onAltar: vi.fn() };
     const stage = Object.assign(Object.create(Stage.prototype), { view: 'shop', callbacks, look: vi.fn() });

@@ -26,11 +26,17 @@ import { ticketRefund } from '../game/economy';
 import { RobotStation } from './robotStation';
 import type { AutomationAction } from '../game/automation';
 import { Altar } from './altar';
+import { UpgradeStation, UPGRADE_IDS } from './upgradeStation';
+import { DeskRound } from './deskRound';
+import { currentRound } from '../game/upgrades';
+import type { UpgradeId } from '../data/upgrades';
 
 /** Where the player is looking: down at the scratch mat, up at the ticket rack, or at the licence board. */
-export type View = 'desk' | 'shop' | 'board' | 'tools' | 'robots' | 'altar';
+export type View = 'desk' | 'shop' | 'board' | 'tools' | 'robots' | 'altar' | 'upgrades';
 
 export interface StageCallbacks {
+  onUpgrade(id: UpgradeId): void;
+  onLot(): void;
   onContract(): void;
   onJournal(): void;
   onAltar(): void;
@@ -55,7 +61,7 @@ export interface StageCallbacks {
   onBomb(ticket: Ticket, index: number): void;
 }
 
-type Action = { kind: 'contract' } | { kind: 'journal' } | { kind: 'altar'; offer?: boolean } | { kind: 'robots' } | { kind: 'automation'; action: AutomationAction | 'context'; index?: number } | { kind: 'ticket'; id: TicketId } | { kind: 'board' } | { kind: 'collect' } | { kind: 'tools' } | { kind: 'tool'; intent: ToolIntent | null } | { kind: 'return' } | { kind: 'repair'; id: ToolId };
+type Action = { kind: 'upgrade'; id: UpgradeId } | { kind: 'lot' } | { kind: 'upgrades' } | { kind: 'contract' } | { kind: 'journal' } | { kind: 'altar'; offer?: boolean } | { kind: 'robots' } | { kind: 'automation'; action: AutomationAction | 'context'; index?: number } | { kind: 'ticket'; id: TicketId } | { kind: 'board' } | { kind: 'collect' } | { kind: 'tools' } | { kind: 'tool'; intent: ToolIntent | null } | { kind: 'return' } | { kind: 'repair'; id: ToolId };
 
 const FACE_PX = 1024;
 const FOIL_PX = 768;
@@ -137,6 +143,8 @@ export class Stage {
   private altarArmed = false;
   private incenseTime = 0;
   private toolShelf!: ToolShelf;
+  private upgrades!: UpgradeStation;
+  private roundDisplay!: DeskRound;
   private handKey = '';
   private feltMaterial!: THREE.Material;
   private rent!: Paper;
@@ -147,6 +155,8 @@ export class Stage {
   private rentStamp = 0;
   private receiptTime = 0;
   private collectionDebt = 0;
+  private collectionTicket: Ticket | null = null;
+  private roundSize = 0;
   private rentKey = '';
   private returnKey = '';
   private readonly bombHits = new Set<number>();
@@ -199,7 +209,7 @@ export class Stage {
   }
 
   private measureHud(): void {
-    if (!this.ready || !this.touchLayout()) return;
+    if (!this.ready || (!this.touchLayout() && this.view !== 'upgrades')) return;
     const app = this.host.parentElement;
     const prompt = app?.querySelector('.prompt')?.getBoundingClientRect();
     if (!app || !prompt) return;
@@ -220,6 +230,10 @@ export class Stage {
       const notice = app.querySelector('.incident-notice[data-incident]')?.getBoundingClientRect();
       if (notice) top = Math.max(top, notice.bottom);
     }
+    if (this.view === 'upgrades') {
+      const notices = app.querySelector('.kiosk-notices')?.getBoundingClientRect();
+      if (notices) top = Math.max(top, notices.bottom);
+    }
     const bounds = `${top}:${bottom}:${this.view}:${height}`;
     if (bounds === this.hudBounds) return;
     this.hudBounds = bounds;
@@ -238,7 +252,7 @@ export class Stage {
 
   private observeHud(): void {
     this.hudObserver.disconnect();
-    for (const element of this.host.parentElement?.querySelectorAll('.prompt, .purse, .corner, .look, .incident-notice') ?? []) {
+    for (const element of this.host.parentElement?.querySelectorAll('.prompt, .purse, .corner, .look, .incident-notice, .kiosk-notices') ?? []) {
       this.hudObserver.observe(element);
     }
     this.queueHudMeasurement();
@@ -296,6 +310,11 @@ export class Stage {
     this.toolShelf = new ToolShelf();
     this.toolShelf.group.position.set(-2.8, 0, -1.5);
     this.toolShelf.group.rotation.y = 0.18;
+    this.upgrades = new UpgradeStation();
+    this.upgrades.group.position.set(-5.1, 0, -1.6);
+    this.upgrades.group.rotation.y = .3;
+    this.roundDisplay = new DeskRound();
+    this.scene.add(this.upgrades.group, this.roundDisplay.followers, this.roundDisplay.pile);
     this.rent = new Paper(1.35, .47);
     this.rent.group.rotation.z = -.025;
     this.receipt = new Paper(.9, .76);
@@ -351,7 +370,15 @@ export class Stage {
       this.tweens.length = 0;
       this.tweens.push({ elapsed: 0, duration: 2.4, step: () => undefined, done: () => { if (this.view === 'altar') this.look('shop'); } });
     }
-    if (!changedLife && this.state?.ticket && !state.ticket) this.collectionDebt = this.state.rentDebt;
+    if (!changedLife && this.state?.ticket && this.state.ticket.serial !== state.ticket?.serial) {
+      this.collectionDebt = this.state.rentDebt;
+      const round = currentRound(this.state);
+      this.collectionTicket = { ...this.state.ticket,
+        gross: round.reduce((sum, ticket) => sum + ticket.gross, 0),
+        tax: round.reduce((sum, ticket) => sum + ticket.tax, 0),
+        net: round.reduce((sum, ticket) => sum + ticket.net, 0),
+        fakeTell: round.every(ticket => ticket.fakeTell) ? this.state.ticket.fakeTell : null };
+    }
     if (!changedLife && this.state && state.rentElapsedMs < this.state.rentElapsedMs) {
       this.rentStamp = 2.8;
       if (this.ready) {
@@ -407,6 +434,8 @@ export class Stage {
     if (this.ready) {
       this.particles.dispose();
       this.toolShelf.dispose();
+      this.upgrades.dispose();
+      this.roundDisplay.dispose();
       disposeToolObject(this.tool);
       this.rent.dispose(); this.receipt.dispose(); this.returnTag.dispose();
       this.robots.dispose();
@@ -424,6 +453,14 @@ export class Stage {
     const state = this.state;
     if (!state) return;
     this.toolShelf.update(state);
+    this.upgrades.update(state);
+    this.roundDisplay.update(state);
+    const spread = Math.max(0, currentRound(state).length - 1);
+    this.mat.scale.set(1 + spread * .10, 1, 1 + spread * .08);
+    if (this.roundSize !== spread + Number(state.ticket !== null)) {
+      this.roundSize = spread + Number(state.ticket !== null);
+      this.aim();
+    }
     this.robots.update(state);
     this.altar.update(state, this.altarArmed);
     const key = JSON.stringify(rentLines(state, this.rentStamp > 0));
@@ -498,7 +535,7 @@ export class Stage {
     this.pendingScratch.clear();
     if (before) {
       if (before.revealed) {
-        this.receipt.draw(receiptLines(before, this.collectionDebt));
+        this.receipt.draw(receiptLines(this.collectionTicket ?? before, this.collectionDebt));
         this.receipt.group.visible = true;
         this.receiptTime = 5;
       }
@@ -698,7 +735,7 @@ export class Stage {
   /** The thing under the pointer that can be pressed, if any. */
   private pick(event: PointerEvent): Action | null {
     this.raycaster.setFromCamera(this.ndc(event), this.camera);
-    for (const hit of this.raycaster.intersectObjects([this.altar.group, this.rack.group, this.board.group, this.toolShelf.group, this.robots.group, this.ticket, this.returnTag.group, this.receipt.group], true)) {
+    for (const hit of this.raycaster.intersectObjects([this.altar.group, this.rack.group, this.board.group, this.toolShelf.group, this.upgrades.group, this.robots.group, this.ticket, this.returnTag.group, this.receipt.group], true)) {
       let visible = true;
       for (let node: THREE.Object3D | null = hit.object; node; node = node.parent) visible &&= node.visible;
       if (!visible) continue;
@@ -707,6 +744,7 @@ export class Stage {
       if (action.kind === 'board' && this.board.contractHit(hit.uv)) return { kind: 'contract' };
       if (action.kind === 'board' && this.board.journalHit(hit.uv)) return { kind: 'journal' };
       if (action.kind === 'tool' && this.view !== 'tools') return { kind: 'tools' };
+      if (action.kind === 'upgrade' && this.view !== 'upgrades') return { kind: 'upgrades' };
       if (action.kind === 'automation' && this.view !== 'robots') return { kind: 'robots' };
       if (action.kind === 'collect' && !(this.shown?.revealed && !this.busy)) continue;
       return action;
@@ -816,16 +854,19 @@ export class Stage {
   /** Looks one step up (desk to rack) or down (board or rack back to the desk). */
   nod(direction: 'up' | 'down'): void {
     if (direction === 'up') this.look('shop');
-    else this.look(this.view === 'board' || this.view === 'tools' || this.view === 'robots' || this.view === 'altar' ? 'shop' : 'desk');
+    else this.look(this.view === 'board' || this.view === 'tools' || this.view === 'robots' || this.view === 'altar' || this.view === 'upgrades' ? 'shop' : 'desk');
   }
 
   sideView(direction: 'left' | 'right'): View {
-    const views: View[] = ['tools', 'altar', 'shop', 'board', 'robots'];
+    const views: View[] = ['upgrades', 'tools', 'altar', 'shop', 'board', 'robots'];
     const index = Math.max(0, views.indexOf(this.view));
     return views[(index + (direction === 'right' ? 1 : views.length - 1)) % views.length]!;
   }
 
   private press(action: Action): void {
+    if (action.kind === 'upgrades') { this.look('upgrades'); return; }
+    if (action.kind === 'upgrade') { this.callbacks.onUpgrade(action.id); return; }
+    if (action.kind === 'lot') { this.callbacks.onLot(); return; }
     if (action.kind === 'contract') { this.look('board'); this.callbacks.onContract(); }
     else if (action.kind === 'journal') this.callbacks.onJournal();
     else if (action.kind === 'altar') {
@@ -932,7 +973,8 @@ export class Stage {
   private frameUp(target: THREE.Vector3, direction: THREE.Vector3, points: THREE.Vector3[]): THREE.Vector3 {
     const height = Math.max(1, this.host.clientHeight);
     // The HUD covers a strip at the top and the bottom of the picture.
-    const top = 1 - (2 * (this.touchLayout() ? this.touchTop : 70)) / height;
+    const topInset = this.touchLayout() ? this.touchTop : this.view === 'upgrades' ? Math.max(70, this.touchTop) : 70;
+    const top = 1 - (2 * topInset) / height;
     const bottom = -1 + (2 * (this.touchLayout() ? this.touchBottom : 120)) / height;
     const probe = this.camera.clone();
     probe.fov = this.fovGoal;
@@ -961,11 +1003,17 @@ export class Stage {
     const tall = this.camera.aspect < 0.8;
     const desktop = desktopLayout(this.host.clientWidth, this.host.clientHeight);
     this.robots.group.visible = this.view !== 'desk';
+    if (this.upgrades) this.upgrades.group.visible = this.view !== 'desk';
+    if (this.roundDisplay) {
+      this.roundDisplay.followers.visible = this.view === 'desk';
+      this.roundDisplay.pile.visible = this.view === 'shop';
+    }
     this.robots.layout(this.view === 'robots' ? tall : !desktop, this.view === 'robots');
     const counterExtension = this.room.getObjectByName('countertop-extension');
     if (counterExtension) counterExtension.visible = this.view === 'robots';
     this.fovGoal = desktop && this.view === 'shop' ? this.camera.aspect < 1.5 ? 85 : 65 : 50;
     const touch = this.touchLayout();
+    this.rack?.showLot(this.view === 'shop');
     if (this.state) this.board.update(this.state, this.view === 'board' && touch && this.camera.aspect > 1);
     if (touch) {
       const width = this.host.clientWidth;
@@ -979,7 +1027,7 @@ export class Stage {
     // Looking at the rack, the eye rests a little above it so the shop behind shows.
     let lift = 0;
     if (this.view === 'desk') {
-      const margin = .19;
+      const margin = .19 + (this.state ? Math.max(0, currentRound(this.state).length - 1) * .065 : 0);
       const halfW = 0.5 + margin;
       const halfH = this.metrics.height / 2 + margin;
       target = new THREE.Vector3(0, 0, 0);
@@ -999,6 +1047,7 @@ export class Stage {
       }
     } else if (this.view === 'shop') {
       points = this.rack.points();
+      if (this.state?.deskQueue.length) points.push(...this.roundDisplay.pilePoints());
       points.push(...this.altar.points());
       this.rent.group.updateWorldMatrix(true, false);
       points.push(...[-1, 1].flatMap(x => [-1, 1].map(y => this.rent.group.localToWorld(new THREE.Vector3(x * .69, y * .25, .03)))));
@@ -1024,6 +1073,10 @@ export class Stage {
       target = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
       if (!tall) target.y -= .45;
       direction = gaze(tall ? 70 : this.camera.aspect > 2 ? 15 : 25);
+    } else if (this.view === 'upgrades') {
+      points = this.upgrades.points();
+      target = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
+      direction = gaze(6, this.upgrades.group.rotation.y);
     } else if (this.view === 'tools') {
       points = this.toolShelf.points();
       target = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
@@ -1052,6 +1105,7 @@ export class Stage {
     if (!this.ready) return;
     const tall = this.camera.aspect < 0.8;
     const desktop = desktopLayout(width, height);
+    this.roundDisplay.pile.position.set(desktop ? 1.1 : 0, .02, desktop ? -.9 : .05);
     this.altar.group.position.set(tall ? 0 : -1.1, tall ? 2.65 : 1.98, WALL_Z + .15);
     this.altar.group.scale.setScalar(.8);
     this.robots.layout(!desktop);
@@ -1098,6 +1152,13 @@ export class Stage {
     canvas.dataset.altar = JSON.stringify(screen(this.altar.anchor()));
     canvas.dataset.altarArmed = this.altarArmed ? '1' : '0';
     canvas.dataset.tools = JSON.stringify(Object.fromEntries(TOOLS.map(tool => [tool.id, screen(this.toolShelf.anchor(tool.id))])));
+    canvas.dataset.upgrades = JSON.stringify(this.state?.upgrades ?? {});
+    canvas.dataset.upgradeOffers = JSON.stringify(Object.fromEntries(UPGRADE_IDS.map(id => [id, screen(this.upgrades.anchor(id))])));
+    canvas.dataset.upgradeStation = JSON.stringify(screen(this.upgrades.anchor('luck')));
+    canvas.dataset.queueLength = String(this.state?.deskQueue.length ?? 0);
+    canvas.dataset.roundSize = String(this.state ? currentRound(this.state).length : 0);
+    canvas.dataset.bulkLot = String(this.state?.bulkLot ?? 1);
+    canvas.dataset.lotSelector = JSON.stringify(screen(this.rack.lotAnchor()));
     canvas.dataset.equippedTool = this.state?.equippedTool ?? 'coin';
     canvas.dataset.repairs = JSON.stringify(Object.fromEntries(TOOLS.map(tool => [tool.id, screen(this.toolShelf.repairAnchor(tool.id))])));
     canvas.dataset.rent = JSON.stringify(screen(this.rent.group.position));
