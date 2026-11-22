@@ -9,6 +9,18 @@ import { acceptContract, contractOffer } from '../game/contracts';
 
 const fresh = (): GameState => createInitialState(1);
 
+describe('round payout prompt', () => {
+  it('shows the combined round payout even when only a follower wins', () => {
+    const state = revealTicket(buyTicket(fresh(), 'dong'));
+    const active = { ...state.ticket!, prize: 0, gross: 0, net: 0, tier: 0 };
+    const follower = { ...state.ticket!, serial: 2, prize: 50, gross: 50, net: 50, tier: 3 };
+    const prompt = promptFor({ ...state, upgrades: { luck: 0, desk: 1, bulk: 0 }, ticket: active, deskQueue: [follower] }, 0, 'desk', 1);
+    expect(prompt.tone).toBe('win');
+    expect(prompt.button?.command).toBe('collect');
+    expect(prompt.button?.label).toContain('50');
+  });
+});
+
 describe('contract HUD', () => {
   it('shows goal, duration, deposit, reward and decline only for the selected board note', () => {
     const base = fresh();

@@ -10,6 +10,8 @@ import { buyLicense, unlockProgress } from '../src/game/unlocks';
 import { automationAction, automationPrice, loadRobot, type AutomationAction } from '../src/game/automation';
 import { canPrestige, prestige as performPrestige } from '../src/game/prestige';
 import { acceptContract, canAcceptContract, declineContract } from '../src/game/contracts';
+import { UPGRADES, type UpgradeId } from '../src/data/upgrades';
+import { buyUpgrade, upgradePrice } from '../src/game/upgrades';
 
 export const CYCLE_SECONDS = 4;
 export const PACING_SEEDS = 384;
@@ -74,6 +76,10 @@ export function simulatePacing(seed: number, horizonSeconds: number, cycleSecond
     }
     // Keep ticket money in reserve and spend at most 15% of the purse per improvement.
     const reserve = tickets[next - 1]!.price;
+    const upgrade = (Object.keys(UPGRADES) as UpgradeId[])
+      .filter(id => upgradePrice(state, id) <= state.money * .15 && state.money - upgradePrice(state, id) >= reserve)
+      .sort((a, b) => upgradePrice(state, a) - upgradePrice(state, b))[0];
+    if (upgrade) state = buyUpgrade(state, upgrade);
     if (robots) {
       const actions: AutomationAction[] = state.automation.robots.length ? ['autoBuy', 'away', 'speed', 'capacity', 'robot', 'cap'] : ['robot'];
       const action = actions.filter(action => automationPrice(state, action) <= state.money * .15 && state.money - automationPrice(state, action) >= reserve)
@@ -111,15 +117,18 @@ export function simulatePacing(seed: number, horizonSeconds: number, cycleSecond
         toolPurchases[improvement.id] ??= elapsed;
       }
     }
+    let boughtLot = false;
     if (isBroke(state)) {
       state = claimPromo(updatePromo(state, 0), BALANCE.promoIntervalMs);
+      boughtLot = true;
       elapsed += BALANCE.promoIntervalMs / 1000;
-    } else {
+    } else if (!state.ticket) {
       for (let i = next - 1; i >= 0; i--) {
         const def = tickets[i];
         if (def && state.stock[def.id].remaining === 0 && STOCK[def.id].rushFee <= state.money * .01) state = rushRestock(state, def.id);
         if (def && state.stock[def.id].remaining > 0 && state.money >= def.price) {
           state = buyTicket(state, def.id);
+          boughtLot = true;
           break;
         }
       }
@@ -127,9 +136,7 @@ export function simulatePacing(seed: number, horizonSeconds: number, cycleSecond
     // Serial parity models a player returning half the tickets they can send back.
     if ((state.ticket?.fakeTell || state.ticket?.defective) && state.ticket.serial % 2 === 0) state = returnTicket(state);
     state = collectTicket(revealTicket(state));
-    // A coin takes 4 s: 1.5 s buying/collecting plus 2.5 s scratching.
-    // Only scratching speeds up, inversely with radius; overhead stays fixed.
-    elapsed += 1.5 + (cycleSeconds - 1.5) * BALANCE.brushRadius / toolRadius(state);
+    elapsed += (boughtLot ? .75 : 0) + .75 + (cycleSeconds - 1.5) * BALANCE.brushRadius / toolRadius(state);
     state = advanceKioskTime(state, (elapsed - cycleStart) * 1000);
   }
   return { intervals: runs[0]!.intervals, runs, prestige, prestigeTimes, firstUpgrade, toolPurchases, firstRobot, autoBuy, away,

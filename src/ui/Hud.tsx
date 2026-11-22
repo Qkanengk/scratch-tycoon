@@ -21,6 +21,7 @@ import { canAcceptContract } from '../game/contracts';
 import { contractGoal } from './contractText';
 import { GOLDEN_HOUR } from '../data/journal';
 import type { GoldenHour } from '../game/goldenHour';
+import { currentRound } from '../game/upgrades';
 
 export type Command = 'acceptContract' | 'declineContract' | 'restock' | 'buy' | 'collect' | 'return' | 'promo' | 'license' | 'robot' | 'awayReceipt' | 'incense' | 'journal';
 
@@ -71,11 +72,12 @@ export function promptFor(state: GameState, now: number, view: View, progress: n
     };
   }
   if (ticket?.revealed) {
-    const amount = money(ticket.net);
-    if (ticket.prize === 0) return { tone: 'lose', message: t('table.lose'), button: { label: t('table.discard'), command: 'collect' } };
-    const jackpot = ticket.tier === jackpotTier(ticketDef(ticket.type));
+    const round = currentRound(state);
+    const amount = money(round.reduce((sum, ticket) => sum + ticket.net, 0));
+    if (round.every(ticket => ticket.prize === 0)) return { tone: 'lose', message: t('table.lose'), button: { label: t('table.discard'), command: 'collect' } };
+    const jackpot = round.some(ticket => ticket.tier === jackpotTier(ticketDef(ticket.type)));
     const won = t(jackpot ? 'table.jackpot' : 'table.win', { amount });
-    const golden = (ticket.payoutPercent ?? 100) >= GOLDEN_HOUR.multiplier * 100;
+    const golden = round.some(ticket => (ticket.payoutPercent ?? 100) >= GOLDEN_HOUR.multiplier * 100);
     return { tone: jackpot ? 'jackpot' : 'win', wrap: golden,
       message: golden ? `${won} · ${t('golden.payout', { multiplier: GOLDEN_HOUR.multiplier })}` : won,
       button: { label: t('table.collect', { amount }), command: 'collect' } };

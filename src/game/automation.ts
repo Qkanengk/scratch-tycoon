@@ -5,6 +5,7 @@ import type { GameState, Ticket } from './state';
 import { ticketDef } from '../data/tickets';
 import { advanceStock } from './stock';
 import { advanceContracts, contractBoundary } from './contracts';
+import { currentRound } from './upgrades';
 
 export interface Robot {
   charge: number;
@@ -63,11 +64,18 @@ export function automationPrice(s: GameState, action: AutomationAction, index = 
 export function loadRobot(s: GameState, index: number, away = false): GameState {
   const robot = s.automation.robots[index];
   if (!robot || robot.tray || robot.charging || robot.charge <= 0 || s.rentDebt > 0) return s;
-  const bought = buyTicket({ ...s, ticket: null }, s.selected, away ? 'away' : 'robot');
+  const queueIndex = Math.max(0, currentRound(s).length - 1);
+  const queued = s.deskQueue[queueIndex];
+  if (queued) {
+    const robots = [...s.automation.robots];
+    robots[index] = { ...robot, tray: queued, progressMs: 0 };
+    return { ...s, deskQueue: s.deskQueue.filter((_, i) => i !== queueIndex), automation: { ...s.automation, robots } };
+  }
+  const bought = buyTicket({ ...s, ticket: null, deskQueue: [] }, s.selected, away ? 'away' : 'robot');
   if (!bought.ticket) return s;
   const robots = [...s.automation.robots];
   robots[index] = { ...robot, tray: bought.ticket, progressMs: 0 };
-  return { ...bought, ticket: s.ticket, automation: { ...s.automation, robots } };
+  return { ...bought, ticket: s.ticket, deskQueue: s.deskQueue, automation: { ...s.automation, robots } };
 }
 
 export function automationAction(s: GameState, action: AutomationAction, index = 0, now = 0): GameState {
@@ -139,11 +147,11 @@ export function advanceAutomation(state: GameState, elapsedMs: number, away = fa
       const ticket = robot.tray;
       if (!ticket) continue;
       if (robot.progressMs >= interval - 1e-7) {
-        const revealed = revealTicket({ ...s, ticket, equippedTool: 'coin' }, away);
+        const revealed = revealTicket({ ...s, ticket, deskQueue: [], equippedTool: 'coin' }, away);
         const prize = revealed.ticket!.net;
         const net = prize - Math.min(s.rentDebt, prize);
         const result = collectTicket(revealed, away);
-        s = { ...result, ticket: state.ticket, equippedTool: state.equippedTool,
+        s = { ...result, ticket: s.ticket, deskQueue: s.deskQueue, equippedTool: state.equippedTool,
           stats: away ? state.stats : result.stats, totalEarned: away ? state.totalEarned : result.totalEarned,
           prestige: away ? state.prestige : result.prestige,
           automation: { ...s.automation, report: { tickets: s.automation.report.tickets + 1, net: s.automation.report.net + net } } } as typeof s;

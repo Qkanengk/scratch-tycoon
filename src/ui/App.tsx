@@ -106,7 +106,7 @@ export function App() {
 
   const buy = (id: TicketId) => {
     const name = t(`ticket.${id}.name`);
-    if (state.ticket && !state.ticket.revealed) {
+    if (state.ticket && !state.ticket.revealed && !canBuyTicket(state, id)) {
       refuse(t('hud.tableBusy'));
       stage.current?.look('desk');
     } else if (!isUnlocked(state, id)) {

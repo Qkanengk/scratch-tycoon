@@ -15,6 +15,7 @@ import { INCIDENT_KINDS, initialIncidents, type IncidentState } from './incident
 import { ACHIEVEMENT_BONUS_PERCENT, ALL_STAMPS, COLLECTION_BONUS_PERCENT, GOLDEN_HOUR } from '../data/journal';
 import { ACHIEVEMENT_TOTAL, initialJournal, type Journal } from './journal';
 import { initialGoldenHour, type GoldenHour } from './goldenHour';
+import { BULK_LOTS, UPGRADES, type BulkLot, type UpgradeId } from '../data/upgrades';
 
 export const SAVE_KEY = 'scratch-tycoon-save';
 export const SAVE_BACKUP_KEY = `${SAVE_KEY}-backup`;
@@ -26,6 +27,7 @@ type RawSave = Record<string, unknown>;
  * Add an entry (and a test) whenever the shape of GameState changes.
  */
 const MIGRATIONS: Record<number, (save: RawSave) => RawSave> = {
+  10: save => ({ ...save, version: 11, upgrades: { luck: 0, desk: 0, bulk: 0 }, bulkLot: 1, deskQueue: [] }),
   9: save => ({ ...save, version: 10, journal: null, goldenHour: initialGoldenHour(amount(save.rngState, 0)) }),
   8: save => ({ ...save, version: 9, contracts: initialContracts(amount(save.rngState, 0)) }),
   7: save => ({ ...save, version: 8, stock: initialStock() }),
@@ -290,17 +292,30 @@ export function migrate(raw: unknown, now = Date.now()): GameState | null {
       };
     }
   }
-  const ticket = readTicket(save.ticket, tier);
-  const damaged = save.ticket;
-  // Only explicitly paid, unrevealed tickets qualify; never pay an unverified prize.
-  const refund = ticket === null && isRecord(damaged) && isTicketId(damaged.type)
-    && available(damaged.type) && damaged.free === false && damaged.revealed === false ? ticketDef(damaged.type).price : 0;
+  const upgrades = { ...base.upgrades };
+  for (const id of Object.keys(UPGRADES) as UpgradeId[]) {
+    const level = isRecord(save.upgrades) ? save.upgrades[id] : undefined;
+    if (typeof level === 'number' && Number.isInteger(level) && level >= 0 && level <= UPGRADES[id].maxLevel) upgrades[id] = level;
+  }
+  const bulkLot = BULK_LOTS.includes(save.bulkLot as BulkLot) && (save.bulkLot as number) <= (BULK_LOTS[upgrades.bulk] ?? 1) ? save.bulkLot as BulkLot : 1;
+  let refund = 0;
+  const restoreTicket = (raw: unknown) => {
+    const ticket = readTicket(raw, tier);
+    if (!ticket && isRecord(raw) && isTicketId(raw.type) && available(raw.type) && raw.free === false && raw.revealed === false) refund += ticketDef(raw.type).price;
+    return ticket;
+  };
+  let ticket = restoreTicket(save.ticket);
+  const deskQueue = (Array.isArray(save.deskQueue) ? save.deskQueue : []).map(restoreTicket).filter((ticket): ticket is Ticket => ticket !== null);
+  if (!ticket) ticket = deskQueue.shift() ?? null;
   const latestPromo = now + BALANCE.promoIntervalMs;
   const promoReadyAt = typeof save.promoReadyAt === 'number'
     ? Number.isFinite(save.promoReadyAt) ? Math.min(save.promoReadyAt, latestPromo) : latestPromo
     : null;
   return {
     version: SAVE_VERSION,
+    upgrades,
+    bulkLot,
+    deskQueue,
     contracts: readContracts(save.contracts, amount(save.rngState, 0), tier, save.licenses),
     stock: readStock(save.stock),
     prestige,
