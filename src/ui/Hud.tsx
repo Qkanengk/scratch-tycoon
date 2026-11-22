@@ -30,8 +30,9 @@ export type Command = 'upgrade' | 'lot' | 'acceptContract' | 'declineContract' |
 interface Prompt {
   tone: 'idle' | 'win' | 'jackpot' | 'lose';
   message: string;
+  keyHint?: string;
   button?: { label: string; command: Command; disabled?: boolean };
-  secondary?: { label: string; command: Command };
+  secondary?: { label: string; command: Command; shortcut?: string };
   progress?: number;
   wrap?: boolean;
 }
@@ -43,11 +44,12 @@ export function promptFor(state: GameState, now: number, view: View, progress: n
   if (view === 'upgrades') {
     const price = upgradePrice(state, selectedUpgrade);
     return { tone: 'idle', wrap: true,
-      message: `${t('upgrade.hint', { name: t(`upgrade.${selectedUpgrade}.name`) })} ${upgradeEffect(state, selectedUpgrade)}`,
+      message: `${t('upgrade.hint')} ${upgradeEffect(state, selectedUpgrade)}`,
+      keyHint: t('upgrade.keyHint', { name: t(`upgrade.${selectedUpgrade}.name`) }),
       button: { label: Number.isFinite(price) ? t('upgrade.buy', { cost: formatCompact(price) }) : t('upgrade.max'), command: 'upgrade', disabled: !Number.isFinite(price) || state.money < price } };
   }
   const secondary = view === 'shop' && state.upgrades.bulk > 0
-    ? { label: t('bulk.cycle', { count: state.bulkLot }), command: 'lot' as const } : undefined;
+    ? { label: t('bulk.cycle', { count: state.bulkLot }), command: 'lot' as const, shortcut: 'B' } : undefined;
   if (view === 'board' && contractSelected && offer) return {
     tone: 'idle', wrap: true,
     message: t('contract.offer', { goal: contractGoal(offer), time: restockCountdown(offer.durationMs), deposit: money(offer.deposit), reward: money(offer.reward) }),
@@ -138,13 +140,14 @@ export function PromptChip({ prompt, onCommand }: { prompt: Prompt; onCommand: (
     <div className={`prompt prompt-${prompt.tone}${prompt.wrap ? ' prompt-wrap' : ''}`}>
       <p className="prompt-message" role="status" data-testid="status">
         {prompt.message}
+        {prompt.keyHint && <span className="keyboard-hint"> {prompt.keyHint}</span>}
       </p>
       {prompt.progress !== undefined && (
         <div className="meter" aria-hidden="true">
           <span style={{ width: `${Math.round(prompt.progress * 100)}%` }} />
         </div>
       )}
-      {prompt.secondary && <button className="btn" onClick={() => onCommand(prompt.secondary!.command)}>{prompt.secondary.label}</button>}
+      {prompt.secondary && <button className="btn" onClick={() => onCommand(prompt.secondary!.command)}>{prompt.secondary.label}{prompt.secondary.shortcut && <kbd>{prompt.secondary.shortcut}</kbd>}</button>}
       {button && (
         <button className="btn btn-primary" data-testid="action" disabled={button.disabled} onKeyDown={event => { if (button.command === 'incense') blockRepeatedOffering(event); }} onClick={() => onCommand(button.command)}>
           {button.label}

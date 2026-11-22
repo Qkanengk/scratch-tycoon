@@ -10,6 +10,16 @@ import { acceptContract, contractOffer } from '../game/contracts';
 const fresh = (): GameState => createInitialState(1);
 
 describe('upgrade and bulk prompt chips', () => {
+  it('keeps keyboard hints separate from touch labels', () => {
+    const state = { ...fresh(), upgrades: { luck: 0, desk: 0, bulk: 1 }, bulkLot: 5 as const };
+    const upgrade = promptFor(state, 0, 'upgrades', 0, false, false, 'desk');
+    expect(upgrade.message).not.toContain('Space');
+    expect(upgrade.keyHint).toBe('Space: Bàn rộng.');
+    expect(renderToStaticMarkup(PromptChip({ prompt: upgrade, onCommand: vi.fn() }))).toContain('class="keyboard-hint"');
+    const lot = promptFor(state, 0, 'shop', 0);
+    expect(lot.secondary).toMatchObject({ label: 'Đổi lô · ×5', shortcut: 'B' });
+    expect(renderToStaticMarkup(PromptChip({ prompt: lot, onCommand: vi.fn() }))).toContain('<kbd>B</kbd>');
+  });
   it('offers an upgrade with price and effect and disables unaffordable or maxed offers', () => {
     const state = { ...fresh(), money: 1000 };
     expect(promptFor(state, 0, 'upgrades', 0).button).toMatchObject({ command: 'upgrade', disabled: false });
