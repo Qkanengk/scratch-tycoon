@@ -132,6 +132,7 @@ export class RobotStation {
     return { group, arm, light, gauge, ticket, canvas, texture, status, payout, payoutTime: 0, serial: 0, net: 0, key: '', progress: 0, working: false };
   });
   private key = '';
+  private portraitOffers = false;
 
   constructor() {
     this.group.name = 'robot-station';
@@ -200,26 +201,36 @@ export class RobotStation {
     parent.add(paper.group);
   }
 
-  layout(phone: boolean): void {
+  layout(phone: boolean, focused = false): void {
+    this.portraitOffers = phone && focused;
+    const column = this.portraitOffers ? 1.35 : .95;
     this.group.position.x = phone ? 2.05 : 1.12;
-    this.group.position.z = phone ? -1.70 : .35;
+    this.group.position.z = phone ? this.portraitOffers ? -.40 : -1.70 : .35;
     this.slots.forEach((s, i) => s.group.position.set(phone ? 0 : i * .84, 0, phone ? i * 1.50 : 0));
-    this.board.position.set(phone ? .95 : 2.80, phone ? .35 : 0, phone ? -.10 : -.48);
-    this.charger.position.set(phone ? .95 : 2.66, 0, phone ? 2.70 : 1.04);
-    this.motor.position.set(phone ? .95 : 1.40, 0, phone ? 1.50 : 1.25);
-    this.hiring.position.set(phone ? .95 : .10, 0, phone ? .30 : 1.25);
+    this.board.position.set(phone ? column : 2.80, phone ? .35 : 0, phone ? -.10 : -.48);
+    this.board.rotation.x = this.portraitOffers ? -Math.PI / 4 : 0;
+    this.board.scale.set(this.portraitOffers ? 1.4 : 1, this.portraitOffers ? 1.35 : 1, 1);
+    this.charger.position.set(phone ? column : 2.66, 0, phone ? 2.70 : 1.04);
+    this.motor.position.set(phone ? column : 1.40, 0, phone ? 1.50 : focused ? 1.90 : 1.25);
+    this.hiring.position.set(phone ? column : .10, 0, phone ? .30 : focused ? 1.90 : 1.25);
+    for (const { action, paper } of this.offers) {
+      if (action !== 'robot' && action !== 'speed' && action !== 'capacity') continue;
+      paper.group.scale.set(this.portraitOffers ? 1.4 : 1, this.portraitOffers ? 1.5 : 1, 1);
+      paper.group.position.y = this.portraitOffers ? .11 : action === 'capacity' ? .075 : .065;
+    }
     this.receipt.group.position.set(phone ? 1.25 : 2.64, .015, phone ? 3.65 : 1.91);
     this.awayReceipt.group.position.set(phone ? .45 : 1.25, .32, phone ? 3.25 : 1.45);
   }
 
   update(state: GameState): void {
     const a = state.automation;
-    const key = JSON.stringify([a, state.money, state.rentDebt, state.selected]);
+    const key = JSON.stringify([a, state.money, state.rentDebt, state.selected, this.portraitOffers]);
     if (key === this.key) return;
     this.key = key;
     for (const { action, paper } of this.offers) {
       const level = action === 'speed' ? a.speed : action === 'capacity' ? a.capacity : action === 'cap' ? 2 + a.capLevel * 2 : a.robots.length;
-      paper.draw([{ text: t(`robot.${action}`, { level }), size: 68 }, { text: robotOfferLabel(state, action), size: 65, color: '#75432c' }]);
+      paper.draw([{ text: t(`robot.${action}`, { level }), size: this.portraitOffers ? 110 : 68 },
+        { text: robotOfferLabel(state, action), size: this.portraitOffers ? 100 : 65, color: '#75432c' }]);
     }
     this.slots.forEach((slot, i) => {
       const r = a.robots[i];
