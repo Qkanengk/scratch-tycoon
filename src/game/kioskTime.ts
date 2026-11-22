@@ -1,6 +1,6 @@
 import { advanceAutomation } from './automation';
 import { advancePlayTime } from './economy';
-import { tickIncidents } from './incidents';
+import { incidentActive, tickIncidents } from './incidents';
 import type { GameState } from './state';
 
 export function advanceKioskTime(state: GameState, elapsedMs: number): GameState {
@@ -10,7 +10,7 @@ export function advanceKioskTime(state: GameState, elapsedMs: number): GameState
     const { current, nextInMs } = state.incidents;
     const step = Math.min(left, nextInMs, current?.remainingMs ?? Infinity);
     state = advancePlayTime(state, step);
-    if (current?.kind !== 'powerCut') state = advanceAutomation(state, step);
+    if (!incidentActive(state, 'powerCut')) state = advanceAutomation(state, step);
     state = tickIncidents(state, step);
     left -= step;
   }

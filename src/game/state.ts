@@ -26,6 +26,7 @@ export interface Ticket {
   tax: number;
   net: number;
   fakeTell: 'missing-seal' | 'misprinted-serial' | null;
+  defective?: true;
   scratchStarted: boolean;
   hitBombs: number[];
   free: boolean;

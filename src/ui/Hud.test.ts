@@ -12,17 +12,24 @@ describe('IncidentNotice', () => {
     ['inspection', 'Thanh tra'], ['powerCut', 'Mất điện'], ['theft', 'Trộm'],
     ['badLuck', 'Vận xui'], ['defectiveStock', 'Hàng lỗi'],
   ] as const)('shows the Vietnamese name for %s', (kind, name) => {
-    const text = renderToStaticMarkup(IncidentNotice({ incident: { kind, cost: 0, remainingMs: 1100 } }));
+    const text = renderToStaticMarkup(IncidentNotice({ incident: { kind, phase: 'active', cost: 0, remainingMs: 1100 } }));
     expect(text).toContain(name);
     expect(text).toContain('role="status"');
-    if (kind === 'badLuck' || kind === 'powerCut') expect(text).toContain('role="timer">2 giây');
+    if (kind === 'badLuck' || kind === 'powerCut' || kind === 'defectiveStock') expect(text).toContain('role="timer">2 giây');
     else expect(text).toContain('Không mất xu');
   });
 
   it('shows the paid amount rather than a countdown for a fee', () => {
-    const text = renderToStaticMarkup(IncidentNotice({ incident: { kind: 'inspection', cost: 10, remainingMs: 1100 } }));
+    const text = renderToStaticMarkup(IncidentNotice({ incident: { kind: 'inspection', phase: 'active', cost: 10, remainingMs: 1100 } }));
     expect(text).toContain('−10 xu');
     expect(text).not.toContain('role="timer"');
+  });
+
+  it('shows a warning countdown before applying the incident', () => {
+    const text = renderToStaticMarkup(IncidentNotice({ incident: { kind: 'inspection', phase: 'warning', cost: 0, remainingMs: 10_000 } }));
+    expect(text).toContain('Sắp có: Thanh tra');
+    expect(text).toContain('Dọn vé giả');
+    expect(text).toContain('role="timer">10 giây');
   });
 });
 

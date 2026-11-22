@@ -3,7 +3,7 @@ import { isMuted, play, setMuted } from '../audio/sfx';
 import { ticketDef, TICKETS, type TicketId } from '../data/tickets';
 import { applyToolIntent, repairPrice, repairTool, type ToolIntent } from '../game/tools';
 import { shelfOffer } from '../render/toolShelf';
-import { buyTicket, canBuyTicket, claimPromo, collectTicket, isUnlocked, returnFake, selectTicket, startScratch, uncoverCell } from '../game/economy';
+import { buyTicket, canBuyTicket, claimPromo, collectTicket, isUnlocked, returnTicket, selectTicket, startScratch, uncoverCell } from '../game/economy';
 import { advanceKioskTime } from '../game/kioskTime';
 import { buyLicense, unlockProgress } from '../game/unlocks';
 import { recordReveal, recordScratch } from '../game/save';
@@ -75,7 +75,7 @@ export function App() {
 
   const collect = () => {
     play(state.ticket && state.ticket.prize > 0 ? 'coin-2' : 'ui-click');
-    apply(collectTicket);
+    apply(current => collectTicket(current));
   };
 
   const buy = (id: TicketId) => {
@@ -114,6 +114,7 @@ export function App() {
     else if (command === 'robot') automate('context', 0);
     else if (command === 'buy') buy(state.selected);
     else if (command === 'collect') collect();
+    else if (command === 'return') { play('ticket-collect'); apply(returnTicket); }
     else if (command === 'license') license();
     else {
       play('promo');
@@ -150,7 +151,7 @@ export function App() {
         const next = advanceKioskTime(current, elapsed);
         return { ...next, automation: { ...next.automation, lastSeenAt: time } };
       }),
-      onReturn: () => { play('ticket-collect'); apply(returnFake); },
+      onReturn: () => run('return'),
       onRepair: id => {
         if (state.money < repairPrice(state, id)) { play('ui-error'); stage.current?.refuseTool(id); return; }
         stage.current?.repairedTool(id);

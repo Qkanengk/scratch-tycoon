@@ -2,6 +2,7 @@ import { BALANCE, INCIDENTS } from '../data/balance';
 import { PRESTIGE } from '../data/prestige';
 import { BIG_WIN_MULTIPLIER, TICKETS, ticketDef, type TicketDef, type TicketId } from '../data/tickets';
 import { Rng } from './rng';
+import { incidentActive } from './incidents';
 import type { GameState, Ticket } from './state';
 import { generateCells, jackpotTier } from './tickets';
 import { wearTool } from './tools';
@@ -18,10 +19,13 @@ export function canBuyTicket(state: GameState, id: TicketId): boolean {
   return state.ticket === null && isUnlocked(state, id) && state.money >= ticketDef(id).price;
 }
 
-function placeTicket(state: GameState, def: TicketDef, free: boolean, away = false): GameState {
+type PurchaseSource = 'desk' | 'robot' | 'away';
+
+function placeTicket(state: GameState, def: TicketDef, free: boolean, source: PurchaseSource = 'desk'): GameState {
   const rng = new Rng(state.rngState);
-  const extraMiss = !free && !away && state.incidents.current?.kind === 'badLuck' ? INCIDENTS.extraMissChance : 0;
-  const { tier, cells } = generateCells(def, rng, extraMiss);
+  const defective = !free && source === 'desk' && incidentActive(state, 'defectiveStock');
+  const unlucky = !free && source !== 'away' && incidentActive(state, 'badLuck');
+  const { tier, cells } = generateCells(def, rng, unlucky ? INCIDENTS.badLuckPrizeWeight : defective ? INCIDENTS.defectivePrizeWeight : 1);
   const fakeChance = BALANCE.fakeChances[def.id] + (state.prestige.tier >= 3 ? PRESTIGE.fakeSurcharge : 0);
   const fake = !free && fakeChance > 0 && rng.next() < fakeChance;
   const gross = fake ? 0 : (def.prizes[tier]?.multiplier ?? 0) * def.price;
@@ -35,12 +39,14 @@ function placeTicket(state: GameState, def: TicketDef, free: boolean, away = fal
     prize: gross,
     gross, tax, net,
     fakeTell: fake ? rng.pick(['missing-seal', 'misprinted-serial'] as const) : null,
+    ...(defective ? { defective: true } : {}),
     scratchStarted: false,
     hitBombs: [],
     free,
     revealed: false,
   };
-  return { ...state, rngState: rng.state, nextSerial: state.nextSerial + 1, ticket };
+  const incidents = defective ? { ...state.incidents, current: null } : state.incidents;
+  return { ...state, rngState: rng.state, nextSerial: state.nextSerial + 1, ticket, incidents };
 }
 
 /** Picks the ticket type the empty table offers next. */
@@ -49,10 +55,10 @@ export function selectTicket(state: GameState, id: TicketId): GameState {
   return { ...state, selected: id };
 }
 
-export function buyTicket(state: GameState, id: TicketId, away = false): GameState {
+export function buyTicket(state: GameState, id: TicketId, source: PurchaseSource = 'desk'): GameState {
   if (!canBuyTicket(state, id)) return state;
   const def = ticketDef(id);
-  return placeTicket({ ...state, money: state.money - def.price, selected: id }, def, false, away);
+  return placeTicket({ ...state, money: state.money - def.price, selected: id }, def, false, source);
 }
 
 /** Marks the ticket on the table as fully scratched and counts it toward missions. */
@@ -80,16 +86,18 @@ export function revealTicket(state: GameState): GameState {
 }
 
 /** Pays out a scratched ticket and clears the table. */
-export function collectTicket(state: GameState): GameState {
+export function collectTicket(state: GameState, away = false): GameState {
   const ticket = state.ticket;
   if (ticket === null || !ticket.revealed) return state;
   const withheld = Math.min(state.rentDebt, ticket.net);
+  const recentBigWin = !away && ticket.gross >= ticketDef(ticket.type).price * BIG_WIN_MULTIPLIER;
   return {
     ...state,
     money: state.money + ticket.net - withheld,
     rentDebt: state.rentDebt - withheld,
     totalEarned: state.totalEarned + ticket.net,
     prestige: { ...state.prestige, runEarned: state.prestige.runEarned + ticket.net },
+    incidents: recentBigWin ? { ...state.incidents, recentBigWin: true } : state.incidents,
     ticket: null,
   };
 }
@@ -106,10 +114,15 @@ export function uncoverCell(state: GameState, index: number): GameState {
   return { ...wearTool(state, BALANCE.bombWear), ticket: { ...state.ticket!, hitBombs: [...ticket.hitBombs, index] } };
 }
 
-export function returnFake(state: GameState): GameState {
+export function ticketRefund(ticket: Ticket | null): number {
+  if (!ticket || ticket.free || ticket.scratchStarted || ticket.revealed || (!ticket.fakeTell && !ticket.defective)) return 0;
+  return Math.floor(ticketDef(ticket.type).price * (1 - (ticket.defective ? INCIDENTS.defectiveReturnFee : BALANCE.fakeReturnFee)));
+}
+
+export function returnTicket(state: GameState): GameState {
   const ticket = state.ticket;
-  if (!ticket?.fakeTell || ticket.free || ticket.scratchStarted || ticket.revealed) return state;
-  const refund = Math.floor(ticketDef(ticket.type).price * (1 - BALANCE.fakeReturnFee));
+  const refund = ticketRefund(ticket);
+  if (!refund) return state;
   return { ...state, money: state.money + refund, ticket: null };
 }
 

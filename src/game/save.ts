@@ -54,14 +54,17 @@ function amount(value: unknown, fallback: number): number {
 
 function readIncidents(value: unknown, fallback: IncidentState): IncidentState {
   if (!isRecord(value)) return fallback;
-  const nextInMs = Math.min(amount(value.nextInMs, fallback.nextInMs), INCIDENTS.nextDelayMs[1]);
+  const nextInMs = Math.min(amount(value.nextInMs, fallback.nextInMs), INCIDENTS.intervalMs[1]);
   const saved = isRecord(value.current) ? value.current : null;
   const kind = INCIDENT_KINDS.find(kind => kind === saved?.kind);
-  const remainingMs = kind && saved ? Math.min(amount(saved.remainingMs, 0), INCIDENTS.durationMs[kind], nextInMs) : 0;
+  const phase = saved?.phase === 'warning' ? 'warning' : 'active';
+  const remainingMs = kind && saved ? Math.min(amount(saved.remainingMs, 0),
+    phase === 'warning' ? INCIDENTS.warningMs : INCIDENTS.durationMs[kind], nextInMs) : 0;
   return {
     rngState: amount(value.rngState, fallback.rngState) >>> 0,
     nextInMs,
-    current: kind && saved && remainingMs > 0 ? { kind, remainingMs, cost: Math.floor(amount(saved.cost, 0)) } : null,
+    recentBigWin: value.recentBigWin === true,
+    current: kind && saved && remainingMs > 0 ? { kind, phase, remainingMs, cost: phase === 'active' ? Math.floor(amount(saved.cost, 0)) : 0 } : null,
   };
 }
 
@@ -117,6 +120,7 @@ function readTicket(value: unknown, prestigeTier = 0): Ticket | null {
     prize: gross,
     gross, tax, net: Math.floor((gross - tax) * (1 + prestigeTier * PRESTIGE.bonusPerTier)),
     fakeTell,
+    ...(value.defective === true && value.free !== true ? { defective: true } : {}),
     scratchStarted: value.scratchStarted === true || value.revealed === true || (scratch !== undefined && scratchProgress(mask) > 0),
     hitBombs: Array.isArray(value.hitBombs) ? [...new Set(value.hitBombs.filter((i): i is number => Number.isInteger(i) && value.cells instanceof Array && (value.cells[i] as { type?: string })?.type === 'bomb'))] : [],
     free: value.free === true,

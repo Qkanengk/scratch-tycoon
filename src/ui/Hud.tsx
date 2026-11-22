@@ -1,6 +1,6 @@
 import type { Incident } from '../game/incidents';
 import { ticketDef, TICKETS } from '../data/tickets';
-import { canBuyTicket, canClaimPromo, isBroke, promoTicketDef } from '../game/economy';
+import { canBuyTicket, canClaimPromo, isBroke, promoTicketDef, ticketRefund } from '../game/economy';
 import type { GameState } from '../game/state';
 import { jackpotTier } from '../game/tickets';
 import { unlockProgress } from '../game/unlocks';
@@ -15,7 +15,7 @@ import { licenseWait } from '../render/board';
 import { blockRepeatedOffering } from './altarRitual';
 import { Icon } from './Icon';
 
-export type Command = 'buy' | 'collect' | 'promo' | 'license' | 'robot' | 'awayReceipt' | 'incense';
+export type Command = 'buy' | 'collect' | 'return' | 'promo' | 'license' | 'robot' | 'awayReceipt' | 'incense';
 
 interface Prompt {
   tone: 'idle' | 'win' | 'jackpot' | 'lose';
@@ -60,6 +60,9 @@ export function promptFor(state: GameState, now: number, view: View, progress: n
     return { tone: jackpot ? 'jackpot' : 'win', message: t(jackpot ? 'table.jackpot' : 'table.win', { amount }), button: { label: t('table.collect', { amount }), command: 'collect' } };
   }
   if (ticket) {
+    const refund = ticket.defective ? ticketRefund(ticket) : 0;
+    if (refund > 0) return { tone: 'idle', wrap: true, message: t('incident.defectiveStock.ticket'),
+      button: { label: t('drain.return', { cost: money(refund) }), command: 'return' } };
     return { tone: 'idle', message: progress > 0 ? t('table.progress', { percent: Math.floor(progress * 100) }) : t('table.hint'), progress };
   }
   if (isBroke(state)) {
@@ -104,17 +107,18 @@ export function PromptChip({ prompt, onCommand }: { prompt: Prompt; onCommand: (
 }
 
 export function IncidentNotice({ incident }: { incident: Incident | null }) {
-  const timed = incident?.kind === 'powerCut' || incident?.kind === 'badLuck';
+  const warning = incident?.phase === 'warning';
+  const timed = warning || incident?.kind === 'powerCut' || incident?.kind === 'badLuck' || incident?.kind === 'defectiveStock';
   return (
-    <div className="incident-notice" data-incident={incident?.kind}>
+    <div className="incident-notice" data-incident={incident?.kind} data-phase={incident?.phase}>
       <p role="status">
         {incident && <>
           <strong>
-            {t(`incident.${incident.kind}`)}
+            {t(warning ? 'incident.warning' : 'incident.title', { name: t(`incident.${incident.kind}`) })}
             {incident.cost > 0 && <> · {t('incident.loss', { cost: money(incident.cost) })}</>}
             {!timed && incident.cost === 0 && <> · {t('incident.noLoss')}</>}
           </strong>
-          <span>{t(`incident.${incident.kind}.detail`)}</span>
+          <span>{t(`incident.${incident.kind}.${warning ? 'warning' : 'detail'}`)}</span>
         </>}
       </p>
       {timed && <span className="incident-time" role="timer">{t('incident.seconds', { seconds: Math.ceil(incident.remainingMs / 1000) })}</span>}

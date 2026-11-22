@@ -61,7 +61,7 @@ export function automationPrice(s: GameState, action: AutomationAction, index = 
 export function loadRobot(s: GameState, index: number, away = false): GameState {
   const robot = s.automation.robots[index];
   if (!robot || robot.tray || robot.charging || robot.charge <= 0 || s.rentDebt > 0) return s;
-  const bought = buyTicket({ ...s, ticket: null }, s.selected, away);
+  const bought = buyTicket({ ...s, ticket: null }, s.selected, away ? 'away' : 'robot');
   if (!bought.ticket) return s;
   const robots = [...s.automation.robots];
   robots[index] = { ...robot, tray: bought.ticket, progressMs: 0 };
@@ -133,7 +133,7 @@ export function advanceAutomation(state: GameState, elapsedMs: number, away = fa
       const ticket = robot.tray;
       if (!ticket) continue;
       if (robot.progressMs >= interval - 1e-7) {
-        const result = collectTicket(revealTicket({ ...s, ticket, equippedTool: 'coin' }));
+        const result = collectTicket(revealTicket({ ...s, ticket, equippedTool: 'coin' }), away);
         const net = result.money - s.money;
         s = { ...result, ticket: state.ticket, equippedTool: state.equippedTool,
           stats: away ? state.stats : result.stats, totalEarned: away ? state.totalEarned : result.totalEarned,

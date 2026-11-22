@@ -22,10 +22,13 @@ export const BALANCE = {
 } as const;
 
 export const INCIDENTS = {
-  firstDelayMs: [180_000, 300_000],
-  nextDelayMs: [360_000, 600_000],
-  durationMs: { inspection: 12_000, powerCut: 18_000, theft: 12_000, badLuck: 30_000, defectiveStock: 12_000 },
-  ticketPriceCap: { inspection: 1, powerCut: 0.5, theft: 2, badLuck: 0, defectiveStock: 0.75 },
-  theftFraction: 0.05,
-  extraMissChance: 0.08,
+  intervalMs: [240_000, 480_000],
+  warningMs: 10_000,
+  durationMs: { inspection: 12_000, powerCut: 60_000, theft: 12_000, badLuck: 120_000, defectiveStock: 30_000 },
+  fineFraction: 0.15,
+  theftFraction: 0.20,
+  theftCapTickets: 4,
+  badLuckPrizeWeight: 0.5,
+  defectivePrizeWeight: 0.85,
+  defectiveReturnFee: 0.20,
 } as const;

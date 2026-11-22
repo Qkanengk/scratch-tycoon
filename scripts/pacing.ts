@@ -2,7 +2,7 @@ import { BALANCE } from '../src/data/balance';
 import { TICKETS, type TicketId } from '../src/data/tickets';
 import { TOOLS, type ToolId } from '../src/data/tools';
 import { buyTool, repairPrice, repairTool, toolRadius, toolUpgradePrice, upgradeTool } from '../src/game/tools';
-import { buyTicket, claimPromo, collectTicket, isBroke, isTicketAvailable, returnFake, revealTicket, updatePromo } from '../src/game/economy';
+import { buyTicket, claimPromo, collectTicket, isBroke, isTicketAvailable, returnTicket, revealTicket, updatePromo } from '../src/game/economy';
 import { advanceKioskTime } from '../src/game/kioskTime';
 import { createInitialState } from '../src/game/state';
 import { buyLicense, unlockProgress } from '../src/game/unlocks';
@@ -117,8 +117,8 @@ export function simulatePacing(seed: number, horizonSeconds: number, cycleSecond
         }
       }
     }
-    // Serial parity models a player noticing half the visible counterfeit tells.
-    if (state.ticket?.fakeTell && state.ticket.serial % 2 === 0) state = returnFake(state);
+    // Serial parity models a player returning half the tickets they can send back.
+    if ((state.ticket?.fakeTell || state.ticket?.defective) && state.ticket.serial % 2 === 0) state = returnTicket(state);
     state = collectTicket(revealTicket(state));
     // A coin takes 4 s: 1.5 s buying/collecting plus 2.5 s scratching.
     // Only scratching speeds up, inversely with radius; overhead stays fixed.

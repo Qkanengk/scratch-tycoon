@@ -41,10 +41,10 @@ describe('robot policy pacing', () => {
       expect(median, id).toBeLessThanOrEqual(40);
     }
   });
-  it('buys the first robot near one hour', () => {
+  it('buys the first robot within 75 minutes despite incidents', () => {
     const median = percentile(runs.map(r => r.firstRobot), .5) / 60;
     expect(median).toBeGreaterThanOrEqual(50);
-    expect(median).toBeLessThanOrEqual(70);
+    expect(median).toBeLessThanOrEqual(75);
   });
 
   it('reaches first prestige after five to six hours', () => {
