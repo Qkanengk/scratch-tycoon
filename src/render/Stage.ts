@@ -223,8 +223,9 @@ export class Stage {
     const height = this.host.clientHeight;
     let top = 0;
     let bottom = height - prompt.top;
+    const returnableRound = this.state && currentRound(this.state).length > 1 && ticketRefund(this.state.ticket) > 0;
     for (const element of app.querySelectorAll('.purse, .corner, .look')) {
-      if (this.view === 'desk' && element.matches('.look-right')) continue;
+      if (this.view === 'desk' && element.matches('.look-right') && !returnableRound) continue;
       const rect = element.getBoundingClientRect();
       if (rect.top < height / 3) top = Math.max(top, rect.bottom);
       else bottom = Math.max(bottom, height - rect.top);

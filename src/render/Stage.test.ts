@@ -205,6 +205,32 @@ describe('desk framing', () => {
     expect(stage.touchBottom).toBe(136);
   });
 
+  it.each([1, 2, 3, 4, 5, 6, 7, 8])('reserves phone navigation above a returnable %i-ticket round without changing normal rounds', count => {
+    const stage = stageAt(390, 844);
+    const initial = createInitialState(4);
+    const held = buyTicket({ ...initial, money: 1000000, licenses: ['dong', 'bac'],
+      upgrades: { luck: 0, desk: count - 1, bulk: 3 }, bulkLot: 10,
+      incidents: { ...initial.incidents, current: { kind: 'defectiveStock', phase: 'active', remainingMs: 10000, cost: 0 } },
+    }, 'bac');
+    stage.state = { ...held, deskQueue: held.deskQueue.slice(0, count - 1) };
+    stage.ready = true;
+    stage.aim = vi.fn();
+    const nav = { matches: () => true, getBoundingClientRect: () => ({ top: 677, bottom: 721 }) };
+    stage.host.parentElement = {
+      style: { getPropertyValue: () => '', setProperty: vi.fn() },
+      querySelector: (selector: string) => selector === '.prompt' ? { getBoundingClientRect: () => ({ top: 731, height: 101 }) } : null,
+      querySelectorAll: () => [nav],
+    };
+    stage.measureHud();
+    expect(stage.touchBottom).toBe(count > 1 ? 173 : 119);
+    stage.state = { ...stage.state, ticket: { ...stage.state.ticket, scratchStarted: true } };
+    stage.measureHud();
+    expect(stage.touchBottom).toBe(119);
+    stage.state = { ...stage.state, ticket: null, deskQueue: [] };
+    stage.measureHud();
+    expect(stage.touchBottom).toBe(119);
+  });
+
   it.each([
     ['Golden Hour only', 124, null],
     ['incident only', 133, 133],
