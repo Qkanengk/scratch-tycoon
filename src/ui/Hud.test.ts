@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { buyTicket, collectTicket, revealTicket } from '../game/economy';
+import { buyTicket, canClaimPromo, claimPromo, collectTicket, revealTicket } from '../game/economy';
 import { createInitialState, type GameState } from '../game/state';
 import { ContractNotice, IncidentNotice, PromptChip, promptFor } from './Hud';
 import { prestigeScenario } from './debugPrestige';
@@ -24,6 +24,22 @@ describe('prepaid robot loading prompt', () => {
 });
 
 describe('upgrade and bulk prompt chips', () => {
+  it('offers the broke-player promo at the rack with a busy desk and spare capacity', () => {
+    const held = buyTicket({ ...fresh(), money: 1000, upgrades: { luck: 0, desk: 0, bulk: 1 } }, 'dong');
+    const state = { ...held, money: 0, promoReadyAt: 1000 };
+    expect(canClaimPromo(state, 1000)).toBe(true);
+    expect(promptFor(state, 500, 'shop', 0).button).toMatchObject({ command: 'promo', disabled: true });
+    expect(promptFor(state, 1000, 'shop', 0).button).toMatchObject({ command: 'promo', disabled: false });
+    const claimed = claimPromo(state, 1000);
+    expect(claimed.ticket).toBe(state.ticket);
+    expect(claimed.deskQueue[0]?.free).toBe(true);
+    expect(claimed.money).toBe(0);
+    expect(promptFor(state, 1000, 'desk', 0).button?.command).not.toBe('promo');
+    const full = { ...state, deskQueue: Array.from({ length: 4 }, () => state.ticket!) };
+    expect(canClaimPromo(full, 1000)).toBe(false);
+    expect(promptFor(full, 1000, 'shop', 0).button?.command).not.toBe('promo');
+    expect(promptFor({ ...state, money: 10 }, 1000, 'shop', 0).button?.command).toBe('buy');
+  });
   it.each([0, 10, 100])('previews bulk buying after collecting a revealed round with %s xu left', money => {
     const held = revealTicket(buyTicket({ ...createInitialState(4), money: 1000, upgrades: { luck: 0, desk: 2, bulk: 1 }, bulkLot: 5 }, 'dong'));
     const state = { ...held, money };

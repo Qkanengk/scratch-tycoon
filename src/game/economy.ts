@@ -206,7 +206,7 @@ export function canClaimPromo(state: GameState, now: number): boolean {
   return promoEligible(state) && state.promoReadyAt !== null && now >= state.promoReadyAt;
 }
 
-function promoEligible(state: GameState): boolean {
+export function promoEligible(state: GameState): boolean {
   return state.money < cheapestPrice() && heldCount(state) < holdCapacity(state);
 }
 

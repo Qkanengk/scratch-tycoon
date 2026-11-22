@@ -1,6 +1,6 @@
 import type { Incident } from '../game/incidents';
 import { ticketDef, TICKETS } from '../data/tickets';
-import { canBuyTicket, canClaimPromo, collectTicket, isBroke, promoTicketDef, ticketRefund } from '../game/economy';
+import { canBuyTicket, canClaimPromo, collectTicket, isBroke, promoEligible, promoTicketDef, ticketRefund } from '../game/economy';
 import { formatMoney, formatCompact } from '../game/format';
 import type { GameState } from '../game/state';
 import { jackpotTier } from '../game/tickets';
@@ -83,6 +83,15 @@ export function promptFor(state: GameState, now: number, view: View, progress: n
       button: { label: t('shop.buyLicense', { cost: money(next.unlock.licenseCost) }), command: 'license', disabled: !unlockProgress(state, next.id).canBuyLicense },
     };
   }
+  if ((view === 'shop' && promoEligible(state)) || isBroke(state)) {
+    const ready = canClaimPromo(state, now);
+    const seconds = Math.max(1, Math.ceil(((state.promoReadyAt ?? now) - now) / 1000));
+    return {
+      tone: 'idle',
+      message: ready ? t('table.promoReady', { name: t(`ticket.${promoTicketDef(state).id}.name`) }) : t('table.promoWait', { seconds }),
+      button: { label: t('table.promoClaim'), command: 'promo', disabled: !ready },
+    };
+  }
   if (view === 'shop' && secondary && !isBroke(state)) {
     const purchaseState = collectTicket(state);
     const def = ticketDef(state.selected);
@@ -109,15 +118,6 @@ export function promptFor(state: GameState, now: number, view: View, progress: n
     if (refund > 0) return { tone: 'idle', wrap: true, message: t('incident.defectiveStock.ticket'),
       button: { label: t('drain.return', { cost: formatMoney(refund) }), command: 'return' } };
     return { tone: 'idle', message: progress > 0 ? t('table.progress', { percent: Math.floor(progress * 100) }) : t('table.hint'), progress };
-  }
-  if (isBroke(state)) {
-    const ready = canClaimPromo(state, now);
-    const seconds = Math.max(1, Math.ceil(((state.promoReadyAt ?? now) - now) / 1000));
-    return {
-      tone: 'idle',
-      message: ready ? t('table.promoReady', { name: t(`ticket.${promoTicketDef(state).id}.name`) }) : t('table.promoWait', { seconds }),
-      button: { label: t('table.promoClaim'), command: 'promo', disabled: !ready },
-    };
   }
   const def = ticketDef(state.selected);
   const name = t(`ticket.${def.id}.name`);
