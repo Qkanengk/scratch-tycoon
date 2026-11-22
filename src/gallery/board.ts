@@ -90,6 +90,6 @@ export function buildBoard(root: HTMLElement): void {
 
   const brand = section(root, 'Biểu trưng', 'Đồng xu từ Kenney.');
   brand.appendChild(tile('coin', `<img src="${ASSETS}/brand/coin.png" width="96" height="96" alt="">`, 120));
-  root.appendChild(el('p', 'margin:18px', `<a href="${ASSETS}/credits/credits.html">Nguồn tài nguyên</a>`));
+  root.appendChild(el('p', 'margin:18px', `<a href="${ASSETS}/credits/credits.html" target="_blank" rel="noreferrer">Nguồn tài nguyên</a>`));
   root.appendChild(el('div', 'height:40px'));
 }
