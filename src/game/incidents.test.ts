@@ -48,6 +48,22 @@ describe('kiosk incidents', () => {
     expect(resolve(due('theft', 3)).money).toBe(3);
   });
 
+  it('draws the next incident independently of its scheduled delay, including after reload', () => {
+    const state = due('theft', 100);
+    const rng = new Rng(state.incidents.rngState);
+    rng.pick(INCIDENT_KINDS);
+    const [min, max] = INCIDENTS.intervalMs;
+    const delay = min + rng.int(max - min + 1);
+    const savedRng = rng.state;
+    const nextKind = rng.pick(INCIDENT_KINDS.filter(kind => kind !== 'badLuck'));
+
+    const warning = advanceKioskTime(state, 1);
+    expect(warning.incidents.nextInMs).toBe(delay);
+    const loaded = migrate(JSON.parse(serialize(warning)))!;
+    expect(loaded.incidents.rngState).toBe(savedRng);
+    expect(advanceKioskTime(loaded, delay).incidents.current?.kind).toBe(nextKind);
+  });
+
   it('only fines a fake on the desk and gives the player time to return it', () => {
     const state = due('inspection', 1000);
     const ticket = buyTicket(state, 'dong').ticket!;

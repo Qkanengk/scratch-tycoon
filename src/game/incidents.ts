@@ -60,9 +60,10 @@ export function tickIncidents(state: GameState, elapsedMs: number): GameState {
   const rng = new Rng(rngState);
   const choices = state.incidents.recentBigWin ? INCIDENT_KINDS : INCIDENT_KINDS.filter(kind => kind !== 'badLuck');
   const kind = rng.pick(choices);
+  const nextDelay = delay(rng);
   return { ...state, incidents: {
     rngState: rng.state,
-    nextInMs: delay(rng),
+    nextInMs: nextDelay,
     recentBigWin: false,
     current: { kind, phase: 'warning', remainingMs: INCIDENTS.warningMs, cost: 0 },
   } };
