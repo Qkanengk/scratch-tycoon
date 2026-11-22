@@ -1,9 +1,4 @@
-@import '@fontsource/baloo-2/vietnamese-600.css';
-@import '@fontsource/baloo-2/vietnamese-700.css';
-@import '@fontsource/baloo-2/vietnamese-800.css';
-@import '@fontsource/baloo-2/latin-600.css';
-@import '@fontsource/baloo-2/latin-700.css';
-@import '@fontsource/baloo-2/latin-800.css';
+@import '../i18n/font.css';
 
 :root {
   --ink: #2b1b17;
@@ -345,14 +340,10 @@ kbd {
   opacity: 1;
 }
 
-.look svg {
-  width: 24px;
-  height: 24px;
-  fill: none;
-  stroke: var(--gold);
-  stroke-width: 4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.look .icon {
+  width: 20px;
+  height: 20px;
+  color: var(--gold);
 }
 
 .look-up {

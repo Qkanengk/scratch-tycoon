@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import '@fontsource/baloo-2/vietnamese-700.css';
-import '@fontsource/baloo-2/latin-700.css';
+import '../i18n/font.css';
 import { buildBoard } from './board';
+import { loadFonts, preloadImages } from '../render/assets';
+import { faceText } from '../render/ticketFace';
 import { fitToSize, isFiniteBox, posedBounds, toonify, unskin } from '../render/toon';
 
 /**
@@ -81,6 +82,7 @@ async function load(): Promise<void> {
     tiles.push({ el, scene, model, mixer });
   }
   if (!transparent && !only) {
+    await Promise.all([preloadImages(), loadFonts(faceText())]);
     const board = document.createElement('div');
     host.after(board);
     buildBoard(board);

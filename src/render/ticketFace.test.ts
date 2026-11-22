@@ -3,21 +3,28 @@ import { TICKETS } from '../data/tickets';
 import { createMask, scratchSegment } from '../game/scratch';
 import { drawFace, restoreFoil, ticketMetrics } from './ticketFace';
 
-vi.mock('./assets', () => ({ image: () => ({}), rasterize: () => ({}) }));
+vi.mock('./assets', async importOriginal => ({
+  ...await importOriginal<typeof import('./assets')>(),
+  image: (path: string) => ({ path, naturalWidth: 100, naturalHeight: 100 }),
+}));
 
 describe('ticketMetrics', () => {
   it.each(['ngoc', 'rong', 'vutru'] as const)('keeps the %s seal below the entire printed rule line', id => {
     const fillText = vi.fn();
-    const arc = vi.fn();
-    const translate = vi.fn();
-    const ctx = new Proxy({ fillText, arc, translate, measureText: () => ({ width: 100 }), font: '' }, { get: (target, key) => Reflect.get(target, key) ?? vi.fn() });
+    const drawImage = vi.fn();
+    const ctx = new Proxy({ fillText, drawImage, measureText: () => ({ width: 100 }), font: '' }, { get: (target, key) => Reflect.get(target, key) ?? vi.fn() });
     const canvas = { width: 1024, height: 1024, getContext: () => ctx } as unknown as HTMLCanvasElement;
     drawFace(canvas, id, null, false);
     const rule = fillText.mock.calls.find(([text]) => text.startsWith(id === 'rong' ? 'Đủ 3' : 'Trùng số'))!;
-    const sealCenter = translate.mock.calls.at(-1)!;
-    const radius = arc.mock.calls.at(-1)![2];
+    const seal = drawImage.mock.calls.find(([img]) => img.path === 'stickers/jewel.png')!;
     const ruleFontHeight = .25 * 1024 * .86 * .29;
-    expect(sealCenter[1] - radius).toBeGreaterThan(rule[2] + ruleFontHeight / 2);
+    expect(seal[2]).toBeGreaterThan(rule[2] + ruleFontHeight / 2);
+    if (id === 'vutru') {
+      const [, x, y, width] = drawImage.mock.calls.find(([img]) => img.path === 'stickers/spaceship.png')!;
+      const [, serialX, , serialWidth] = fillText.mock.calls.find(([text]) => text.includes('000001'))!;
+      expect(y).toBeGreaterThan(rule[2] + ruleFontHeight / 2);
+      expect(x + width).toBeLessThan(serialX - serialWidth / 2);
+    }
   });
   it.each(TICKETS.map((def) => def.id))('keeps the scratch window of %s inside the ticket', (id) => {
     const m = ticketMetrics(id);

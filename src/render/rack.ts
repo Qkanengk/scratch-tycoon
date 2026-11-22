@@ -6,8 +6,9 @@ import { unlockProgress } from '../game/unlocks';
 import { t } from '../i18n';
 import { canvasTexture, rasterize } from './assets';
 import { palette } from './palette';
-import { inkBox, inkCard } from './shapes';
-import { drawFace, drawFoil, ticketMetrics } from './ticketFace';
+import { inkCard } from './shapes';
+import { kioskProp } from './kioskModels';
+import { ticketMetrics, ticketSample } from './ticketFace';
 
 const CARD_W = 0.38;
 const SPACING = 0.5;
@@ -26,21 +27,6 @@ interface Slot {
   tagTexture: THREE.CanvasTexture;
   drawn: string;
   height: number;
-}
-
-/** A blank ticket with its foil on, as it hangs on the rack. */
-function sample(id: TicketId): HTMLCanvasElement {
-  const m = ticketMetrics(id);
-  const face = document.createElement('canvas');
-  face.width = 384;
-  face.height = Math.round(384 * m.height);
-  drawFace(face, id, null, false);
-  const foil = document.createElement('canvas');
-  foil.width = Math.round(384 * m.window.w);
-  foil.height = Math.round(foil.width * m.layout.height);
-  drawFoil(foil, id);
-  face.getContext('2d')!.drawImage(foil, m.window.x * 384, m.window.y * 384);
-  return face;
 }
 
 function drawTag(canvas: HTMLCanvasElement, def: TicketDef, unlocked: boolean, affordable: boolean): void {
@@ -78,7 +64,7 @@ export class Rack {
     const lockTexture = canvasTexture(rasterize('stickers/lock.png', 256));
     for (const def of TICKETS) {
       const height = ticketMetrics(def.id).height * CARD_W;
-      const card = inkCard(CARD_W, height, canvasTexture(sample(def.id)));
+      const card = inkCard(CARD_W, height, canvasTexture(ticketSample(def.id, 384)));
       card.position.y = height / 2;
       const front = card.getObjectByName('front') as Slot['front'];
       const lock = new THREE.Mesh(new THREE.PlaneGeometry(0.17, 0.17), new THREE.MeshBasicMaterial({ map: lockTexture, transparent: true }));
@@ -119,7 +105,8 @@ export class Rack {
     this.rows.forEach((row, r) => {
       const y = r * 0.62;
       const z = -r * 0.34;
-      const stand = inkBox(row.length * SPACING + 0.08, STAND_H + y, 0.32, 0x9c5a2a);
+      if (!row.length) return;
+      const stand = kioskProp('counter', [row.length * SPACING + 0.08, STAND_H + y, 0.32]);
       stand.position.set(0, 0, z);
       this.stands.add(stand);
       row.forEach((id, i) => {

@@ -12,6 +12,7 @@ import { canPrestige } from '../game/prestige';
 import { PRESTIGE } from '../data/prestige';
 import { licenseWait } from '../render/board';
 import { blockRepeatedOffering } from './altarRitual';
+import { Icon } from './Icon';
 
 export type Command = 'buy' | 'collect' | 'promo' | 'license' | 'robot' | 'awayReceipt' | 'incense';
 
@@ -101,14 +102,10 @@ export function PromptChip({ prompt, onCommand }: { prompt: Prompt; onCommand: (
   );
 }
 
-const ARROWS = { up: 'M5 15 L12 8 L19 15', down: 'M5 9 L12 16 L19 9', left: 'M15 5 L8 12 L15 19', right: 'M9 5 L16 12 L9 19' };
-
-export function LookButton({ direction, label, testid, onClick }: { direction: keyof typeof ARROWS; label: string; testid: string; onClick: () => void }) {
+export function LookButton({ direction, label, testid, onClick }: { direction: 'up' | 'down' | 'left' | 'right'; label: string; testid: string; onClick: () => void }) {
   return (
     <button className={`look look-${direction}`} data-testid={testid} onClick={onClick}>
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d={ARROWS[direction]} />
-      </svg>
+      <Icon name={`arrow-${direction}`} />
       {label}
     </button>
   );

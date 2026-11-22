@@ -1,112 +1,30 @@
-# Assets
+# Asset sources
 
-Everything under `public/assets` is either CC0 (public domain) or original work made for this game. No asset
-needs attribution; the credits below are given anyway. Preview the whole set with `npm run dev` and open
-`/gallery.html` (the asset board: models on a turntable, stickers, ticket mock-ups, patterns, effects, icons, sounds).
+Scratch Tycoon uses free third-party art and audio. Three.js applies the game's toon shading, outlines and placement at runtime. Canvases lay out the localized game text, ticket rules, prices, and scratch masks over sourced art; these layouts do not ship as separate illustrations.
 
-## Style rules
+The [in-game credits](public/assets/credits/credits.html) and [model inventory](public/assets/models/manifest.json) retain author and source links. License copies live in [the credits directory](public/assets/credits).
 
-### Đổi đời / Thần Tài
+## Models
 
-The lacquer wall altar, seated Thần Tài figure, incense pot and sticks, oranges, lamp and gold ingots
-are original hand-built geometry in `src/render/altar.ts`, using the existing toon ramp and ink outlines.
-Its painted wooden tablet is original canvas lettering. Vũ Trụ's navy/violet stars and ringed planet
-are original SVG/canvas artwork (`public/assets/patterns/paper-vutru.svg`, `src/render/ticketFace.ts`).
-The ritual reuses the original `smoke-puff` and `coin` particles and existing `unlock` sound below.
-No downloaded assets or additional licences.
+The inventory includes each GLB's original page, author, and license. Models from Kenney, Quaternius, Pichuliru, and Kay Lousberg are CC0 1.0. The Paint roller by Poly by Google is CC BY 3.0, used as the motorized scratch tool. The game applies toon materials, tints and a rotation to that model; its downloaded GLB is unchanged.
 
-### Drains and hazards scene additions
+## Images and textures
 
-Rent notices, payout receipt paper, return tags, hologram seals, serial checks and tool wear scuffs are original procedural geometry/canvas artwork in `src/render` (no external assets). The repair tags reuse `public/assets/icons/wrench.png` (Kenney Game Icons, CC0 1.0, see Icons below); bombs reuse the CC0 Kenney-derived `stickers/bomb.png`; blast feedback reuses the original `particles/smoke-puff.svg` and existing game audio documented below. No new downloaded assets.
-
-- Models are drawn with the game's toon shader (`src/render/toon.ts`): three flat light bands and an ink outline.
-- Ink is `#2b1b17`; the rest of the palette is in `src/render/palette.ts`. 2D art uses flat fills and thick ink lines.
-- No emoji and no gradients-with-glow. Symbols on tickets are stickers baked from the 3D models, so 2D and 3D match.
-
-## 3D models (`public/assets/models`)
-
-All CC0 1.0. `manifest.json` in that folder is the machine-readable version of this table.
-
-| Id | File | Author | Source | Used for |
-| --- | --- | --- | --- | --- |
-| `platformer-kit/coin-gold` | `public/assets/models/kenney-platformer-kit/coin-gold.glb` | Kenney | [kenney.nl](https://kenney.nl/assets/platformer-kit) | tool: đồng xu cào |
-| `food-kit/cherries` | `public/assets/models/kenney-food-kit/cherries.glb` | Kenney | [kenney.nl](https://kenney.nl/assets/food-kit) | symbol: Vé Đồng |
-| `food-kit/lemon` | `public/assets/models/kenney-food-kit/lemon.glb` | Kenney | [kenney.nl](https://kenney.nl/assets/food-kit) | symbol: Vé Đồng |
-| `quaternius/bell` | `public/assets/models/quaternius/bell.glb` | Quaternius | [poly.pizza](https://poly.pizza/m/cILuaO115Y) | symbol: Vé Đồng |
-| `platformer-kit/jewel` | `public/assets/models/kenney-platformer-kit/jewel.glb` | Kenney | [kenney.nl](https://kenney.nl/assets/platformer-kit) | symbol: Vé Đồng, Vé Ngọc |
-| `quaternius/crown` | `public/assets/models/quaternius/crown.glb` | Quaternius | [poly.pizza](https://poly.pizza/m/i0PZVuVlYv) | symbol: Vé Đồng (jackpot) |
-| `original/gourd` | `public/assets/models/original/gourd.glb` | Scratch Tycoon | [scripts/assets/make-gourd.py](scripts/assets/make-gourd.py) | symbol: Vé Bạc (bầu) |
-| `quaternius/crab` | `public/assets/models/quaternius/crab.glb` | Quaternius | [poly.pizza](https://poly.pizza/m/Gs3yfsV5lB) | symbol: Vé Bạc (cua) |
-| `quaternius/fish-a` | `public/assets/models/quaternius/fish-a.glb` | Quaternius | [poly.pizza](https://poly.pizza/m/BEcU9rjiAq) | symbol: Vé Bạc (cá) |
-| `quaternius/chicken-a` | `public/assets/models/quaternius/chicken-a.glb` | Quaternius | [poly.pizza](https://poly.pizza/m/ineV9pU5VL) | symbol: Vé Bạc (gà) |
-| `quaternius/stag` | `public/assets/models/quaternius/stag.glb` | Quaternius | [poly.pizza](https://poly.pizza/m/tQdzbZ1Cmw) | symbol: Vé Bạc (nai, jackpot) |
-| `platformer-kit/star` | `public/assets/models/kenney-platformer-kit/star.glb` | Kenney | [kenney.nl](https://kenney.nl/assets/platformer-kit) | symbol: số may mắn, hiệu ứng thắng |
-| `quaternius/dragon-evolved` | `public/assets/models/quaternius/dragon-evolved.glb` | Quaternius | [poly.pizza](https://poly.pizza/m/LlwD0QNUPj) | symbol: Vé Rồng (rồng) |
-| `platformer-kit/bomb` | `public/assets/models/kenney-platformer-kit/bomb.glb` | Kenney | [kenney.nl](https://kenney.nl/assets/platformer-kit) | symbol: Vé Rồng (bom) |
-| `quaternius/coins` | `public/assets/models/quaternius/coins.glb` | Quaternius | [poly.pizza](https://poly.pizza/m/VaGFKE0n0F) | reward: thắng nhỏ |
-| `quaternius/star-coin` | `public/assets/models/quaternius/star-coin.glb` | Quaternius | [poly.pizza](https://poly.pizza/m/n5nJIQAozN) | reward: xu thưởng |
-| `quaternius/gold-bag` | `public/assets/models/quaternius/gold-bag.glb` | Quaternius | [poly.pizza](https://poly.pizza/m/vFFblhnHtb) | reward: thắng vừa |
-| `quaternius/gold-ingots` | `public/assets/models/quaternius/gold-ingots.glb` | Quaternius | [poly.pizza](https://poly.pizza/m/3jRhAgbc6t) | reward: thắng lớn |
-| `platformer-kit/chest` | `public/assets/models/kenney-platformer-kit/chest.glb` | Kenney | [kenney.nl](https://kenney.nl/assets/platformer-kit) | reward: jackpot |
-| `platformer-kit/lock` | `public/assets/models/kenney-platformer-kit/lock.glb` | Kenney | [kenney.nl](https://kenney.nl/assets/platformer-kit) | shop: vé chưa mở khóa |
-| `mini-arcade/ticket-machine` | `public/assets/models/kenney-mini-arcade/ticket-machine.glb` | Kenney | [kenney.nl](https://kenney.nl/assets/mini-arcade) | prop: máy bán vé |
-| `mini-arcade/cash-register` | `public/assets/models/kenney-mini-arcade/cash-register.glb` | Kenney | [kenney.nl](https://kenney.nl/assets/mini-arcade) | prop: quầy thu ngân |
-| `mini-arcade/prize-wheel` | `public/assets/models/kenney-mini-arcade/prize-wheel.glb` | Kenney | [kenney.nl](https://kenney.nl/assets/mini-arcade) | prop: vé khuyến mãi |
-| `mini-arcade/gambling-machine` | `public/assets/models/kenney-mini-arcade/gambling-machine.glb` | Kenney | [kenney.nl](https://kenney.nl/assets/mini-arcade) | prop: trang trí bàn |
-| `mini-shop/gacha-machine` | `public/assets/models/kenney-mini-shop/gacha-machine.glb` | Kenney | [kenney.nl](https://kenney.nl/assets/mini-shop) | prop: trang trí bàn |
-
-Kenney packs: [Platformer Kit](https://kenney.nl/assets/platformer-kit), [Food Kit](https://kenney.nl/assets/food-kit),
-[Mini Arcade](https://kenney.nl/assets/mini-arcade), [Mini Shop](https://kenney.nl/assets/mini-shop). Each kit's
-`Textures/colormap.png` is the shared colour atlas its models reference. Quaternius models were downloaded from
-[Poly Pizza](https://poly.pizza/u/Quaternius), where each model page states CC0 1.0.
-
-## Stickers (`public/assets/stickers`)
-
-One 256 px transparent PNG per model, baked from the asset board with `scripts/assets/bake-stickers.mjs`.
-Derived from the CC0 models above, so CC0 as well. Re-bake after changing a model, the shader or a `yaw` in the manifest.
-
-## Patterns, particles, brand (`public/assets/patterns`, `particles`, `brand`)
-
-Original SVGs for this game, generated by `scripts/assets/make-patterns.py` and `scripts/assets/make-particles.py`.
-
-| Files | Used for |
-| --- | --- |
-| `patterns/paper-dong.svg`, `paper-bac.svg`, `paper-vang.svg`, `paper-ngoc.svg`, `paper-rong.svg` | Ticket paper of the five tiers (cash coins, waves, star lattice, cut gems, dragon scales) |
-| `patterns/foil.svg` | Scratch-off layer |
-| `patterns/table-wood.svg`, `patterns/mat-felt.svg` | Table top and the mat under the ticket |
-| `particles/foil-flake-a.svg`, `foil-flake-b.svg`, `foil-curl.svg`, `smoke-puff.svg` | Scratching debris |
-| `particles/star.svg`, `sparkle.svg`, `coin.svg`, `ring.svg`, `confetti-*.svg` | Win effects |
-| `brand/logo-mark.svg`, `brand/favicon.svg` | Logo mark and browser icon |
-
-## Interface icons (`public/assets/icons`)
-
-White 100 px PNGs from Kenney's [Game Icons](https://kenney.nl/assets/game-icons) (CC0 1.0), renamed to kebab-case.
-They are tinted in CSS where used.
-
-## Sounds (`public/assets/audio`)
-
-Kenney (CC0 1.0), converted from OGG to mono MP3 so they also play in Safari.
-
-| Files | Source pack | Used for |
+| Game files | Original source | License |
 | --- | --- | --- |
-| `scratch-1.mp3` to `scratch-5.mp3` | [Interface Sounds](https://kenney.nl/assets/interface-sounds) | Scratching, picked at random |
-| `ticket-buy.mp3`, `ticket-deal.mp3`, `ticket-collect.mp3` | [Casino Audio](https://kenney.nl/assets/casino-audio) | Buying a ticket, ticket landing on the table, collecting it |
-| `coin-1.mp3` to `coin-3.mp3`, `coins-many.mp3` | Casino Audio | Money counting up |
-| `reveal.mp3`, `win-small.mp3`, `win-big.mp3`, `win-jackpot.mp3`, `lose.mp3` | Interface Sounds | Ticket result |
-| `unlock.mp3`, `promo.mp3` | Interface Sounds | New ticket type unlocked, free ticket ready |
-| `ui-click.mp3`, `ui-select.mp3`, `ui-error.mp3` | Interface Sounds | Buttons |
+| `patterns/paper-{dong,bac,vang,ngoc,rong}.png` | Kenney [Boardgame Pack](https://kenney.nl/assets/boardgame-pack), card backs red2, blue4, red5, green2 and red4 | CC0 1.0 |
+| `patterns/paper-vutru.png`, `stickers/spaceship.png` | Kenney [Space Shooter Redux](https://opengameart.org/content/space-shooter-redux), darkPurple and playerShip2_blue | CC0 1.0 |
+| `patterns/{foil,mat-felt,wall,paper}.png` | Kenney [Prototype Textures](https://opengameart.org/content/prototype-textures), tinted in game | CC0 1.0 |
+| `patterns/table-wood.png` | OzMaister, [Seamless Cartoon Textures — wood_floor.jpg](https://opengameart.org/content/seamless-cartoon-textures-woodfloorjpg), converted to greyscale and tinted in game | CC0 1.0 |
+| `stickers/gourd.png` | [Calabash bottle gourd](https://creazilla.com/media/clipart/7801006/calabash-bottle-gourd), Creazilla's public-domain collection, resized | CC0 1.0 |
+| `src/render/than-tai.svg` | lkamming, [chinese new year](https://openclipart.org/detail/213211/chinese-new-year), displayed in the shrine with a runtime palette swap | [CC0 1.0](https://openclipart.org/share) |
+| Other `stickers/*.png` | Existing transparent renders of the sourced CC0 models in the model inventory | CC0 1.0 |
+| `particles/*.png` | Kenney [Particle Pack](https://opengameart.org/content/particle-pack-80-sprites), dirt_01–03, spark_04, smoke_01, star_05, circle_02 and star_06. The original monochrome masks were resized and converted to alpha for standard sprite blending. | CC0 1.0 |
+| `brand/coin.png` | Kenney [Platformer Pack Remastered](https://kenney.nl/assets/platformer-pack-remastered), coinGold | CC0 1.0 |
+| `icons/*.png` | Kenney [Game Icons](https://kenney.nl/assets/game-icons), white 100 px PNGs | CC0 1.0 |
 
-## Font
+## Audio and fonts
 
-[Baloo 2](https://fonts.google.com/specimen/Baloo+2) by Ek Type, SIL Open Font License 1.1, installed from
-`@fontsource/baloo-2` (Vietnamese and Latin subsets). The OFL asks that the licence ships with the font; the package includes it.
+Kenney's [Interface Sounds](https://kenney.nl/assets/interface-sounds) and [Casino Audio](https://kenney.nl/assets/casino-audio) (CC0 1.0) are stored under `public/assets/audio` as mono MP3 for browser compatibility. The complete [Baloo 2 variable font](https://github.com/google/fonts/tree/main/ofl/baloo2) by Ek Type is stored as WOFF2 under the SIL Open Font License 1.1.
 
-## Regenerating
-
-```sh
-python3 scripts/assets/make-gourd.py       # models/original/gourd.glb
-python3 scripts/assets/make-patterns.py    # patterns/*.svg
-python3 scripts/assets/make-particles.py   # particles/*.svg, brand/*.svg
-npm run dev -- --port 5199 &               # then:
-node scripts/assets/bake-stickers.mjs      # stickers/*.png (needs google-chrome and Pillow)
-```
+The development [asset gallery](gallery.html) previews the downloaded models through the game shader, shows ticket samples from the same renderer as the game, and links to the credits.

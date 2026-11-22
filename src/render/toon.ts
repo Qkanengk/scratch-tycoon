@@ -93,6 +93,7 @@ export function toonify(root: THREE.Object3D, { outline = 0.02 }: ToonOptions = 
   });
   const scale = new THREE.Vector3();
   for (const mesh of meshes) {
+    if (!mesh.geometry.hasAttribute('normal')) mesh.geometry.computeVertexNormals();
     mesh.material = Array.isArray(mesh.material) ? mesh.material.map(toToon) : toToon(mesh.material);
     if (outline <= 0) continue;
     mesh.getWorldScale(scale);
@@ -116,7 +117,8 @@ export function toonify(root: THREE.Object3D, { outline = 0.02 }: ToonOptions = 
 
 /** Bounds of a model in its current pose; empty-safe for rigs whose pose is broken. */
 export function posedBounds(root: THREE.Object3D): THREE.Box3 {
-  root.updateWorldMatrix(true, true);
+  root.updateWorldMatrix(true, false);
+  root.updateMatrixWorld(true);
   // Skinned models only report their posed size once the bone matrices are current.
   root.traverse((node) => (node as THREE.SkinnedMesh).skeleton?.update());
   return new THREE.Box3().setFromObject(root, true);

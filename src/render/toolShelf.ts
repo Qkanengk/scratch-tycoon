@@ -6,8 +6,9 @@ import { repairPrice, toolIntent, toolUpgradePrice } from '../game/tools';
 import { t } from '../i18n';
 import { canvasTexture, image } from './assets';
 import { palette } from './palette';
-import { inkBox, inkCard } from './shapes';
+import { inkCard } from './shapes';
 import { buildToolModel, disposeToolObject } from './toolModels';
+import { kioskProp } from './kioskModels';
 
 const FONT = '"Baloo 2", system-ui, sans-serif';
 const WIDTH = 1.75;
@@ -29,6 +30,7 @@ export function shelfSlot(index: number): THREE.Vector3 {
 export class ToolShelf {
   readonly group = new THREE.Group();
   private readonly slots = new Map<ToolId, { group: THREE.Group; canvas: HTMLCanvasElement; texture: THREE.CanvasTexture; model: THREE.Group; repair: THREE.Mesh; key: string }>();
+  private readonly headerTexture: THREE.CanvasTexture;
   private repaired: ToolId | null = null;
   private repairedTime = 0;
   private failed: ToolId | null = null;
@@ -36,20 +38,9 @@ export class ToolShelf {
 
   constructor() {
     this.group.name = 'tool-shelf';
-    const back = inkBox(WIDTH, HEIGHT, 0.09, 0x995a30);
-    back.position.z = -0.06;
-    const cork = inkBox(WIDTH - 0.12, HEIGHT - 0.13, 0.025, 0xc98a4b);
-    cork.position.set(0, 0.065, 0);
-    this.group.add(back, cork);
-    const holes = new THREE.Group();
-    const geo = new THREE.CircleGeometry(0.012, 8);
-    const mat = new THREE.MeshBasicMaterial({ color: 0x80532e });
-    for (let x = -0.74; x <= 0.75; x += 0.12) for (let y = 0.16; y < 2.2; y += 0.12) {
-      const hole = new THREE.Mesh(geo, mat);
-      hole.position.set(x, y, 0.028);
-      holes.add(hole);
-    }
-    this.group.add(holes);
+    const shelf = kioskProp('shelf', [WIDTH, HEIGHT, .34], undefined, 0xf4af5b);
+    shelf.position.z = -.16;
+    this.group.add(shelf);
     const header = document.createElement('canvas');
     header.width = 1024;
     header.height = 150;
@@ -61,17 +52,14 @@ export class ToolShelf {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(t('tools.title'), 512, 82);
-    const sign = inkCard(1.57, 0.23, canvasTexture(header));
+    this.headerTexture = canvasTexture(header);
+    const sign = inkCard(1.57, 0.23, this.headerTexture);
     sign.position.set(0, 2.13, 0.07);
     sign.traverse(node => { node.userData.action = { kind: 'tools' }; });
     this.group.add(sign);
     for (const [i, tool] of TOOLS.entries()) {
       const slot = new THREE.Group();
       slot.position.copy(shelfSlot(i));
-      const ledge = inkBox(0.73, 0.035, 0.23, 0x8b4c28, 0.006);
-      ledge.position.set(0, -0.16, -0.04);
-      const hook = inkBox(0.025, 0.11, 0.13, 0xaeb4c2, 0.004);
-      hook.position.set(0, 0.17, -0.06);
       const canvas = document.createElement('canvas');
       canvas.width = 640;
       canvas.height = 280;
@@ -86,7 +74,7 @@ export class ToolShelf {
       repair.userData.action = { kind: 'repair', id: tool.id };
       repair.visible = false;
       const model = new THREE.Group();
-      slot.add(ledge, hook, tag, hit, model, repair);
+      slot.add(tag, hit, model, repair);
       this.group.add(slot);
       this.slots.set(tool.id, { group: slot, canvas, texture, model, repair, key: '' });
     }
@@ -111,11 +99,6 @@ export class ToolShelf {
       model.position.y = tool.id === 'coin' ? 0.035 : -0.1;
       model.rotation.y = -0.12;
       slot.model.add(model);
-      if (offer.owned) for (let i = 0; i < tool.maxLevel; i++) {
-        const pip = new THREE.Mesh(new THREE.CircleGeometry(0.014, 10), new THREE.MeshBasicMaterial({ color: i < level ? palette.gold : '#80532e' }));
-        pip.position.set(-0.25 + i * 0.055, -0.13, 0.22);
-        slot.model.add(pip);
-      }
       const ctx = slot.canvas.getContext('2d')!;
       ctx.fillStyle = failed ? palette.red : offer.equipped ? palette.gold : palette.paper;
       ctx.fillRect(0, 0, 640, 280);
@@ -181,12 +164,8 @@ export class ToolShelf {
   repairedTool(id: ToolId): void { this.repaired = id; this.repairedTime = 1.8; }
 
   dispose(): void {
-    this.group.traverse(node => {
-      if (!(node instanceof THREE.Mesh)) return;
-      for (const material of Array.isArray(node.material) ? node.material : [node.material]) {
-        if ('map' in material) (material.map as THREE.Texture | null)?.dispose();
-      }
-    });
+    this.headerTexture.dispose();
+    this.slots.forEach(slot => slot.texture.dispose());
     disposeToolObject(this.group);
   }
 

@@ -16,6 +16,7 @@ import { buildRoom, desktopLayout, layoutCounterProp, WALL_Z } from './room';
 import { flat, roundedRect } from './shapes';
 import { drawFace, drawFoil, eraseFoil, peelFoil, restoreFoil, ticketMetrics, type TicketMetrics } from './ticketFace';
 import { animateToolModel, buildToolModel, disposeToolObject } from './toolModels';
+import { preloadKioskModels } from './kioskModels';
 import { ToolShelf } from './toolShelf';
 import { INK } from './toon';
 import { Paper, receiptLines, rentLines } from './paper';
@@ -274,7 +275,7 @@ export class Stage {
   }
 
   private async load(): Promise<void> {
-    await Promise.all([preloadImages(), loadFonts(allText())]);
+    await Promise.all([preloadImages(), preloadKioskModels(), loadFonts(allText())]);
     if (this.disposed) return;
     this.particles = new Particles();
     this.room = buildRoom();
@@ -290,9 +291,6 @@ export class Stage {
     this.toolShelf.group.rotation.y = 0.18;
     this.rent = new Paper(1.35, .47);
     this.rent.group.rotation.z = -.025;
-    const pin = new THREE.Mesh(new THREE.SphereGeometry(.025, 12, 8), new THREE.MeshToonMaterial({ color: 0xc43c2d }));
-    pin.position.set(0, .22, .03);
-    this.rent.group.add(pin);
     this.receipt = new Paper(.9, .76);
     this.receipt.group.rotation.x = -Math.PI / 2;
     this.receipt.group.position.set(0, .085, .025);
@@ -303,7 +301,7 @@ export class Stage {
     this.returnTag.group.rotation.x = -Math.PI / 2;
     this.returnTag.group.visible = false;
     this.returnTag.group.traverse(node => { node.userData.action = { kind: 'return' }; });
-    this.feltMaterial = new THREE.MeshBasicMaterial({ map: patternTexture('mat-felt', 0.5) });
+    this.feltMaterial = new THREE.MeshBasicMaterial({ map: patternTexture('mat-felt', 0.5), color: 0x86d9bf });
     this.ticket.visible = false;
     this.tool.visible = false;
     this.scene.add(this.room, this.mat, this.rack.group, this.board.group, this.toolShelf.group, this.ticket, this.tool, this.particles.group);

@@ -3,7 +3,10 @@ import { createInitialState } from '../game/state';
 import { Rack } from './rack';
 
 vi.mock('./assets', async importOriginal => ({ ...await importOriginal<typeof import('./assets')>(), rasterize: () => ({}) }));
-vi.mock('./ticketFace', async importOriginal => ({ ...await importOriginal<typeof import('./ticketFace')>(), drawFace: vi.fn(), drawFoil: vi.fn() }));
+vi.mock('./ticketFace', async importOriginal => ({
+  ...await importOriginal<typeof import('./ticketFace')>(),
+  ticketSample: () => document.createElement('canvas'),
+}));
 
 describe('prestige rack slot', () => {
   beforeEach(() => {

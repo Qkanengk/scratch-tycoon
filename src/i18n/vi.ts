@@ -161,6 +161,7 @@ export const vi = {
   'shop.unlockedToast': 'Đã mở khoá {name}!',
 
   'save.title': 'Lưu game',
+  'save.assetCredits': 'Nguồn hình ảnh và âm thanh',
   'save.auto': 'Game tự lưu trên trình duyệt này.',
   'save.failed': 'Không lưu được tiến độ: bộ nhớ trình duyệt đầy hoặc bị chặn. Hãy xuất save để giữ lại.',
   'save.unsaved': 'Chưa lưu được trên trình duyệt này — hãy xuất save.',

@@ -1,39 +1,15 @@
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { batteryCapacity, robotInterval, type AutomationAction } from '../game/automation';
 import { formatCompact } from '../game/format';
 import type { GameState } from '../game/state';
 import { t } from '../i18n';
 import { Paper } from './paper';
-import { inkBox } from './shapes';
-import { canvasTexture } from './assets';
+import { canvasTexture, image, patternPath } from './assets';
 import { drawFace, ticketMetrics } from './ticketFace';
 import { disposeToolObject } from './toolModels';
-import { INK, toonify } from './toon';
+import { kioskAnimation, kioskProp } from './kioskModels';
 import { robotOfferLabel } from './robotOffers';
 import { awaySummaryText } from '../ui/awaySummary';
-
-function rounded(w: number, h: number, d: number, color: number, radius = .06): THREE.Mesh {
-  const mesh = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 3, radius), new THREE.MeshStandardMaterial({ color }));
-  toonify(mesh, { outline: .008 });
-  return mesh;
-}
-
-function ball(radius: number, color: number): THREE.Mesh {
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 12, 8), new THREE.MeshStandardMaterial({ color }));
-  toonify(mesh, { outline: .005 });
-  return mesh;
-}
-
-function link(from: THREE.Vector3, to: THREE.Vector3, radius: number, color: number): THREE.Mesh {
-  const delta = to.clone().sub(from);
-  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, delta.length(), 10), new THREE.MeshStandardMaterial({ color }));
-  mesh.position.copy(from).add(to).multiplyScalar(.5);
-  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), delta.normalize());
-  toonify(mesh, { outline: .005 });
-  return mesh;
-}
-
 function payoutText() {
   const canvas = document.createElement('canvas');
   canvas.width = 640; canvas.height = 160;
@@ -63,53 +39,16 @@ export class RobotStation {
   });
   private readonly slots = Array.from({ length: 3 }, (_, i) => {
     const group = new THREE.Group();
-    const shell = [0x40a99c, 0xe9a04b, 0x779dc3][i]!;
-    const body = rounded(.43, .36, .34, shell, .09);
-    body.position.y = .27;
-    const belly = rounded(.29, .19, .04, 0xffe0a1, .035);
-    belly.position.set(0, .25, .185);
-    const head = rounded(.55, .34, .36, 0xffd16b, .11);
-    head.position.set(0, .62, .02);
-    const visor = rounded(.42, .18, .045, 0x244c51, .055);
-    visor.position.set(0, .64, .207);
-    group.add(body, belly, head, visor);
-    for (const x of [-.10, .10]) {
-      const eye = ball(.035, 0xfff4c8);
-      eye.scale.set(.85, 1.2, .35);
-      eye.position.set(x, .65, .238);
-      const cheek = ball(.034, 0xea8c64);
-      cheek.scale.set(1, .5, .25);
-      cheek.position.set(x * 1.65, .57, .213);
-      const foot = rounded(.18, .09, .28, shell, .04);
-      foot.position.set(x, .045, .045);
-      group.add(eye, cheek, foot);
-    }
-    const smile = new THREE.Mesh(new THREE.TorusGeometry(.055, .009, 5, 16, Math.PI), new THREE.MeshBasicMaterial({ color: 0xffe0a1 }));
-    smile.rotation.z = Math.PI;
-    smile.position.set(0, .62, .239);
-    group.add(smile);
-    const antenna = link(new THREE.Vector3(0, .78, 0), new THREE.Vector3(.02, .88, 0), .015, 0x425e63);
-    const light = ball(.046, 0x62c46c);
-    light.position.set(.02, .89, 0);
-    group.add(antenna, light);
-    const arm = new THREE.Group();
-    arm.position.set(.24, .35, .06);
-    const elbow = new THREE.Vector3(.10, -.08, .14);
-    const wrist = new THREE.Vector3(-.05, -.25, .38);
-    arm.add(link(new THREE.Vector3(), elbow, .047, shell), link(elbow, wrist, .035, 0xffd16b));
-    for (const point of [new THREE.Vector3(), elbow, wrist]) {
-      const joint = ball(.061, 0xffe0a1); joint.position.copy(point); arm.add(joint);
-    }
-    const coin = new THREE.Mesh(new THREE.CylinderGeometry(.075, .075, .024, 16), new THREE.MeshStandardMaterial({ color: 0xffcc43 }));
-    toonify(coin, { outline: .005 });
-    coin.position.copy(wrist).add(new THREE.Vector3(-.025, -.055, .035));
-    arm.add(coin);
-    group.add(arm, link(new THREE.Vector3(-.24, .34, 0), new THREE.Vector3(-.25, .16, .14), .045, shell));
-    const tray = rounded(.67, .045, .52, 0x397c78, .035);
-    tray.position.set(0, .024, .43);
-    const liner = rounded(.57, .012, .44, 0xffda91, .025);
-    liner.position.set(0, .051, .43);
-    group.add(tray, liner);
+    const modelId = (['robot', 'robot2', 'robot3'] as const)[i]!;
+    const model = kioskProp(modelId, i === 0 ? .83 : .67);
+    const mixer = new THREE.AnimationMixer(model);
+    const idle = kioskAnimation(modelId, /idle$/i);
+    const work = kioskAnimation(modelId, /(?:punch|attack)$/i);
+    const idleAction = idle && mixer.clipAction(idle);
+    const workAction = work && mixer.clipAction(work);
+    const tray = kioskProp('noticeboard', [.67, .045, .52]);
+    tray.position.set(0, 0, .43);
+    group.add(model, tray);
     const canvas = document.createElement('canvas');
     canvas.width = 256; canvas.height = 384;
     const texture = canvasTexture(canvas);
@@ -117,11 +56,6 @@ export class RobotStation {
     ticket.rotation.x = -Math.PI / 2;
     ticket.position.set(0, .061, .43);
     group.add(ticket);
-    const gaugeBack = rounded(.29, .055, .025, 0x244c51, .012);
-    gaugeBack.position.set(0, .25, .216);
-    const gauge = rounded(.25, .03, .025, 0x67c46a, .008);
-    gauge.position.set(0, .25, .235);
-    group.add(gaugeBack, gauge);
     group.traverse(n => { n.userData.action = { kind: 'automation', action: 'context', index: i }; });
     const status = new Paper(.64, .19);
     status.group.rotation.x = -Math.PI / 3;
@@ -129,7 +63,8 @@ export class RobotStation {
     status.group.traverse(n => { n.userData.action = { kind: 'automation', action: 'context', index: i }; });
     const payout = payoutText();
     group.add(status.group, payout.sprite);
-    return { group, arm, light, gauge, ticket, canvas, texture, status, payout, payoutTime: 0, serial: 0, net: 0, key: '', progress: 0, working: false };
+    return { group, model, mixer, idleAction, workAction, activeAction: undefined as THREE.AnimationAction | undefined,
+      ticket, canvas, texture, status, payout, payoutTime: 0, serial: 0, net: 0, key: '', progress: 0, working: false };
   });
   private key = '';
   private portraitOffers = false;
@@ -137,53 +72,22 @@ export class RobotStation {
   constructor() {
     this.group.name = 'robot-station';
     this.group.position.set(1.12, 0, .35);
-    const back = inkBox(1.38, 1.14, .07, 0x995a30);
-    const cork = inkBox(1.26, 1.02, .025, 0xc69158, .006);
-    cork.position.set(0, .06, .045);
-    this.board.add(back, cork);
-    for (let x = -.55; x <= .56; x += .16) for (let y = .13; y < 1; y += .13) {
-      const hole = new THREE.Mesh(new THREE.CircleGeometry(.012, 8), new THREE.MeshBasicMaterial({ color: 0x785333 }));
-      hole.position.set(x, y, .066); this.board.add(hole);
-    }
+    const board = kioskProp('noticeboard', [1.38, 1.14, .087], [Math.PI / 2, 0, 0]);
+    this.board.add(board);
     this.header.group.position.set(0, 1.04, .085);
     this.header.draw([{ text: t('robot.title'), size: 83 }]);
     this.board.add(this.header.group);
-    const feet = inkBox(1.48, .055, .38, 0x995a30);
-    feet.position.z = .04;
-    this.board.add(feet);
     for (const [i, action] of (['autoBuy', 'away', 'cap'] as const).entries()) {
       const paper = this.offers.find(o => o.action === action)!.paper;
-      const x = i === 1 ? .14 : -.12;
-      paper.group.position.set(x, .77 - i * .28, .10);
+      paper.group.position.set(i === 1 ? .14 : -.12, .77 - i * .28, .10);
       paper.group.rotation.z = i === 1 ? -.035 : .025;
-      this.board.add(link(new THREE.Vector3(x, .92 - i * .28, .09), new THREE.Vector3(x, .99 - i * .28, .09), .012, INK), paper.group);
+      this.board.add(paper.group);
     }
-    const dock = rounded(.83, .10, .49, 0x3d777c, .045);
-    dock.position.y = .055;
-    const battery = rounded(.34, .21, .20, 0x83ae68, .035);
-    battery.rotation.z = -.13;
-    battery.position.set(-.12, .17, 0);
-    const terminal = rounded(.13, .035, .12, 0xffd16b, .01);
-    terminal.position.set(-.12, .29, 0);
-    const plug = rounded(.13, .09, .18, 0xffd16b, .02);
-    plug.position.set(.26, .14, .03);
-    const cable = new THREE.Mesh(new THREE.TorusGeometry(.17, .017, 5, 16, Math.PI * 1.5), new THREE.MeshBasicMaterial({ color: INK }));
-    cable.rotation.x = -Math.PI / 2;
-    cable.position.set(.20, .12, -.03);
-    this.charger.add(dock, battery, terminal, plug, cable);
+    this.charger.add(kioskProp('battery', .43));
     this.mountTag('capacity', this.charger, new THREE.Vector3(0, .075, .39));
-    const motor = rounded(.37, .24, .27, 0xd89b50, .04);
-    motor.position.y = .14;
-    const gear = new THREE.Mesh(new THREE.TorusGeometry(.095, .03, 6, 10), new THREE.MeshStandardMaterial({ color: 0xffd16b }));
-    toonify(gear, { outline: .005 });
-    gear.position.set(0, .16, .155);
-    this.motor.add(motor, gear);
+    this.motor.add(kioskProp('power', .39));
     this.mountTag('speed', this.motor, new THREE.Vector3(0, .065, .43));
-    const tin = rounded(.36, .20, .26, 0xd36943, .035);
-    tin.position.y = .11;
-    const coinSlot = rounded(.19, .018, .03, INK, .006);
-    coinSlot.position.set(0, .218, 0);
-    this.hiring.add(tin, coinSlot);
+    this.hiring.add(kioskProp('register', .40));
     this.mountTag('robot', this.hiring, new THREE.Vector3(0, .065, .37));
     this.receipt.group.rotation.x = -Math.PI / 2;
     this.awayReceipt.group.rotation.x = -Math.PI / 3;
@@ -240,9 +144,6 @@ export class RobotStation {
       slot.working = !!r?.tray && r.charge > 0 && !r.charging && !state.rentDebt;
       slot.progress = r ? r.progressMs / robotInterval(state) : 0;
       slot.ticket.visible = !!r?.tray;
-      slot.gauge.scale.x = Math.max(.001, r ? r.charge / batteryCapacity(state) : 0);
-      const color = state.rentDebt ? 0xe2a342 : !r || r.charging || r.charge <= 0 ? 0xc34e42 : r.tray ? 0x62c46c : 0x7bbac9;
-      slot.light.traverse(n => { if (n instanceof THREE.Mesh && n.material instanceof THREE.MeshToonMaterial) n.material.color.setHex(color); });
       if (slot.serial && slot.serial !== r?.tray?.serial && slot.net > 0 && a.report.tickets > 0) {
         const ctx = slot.payout.canvas.getContext('2d')!;
         ctx.clearRect(0, 0, 640, 160);
@@ -263,7 +164,7 @@ export class RobotStation {
         slot.canvas.height = Math.round(256 * m.height);
         drawFace(slot.canvas, r.tray.type, r.tray, true);
         const ctx = slot.canvas.getContext('2d')!;
-        ctx.fillStyle = '#a5aebf';
+        ctx.fillStyle = ctx.createPattern(image(patternPath('foil')), 'repeat')!;
         for (const cell of m.layout.cells) {
           const start = Math.max(cell.y, slot.progress * m.layout.height);
           if (start >= cell.y + cell.h) continue;
@@ -286,8 +187,15 @@ export class RobotStation {
 
   tick(dt: number, time: number): void {
     this.slots.forEach((s, i) => {
-      s.arm.rotation.y = s.working ? -.35 + Math.sin(time * .012 + i * 1.7) * .42 : -.7;
-      s.arm.rotation.x = s.working ? Math.sin(time * .024) * .018 : -.7;
+      if (!s.group.visible) return;
+      const action = s.working ? s.workAction ?? s.idleAction : s.idleAction;
+      if (action !== s.activeAction) {
+        s.activeAction?.stop();
+        action?.reset().play();
+        s.activeAction = action;
+      }
+      s.mixer.update(dt);
+      s.model.rotation.y = s.working ? Math.sin(time * .012 + i * 1.7) * .13 : 0;
       s.payoutTime = Math.max(0, s.payoutTime - dt);
       s.payout.sprite.visible = s.payoutTime > 0;
       s.payout.sprite.position.y = 1 + (1.25 - s.payoutTime) * .18;
@@ -326,7 +234,11 @@ export class RobotStation {
   dispose(): void {
     this.header.dispose(); this.receipt.dispose(); this.awayReceipt.dispose();
     this.offers.forEach(o => o.paper.dispose());
-    this.slots.forEach(s => { s.status.dispose(); s.texture.dispose(); s.payout.texture.dispose(); });
+    this.slots.forEach(s => {
+      s.mixer.stopAllAction();
+      s.mixer.uncacheRoot(s.model);
+      s.status.dispose(); s.texture.dispose(); s.payout.texture.dispose(); s.payout.sprite.material.dispose();
+    });
     disposeToolObject(this.group);
   }
 }
