@@ -159,6 +159,7 @@ export class Stage {
   private collectionDebt = 0;
   private collectionTicket: Ticket | null = null;
   private roundSize = 0;
+  private returnableRound = false;
   private rentKey = '';
   private returnKey = '';
   private readonly bombHits = new Set<number>();
@@ -470,6 +471,11 @@ export class Stage {
     if (key !== this.rentKey) { this.rentKey = key; this.rent.draw(rentLines(state, this.rentStamp > 0)); }
     const ticketForReturn = state.ticket;
     const refund = ticketRefund(ticketForReturn);
+    const returnableRound = spread > 0 && refund > 0;
+    if (returnableRound !== this.returnableRound) {
+      this.returnableRound = returnableRound;
+      this.queueHudMeasurement();
+    }
     this.returnTag.group.visible = refund > 0;
     this.positionReturnTag(this.deskLayout());
     if (this.returnTag.group.visible && this.returnKey !== String(ticketForReturn!.serial)) {
